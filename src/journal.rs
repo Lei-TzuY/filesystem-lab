@@ -7,13 +7,17 @@ pub type TransactionId = u64;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum JournalEntry {
-    Begin { txid: TransactionId },
+    Begin {
+        txid: TransactionId,
+    },
     Write {
         txid: TransactionId,
         block: u64,
         data: Box<[u8; BLOCK_SIZE]>,
     },
-    Commit { txid: TransactionId },
+    Commit {
+        txid: TransactionId,
+    },
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -37,10 +41,7 @@ impl JournalImage {
     ///
     /// Returns an error if the journal image is structurally malformed, including nested
     /// transactions, transaction-id mismatches, writes outside a transaction, or duplicate commits.
-    pub fn replay_into(
-        &self,
-        home: &mut BTreeMap<u64, [u8; BLOCK_SIZE]>,
-    ) -> io::Result<usize> {
+    pub fn replay_into(&self, home: &mut BTreeMap<u64, [u8; BLOCK_SIZE]>) -> io::Result<usize> {
         let mut active: Option<TransactionId> = None;
         let mut pending = Vec::<(u64, [u8; BLOCK_SIZE])>::new();
         let mut replayed = 0_usize;
@@ -56,13 +57,17 @@ impl JournalImage {
                 }
                 JournalEntry::Write { txid, block, data } => {
                     if active != Some(*txid) {
-                        return Err(invalid_journal("journal write does not match active transaction"));
+                        return Err(invalid_journal(
+                            "journal write does not match active transaction",
+                        ));
                     }
                     pending.push((*block, **data));
                 }
                 JournalEntry::Commit { txid } => {
                     if active != Some(*txid) {
-                        return Err(invalid_journal("journal commit does not match active transaction"));
+                        return Err(invalid_journal(
+                            "journal commit does not match active transaction",
+                        ));
                     }
                     for (block, data) in pending.drain(..) {
                         home.insert(block, data);
@@ -275,10 +280,7 @@ mod tests {
     fn active_transaction_is_exclusive_and_ids_are_monotonic() {
         let mut log = JournalLog::new();
         let first = log.begin().unwrap();
-        assert_eq!(
-            log.begin().unwrap_err().kind(),
-            io::ErrorKind::WouldBlock
-        );
+        assert_eq!(log.begin().unwrap_err().kind(), io::ErrorKind::WouldBlock);
         log.commit(first).unwrap();
         let second = log.begin().unwrap();
         assert!(second > first);
@@ -289,9 +291,7 @@ mod tests {
         let mut log = JournalLog::new();
         let txid = log.begin().unwrap();
         assert_eq!(
-            log.write(txid + 1, 1, [0; BLOCK_SIZE])
-                .unwrap_err()
-                .kind(),
+            log.write(txid + 1, 1, [0; BLOCK_SIZE]).unwrap_err().kind(),
             io::ErrorKind::InvalidInput
         );
         assert_eq!(
