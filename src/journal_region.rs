@@ -85,9 +85,11 @@ pub fn load_journal_image(
     let block_count = usize::try_from(superblock.journal_blocks)
         .map_err(|_| invalid_data("journal block count exceeds usize"))?;
     for index in 0..block_count {
+        let index_u64 =
+            u64::try_from(index).map_err(|_| invalid_data("journal index exceeds u64"))?;
         let block = superblock
             .journal_start
-            .checked_add(u64::try_from(index).map_err(|_| invalid_data("journal index exceeds u64"))?)
+            .checked_add(index_u64)
             .ok_or_else(|| invalid_data("journal block index overflow"))?;
         let start = index
             .checked_mul(BLOCK_SIZE)
@@ -190,7 +192,9 @@ fn validate_entries(superblock: Superblock, entries: &[JournalEntry]) -> io::Res
                     ));
                 }
                 if *block < superblock.reserved_blocks() || *block >= superblock.total_blocks {
-                    return Err(invalid_data("journal write targets reserved or invalid block"));
+                    return Err(invalid_data(
+                        "journal write targets reserved or invalid block",
+                    ));
                 }
             }
             JournalEntry::Commit { txid } => {
@@ -220,9 +224,10 @@ fn write_region_block(
     region: &[u8],
     index: usize,
 ) -> io::Result<()> {
+    let index_u64 = u64::try_from(index).map_err(|_| invalid_input("journal index exceeds u64"))?;
     let block = superblock
         .journal_start
-        .checked_add(u64::try_from(index).map_err(|_| invalid_input("journal index exceeds u64"))?)
+        .checked_add(index_u64)
         .ok_or_else(|| invalid_input("journal block index overflow"))?;
     let start = index
         .checked_mul(BLOCK_SIZE)
@@ -329,14 +334,19 @@ mod tests {
 
         assert_eq!(device.writes, vec![2, 1]);
         assert_eq!(device.flushes, 1);
-        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), entries);
+        assert_eq!(
+            load_journal_image(&mut device, superblock).unwrap(),
+            entries
+        );
     }
 
     #[test]
     fn zeroed_fresh_region_is_empty() {
         let superblock = Superblock::with_journal_blocks(8, 2).unwrap();
         let mut device = MemoryDevice::new(8);
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
