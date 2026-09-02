@@ -53,8 +53,7 @@ impl BlockDevice for SparseBlockDevice {
             ));
         }
         if self.fail_writes_to == Some(block) {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 "injected allocation metadata write failure",
             ));
         }
