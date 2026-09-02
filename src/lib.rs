@@ -9,3 +9,4 @@ pub mod inode;
 pub mod journal;
 pub mod journal_codec;
 pub mod journal_region;
+pub mod recovery;
