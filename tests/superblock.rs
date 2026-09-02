@@ -73,7 +73,10 @@ fn explicit_journal_reservation_is_encoded() {
     let superblock = Superblock::with_journal_blocks(64, 7).unwrap();
     assert_eq!(superblock.journal_range(), 1..8);
     assert_eq!(superblock.reserved_blocks(), 8);
-    assert_eq!(Superblock::decode(&superblock.encode()).unwrap(), superblock);
+    assert_eq!(
+        Superblock::decode(&superblock.encode()).unwrap(),
+        superblock
+    );
 }
 
 #[test]
