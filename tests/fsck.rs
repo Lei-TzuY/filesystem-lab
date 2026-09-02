@@ -84,12 +84,8 @@ fn reports_committed_and_crash_incomplete_transactions() {
     let mut log = JournalLog::new();
 
     let committed = log.begin().unwrap();
-    log.write(
-        committed,
-        superblock.reserved_blocks(),
-        [0x11; BLOCK_SIZE],
-    )
-    .unwrap();
+    log.write(committed, superblock.reserved_blocks(), [0x11; BLOCK_SIZE])
+        .unwrap();
     log.commit(committed).unwrap();
 
     let pending = log.begin().unwrap();
@@ -130,12 +126,8 @@ fn detects_cross_block_journal_corruption() {
     let superblock = format_device(&mut device).unwrap();
     let mut log = JournalLog::new();
     let txid = log.begin().unwrap();
-    log.write(
-        txid,
-        superblock.reserved_blocks(),
-        [0x5a; BLOCK_SIZE],
-    )
-    .unwrap();
+    log.write(txid, superblock.reserved_blocks(), [0x5a; BLOCK_SIZE])
+        .unwrap();
     log.commit(txid).unwrap();
     store_journal_image(&mut device, superblock, log.entries()).unwrap();
 
