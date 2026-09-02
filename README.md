@@ -4,7 +4,7 @@ A focused filesystem implementation and crash-consistency laboratory for buildin
 
 ## Current milestone
 
-The repository now establishes the block-device foundation, a versioned on-disk superblock, executable allocation invariants, in-memory inode/directory models, and an explicit buffer-cache durability state machine:
+The repository now establishes the block-device foundation, a versioned on-disk superblock, executable allocation invariants, in-memory inode/directory models, an explicit buffer-cache durability state machine, and a deterministic journal replay model:
 
 - fixed 4 KiB logical blocks;
 - file-backed block device creation/opening;
@@ -26,9 +26,13 @@ The repository now establishes the block-device foundation, a versioned on-disk 
 - write-back semantics that distinguish an issued device write from a completed durability boundary;
 - eviction rejection for dirty or writeback entries so non-durable data cannot be discarded;
 - failed-flush semantics that preserve `Writeback` state and allow durability-only retry without rewriting blocks;
-- focused regression coverage for cache misses, dirty writes, writeback, flush success/failure, eviction safety, and bounds.
+- logical journal transactions with explicit begin, full-block write, and commit records;
+- deterministic crash-prefix construction at every journal-entry boundary;
+- replay semantics that ignore uncommitted tails and atomically apply a transaction only when its commit marker is present;
+- malformed-log validation for nested transactions, mismatched transaction identifiers, writes outside transactions, and invalid commits;
+- focused regression coverage for cache durability and journal crash-before/after-commit behavior.
 
-The version-1 layout is documented in [`docs/on-disk-format.md`](docs/on-disk-format.md). Allocation, inode, directory, and cache state are intentionally in-memory only in this milestone; durable allocator, inode, namespace, or journal metadata requires an explicit future format revision rather than silently reinterpreting version 1.
+The version-1 layout is documented in [`docs/on-disk-format.md`](docs/on-disk-format.md). Allocation, inode, directory, cache, and journal state are intentionally in-memory only in this milestone; durable allocator, inode, namespace, or journal metadata requires an explicit future format revision rather than silently reinterpreting version 1. The journal currently models ordering and replay semantics only; it does not claim persistence until an explicit journal region and durability protocol are added.
 
 The intended core progression is:
 
@@ -37,7 +41,7 @@ The intended core progression is:
 3. allocation invariants;
 4. inode lifecycle and directory model;
 5. cache/dirty-state semantics;
-6. journal/WAL and deterministic crash injection;
-7. recovery and fsck invariants.
+6. journal transaction/replay semantics and deterministic crash prefixes;
+7. durable journal layout, recovery, and fsck invariants.
 
 Large POSIX surface-area work, FUSE integration, complex extents, permissions, and other broad features are intentionally deferred until crash semantics and the durable core are well specified and executable.
