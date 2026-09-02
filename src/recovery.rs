@@ -171,8 +171,14 @@ mod tests {
 
         assert_eq!(report.committed_transactions, 1);
         assert_eq!(report.home_writes, 2);
-        assert_eq!(device.blocks[usize::try_from(first).unwrap()], [0x11; BLOCK_SIZE]);
-        assert_eq!(device.blocks[usize::try_from(second).unwrap()], [0x22; BLOCK_SIZE]);
+        assert_eq!(
+            device.blocks[usize::try_from(first).unwrap()],
+            [0x11; BLOCK_SIZE]
+        );
+        assert_eq!(
+            device.blocks[usize::try_from(second).unwrap()],
+            [0x22; BLOCK_SIZE]
+        );
         assert_eq!(device.flushes, flushes_before + 1);
     }
 
@@ -214,15 +220,27 @@ mod tests {
             recover_journal(&mut device, superblock).unwrap_err().kind(),
             io::ErrorKind::Other
         );
-        assert_eq!(device.blocks[usize::try_from(first).unwrap()], [0xaa; BLOCK_SIZE]);
-        assert_ne!(device.blocks[usize::try_from(second).unwrap()], [0xbb; BLOCK_SIZE]);
+        assert_eq!(
+            device.blocks[usize::try_from(first).unwrap()],
+            [0xaa; BLOCK_SIZE]
+        );
+        assert_ne!(
+            device.blocks[usize::try_from(second).unwrap()],
+            [0xbb; BLOCK_SIZE]
+        );
 
         device.fail_home_write_after = None;
         device.home_writes_seen = 0;
         let report = recover_journal(&mut device, superblock).unwrap();
         assert_eq!(report.home_writes, 2);
-        assert_eq!(device.blocks[usize::try_from(first).unwrap()], [0xaa; BLOCK_SIZE]);
-        assert_eq!(device.blocks[usize::try_from(second).unwrap()], [0xbb; BLOCK_SIZE]);
+        assert_eq!(
+            device.blocks[usize::try_from(first).unwrap()],
+            [0xaa; BLOCK_SIZE]
+        );
+        assert_eq!(
+            device.blocks[usize::try_from(second).unwrap()],
+            [0xbb; BLOCK_SIZE]
+        );
     }
 
     #[test]
