@@ -4,7 +4,7 @@ A focused filesystem implementation and crash-consistency laboratory for buildin
 
 ## Current milestone
 
-The repository now establishes the block-device foundation, a versioned on-disk superblock, executable allocation invariants, in-memory inode/directory models, an explicit buffer-cache durability state machine, and a deterministic journal replay model:
+The repository now establishes the block-device foundation, a versioned on-disk superblock, executable allocation invariants, in-memory inode/directory models, an explicit buffer-cache durability state machine, deterministic journal replay semantics, and an explicit durable journal reservation:
 
 - fixed 4 KiB logical blocks;
 - file-backed block device creation/opening;
@@ -12,8 +12,10 @@ The repository now establishes the block-device foundation, a versioned on-disk 
 - checked device-size/offset arithmetic;
 - rejection of non-block-aligned backing files;
 - explicit durable flush boundary via `sync_data`;
-- version-1 superblock at block zero with magic, format version, block size, and total block count;
-- strict superblock validation, including reserved-byte and device-size consistency checks;
+- version-2 superblock at block zero with magic, format version, block size, total block count, journal start, and journal length;
+- explicit contiguous journal reservation immediately after the superblock, with checked range arithmetic and bounds validation;
+- a single `reserved_blocks()` boundary that lets allocation exclude all currently defined durable metadata;
+- strict superblock validation, including journal-layout, reserved-byte, and device-size consistency checks;
 - deterministic first-fit block allocator with a reserved metadata prefix;
 - executable allocation invariants for no double ownership, reserved-block exclusion, allocate/free accounting, exhaustion, and double-free rejection;
 - deterministic in-memory inode identifiers and file/directory kinds;
@@ -30,9 +32,9 @@ The repository now establishes the block-device foundation, a versioned on-disk 
 - deterministic crash-prefix construction at every journal-entry boundary;
 - replay semantics that ignore uncommitted tails and atomically apply a transaction only when its commit marker is present;
 - malformed-log validation for nested transactions, mismatched transaction identifiers, writes outside transactions, and invalid commits;
-- focused regression coverage for cache durability and journal crash-before/after-commit behavior.
+- focused regression coverage for cache durability, journal crash-before/after-commit behavior, and durable journal-region layout validation.
 
-The version-1 layout is documented in [`docs/on-disk-format.md`](docs/on-disk-format.md). Allocation, inode, directory, cache, and journal state are intentionally in-memory only in this milestone; durable allocator, inode, namespace, or journal metadata requires an explicit future format revision rather than silently reinterpreting version 1. The journal currently models ordering and replay semantics only; it does not claim persistence until an explicit journal region and durability protocol are added.
+The current version-2 layout is documented in [`docs/on-disk-format.md`](docs/on-disk-format.md). Version 1 is retained in the document as historical schema information and is intentionally rejected by the version-2 reader; the laboratory does not silently reinterpret old images. Allocation, inode, directory, and journal-record contents are still in-memory only. Version 2 reserves durable ownership of the journal region but deliberately does not yet define persistent record encoding, circular-log metadata, checkpointing, or recovery writes.
 
 The intended core progression is:
 
@@ -42,6 +44,8 @@ The intended core progression is:
 4. inode lifecycle and directory model;
 5. cache/dirty-state semantics;
 6. journal transaction/replay semantics and deterministic crash prefixes;
-7. durable journal layout, recovery, and fsck invariants.
+7. durable journal region layout;
+8. persistent journal record encoding and recovery;
+9. fsck/corruption invariants.
 
 Large POSIX surface-area work, FUSE integration, complex extents, permissions, and other broad features are intentionally deferred until crash semantics and the durable core are well specified and executable.
