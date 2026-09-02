@@ -26,7 +26,9 @@ pub fn encode_entries(entries: &[JournalEntry]) -> io::Result<Vec<u8>> {
     for entry in entries {
         let (kind, txid, block, payload): (u8, TransactionId, u64, &[u8]) = match entry {
             JournalEntry::Begin { txid } => (KIND_BEGIN, *txid, 0, &[]),
-            JournalEntry::Write { txid, block, data } => (KIND_WRITE, *txid, *block, data.as_slice()),
+            JournalEntry::Write { txid, block, data } => {
+                (KIND_WRITE, *txid, *block, data.as_slice())
+            }
             JournalEntry::Commit { txid } => (KIND_COMMIT, *txid, 0, &[]),
         };
 
@@ -98,9 +100,11 @@ pub fn decode_entries(bytes: &[u8]) -> io::Result<Vec<JournalEntry>> {
             return Err(invalid_data("truncated journal record payload"));
         }
 
-        let txid = u64::from_le_bytes(header[12..20].try_into().map_err(|_| {
-            invalid_data("journal transaction identifier field is malformed")
-        })?);
+        let txid = u64::from_le_bytes(
+            header[12..20]
+                .try_into()
+                .map_err(|_| invalid_data("journal transaction identifier field is malformed"))?,
+        );
         let block = u64::from_le_bytes(
             header[20..28]
                 .try_into()
@@ -126,7 +130,9 @@ pub fn decode_entries(bytes: &[u8]) -> io::Result<Vec<JournalEntry>> {
             }
             KIND_WRITE => {
                 if payload.len() != BLOCK_SIZE {
-                    return Err(invalid_data("journal write record has invalid payload length"));
+                    return Err(invalid_data(
+                        "journal write record has invalid payload length",
+                    ));
                 }
                 let mut data = Box::new([0_u8; BLOCK_SIZE]);
                 data.copy_from_slice(payload);
@@ -147,10 +153,14 @@ pub fn decode_entries(bytes: &[u8]) -> io::Result<Vec<JournalEntry>> {
 
 fn require_control_record(block: u64, payload: &[u8]) -> io::Result<()> {
     if block != 0 {
-        return Err(invalid_data("journal control record has non-zero block field"));
+        return Err(invalid_data(
+            "journal control record has non-zero block field",
+        ));
     }
     if !payload.is_empty() {
-        return Err(invalid_data("journal control record has unexpected payload"));
+        return Err(invalid_data(
+            "journal control record has unexpected payload",
+        ));
     }
     Ok(())
 }
@@ -201,7 +211,9 @@ mod tests {
     fn truncated_header_is_rejected() {
         let encoded = encode_entries(&sample_entries()).unwrap();
         assert_eq!(
-            decode_entries(&encoded[..HEADER_SIZE - 1]).unwrap_err().kind(),
+            decode_entries(&encoded[..HEADER_SIZE - 1])
+                .unwrap_err()
+                .kind(),
             io::ErrorKind::InvalidData
         );
     }
@@ -255,8 +267,7 @@ mod tests {
         encoded[6] = 0xff;
         encoded[CHECKSUM_OFFSET..CHECKSUM_OFFSET + 4].fill(0);
         let checksum = crc32(&encoded[..HEADER_SIZE]);
-        encoded[CHECKSUM_OFFSET..CHECKSUM_OFFSET + 4]
-            .copy_from_slice(&checksum.to_le_bytes());
+        encoded[CHECKSUM_OFFSET..CHECKSUM_OFFSET + 4].copy_from_slice(&checksum.to_le_bytes());
         assert_eq!(
             decode_entries(&encoded).unwrap_err().kind(),
             io::ErrorKind::InvalidData
