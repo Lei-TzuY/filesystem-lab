@@ -63,12 +63,10 @@ impl fmt::Display for InodeError {
         match *self {
             Self::IdExhausted => formatter.write_str("inode identifier space exhausted"),
             Self::NotFound(id) => write!(formatter, "inode {} does not exist", id.get()),
-            Self::BlockNotAllocated(block) => {
-                write!(
-                    formatter,
-                    "block {block} is not allocated to filesystem data"
-                )
-            }
+            Self::BlockNotAllocated(block) => write!(
+                formatter,
+                "block {block} is not allocated to filesystem data"
+            ),
             Self::ReservedBlock(block) => write!(formatter, "block {block} is reserved metadata"),
             Self::BlockAlreadyOwned { block, owner } => write!(
                 formatter,
@@ -250,11 +248,11 @@ impl InodeTable {
             return Err(InodeError::BlockAlreadyOwned { block, owner });
         }
 
-        self.inodes
+        let node = self
+            .inodes
             .get_mut(&inode)
-            .expect("inode presence checked above")
-            .blocks
-            .push(block);
+            .ok_or(InodeError::NotFound(inode))?;
+        node.blocks.push(block);
         self.block_owners.insert(block, inode);
         Ok(())
     }
