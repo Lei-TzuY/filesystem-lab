@@ -5,6 +5,7 @@ pub mod block;
 pub mod cache;
 pub mod directory;
 pub mod format;
+pub mod fsck;
 pub mod inode;
 pub mod journal;
 pub mod journal_codec;
