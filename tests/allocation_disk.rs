@@ -132,11 +132,8 @@ fn failed_header_write_after_tail_update_is_detected_as_torn_image() {
     let superblock = format_device(&mut device).unwrap();
     assert_eq!(superblock.allocation_blocks, 2);
 
-    let mut allocator = BlockAllocator::new(
-        superblock.total_blocks,
-        superblock.reserved_blocks(),
-    )
-    .unwrap();
+    let mut allocator =
+        BlockAllocator::new(superblock.total_blocks, superblock.reserved_blocks()).unwrap();
     for _ in 0..32_600 {
         allocator.allocate().unwrap();
     }
