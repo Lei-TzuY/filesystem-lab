@@ -26,7 +26,10 @@ impl FileBlockDevice {
 
     pub fn create(path: impl AsRef<Path>, blocks: u64) -> io::Result<Self> {
         let len = blocks.checked_mul(BLOCK_SIZE_U64).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "block device size overflows u64")
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "block device size overflows u64",
+            )
         })?;
         let file = OpenOptions::new()
             .create(true)
