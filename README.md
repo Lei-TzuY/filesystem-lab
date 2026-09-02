@@ -4,7 +4,7 @@ A focused filesystem implementation and crash-consistency laboratory for buildin
 
 ## Current milestone
 
-The repository now establishes the block-device foundation, a versioned on-disk superblock, and executable allocation invariants:
+The repository now establishes the block-device foundation, a versioned on-disk superblock, executable allocation invariants, and an in-memory inode lifecycle model:
 
 - fixed 4 KiB logical blocks;
 - file-backed block device creation/opening;
@@ -16,16 +16,19 @@ The repository now establishes the block-device foundation, a versioned on-disk 
 - strict superblock validation, including reserved-byte and device-size consistency checks;
 - deterministic first-fit block allocator with a reserved metadata prefix;
 - executable allocation invariants for no double ownership, reserved-block exclusion, allocate/free accounting, exhaustion, and double-free rejection;
-- regression coverage for persistence, bounds, alignment, size overflow, format round trips, incompatible metadata, durable formatting, and allocation lifecycle behavior.
+- deterministic in-memory inode identifiers and file/directory kinds;
+- explicit inode-to-block ownership with duplicate-owner rejection, reserved/free-block rejection, and detach-before-remove lifecycle rules;
+- executable cross-checks that every inode block reference is allocated and agrees with the reverse ownership index;
+- regression coverage for persistence, bounds, alignment, size overflow, format round trips, incompatible metadata, durable formatting, allocation lifecycle behavior, and inode ownership lifecycle behavior.
 
-The version-1 layout is documented in [`docs/on-disk-format.md`](docs/on-disk-format.md). Allocation state is intentionally in-memory only in this milestone; durable allocator metadata requires an explicit future format revision rather than silently reinterpreting version 1.
+The version-1 layout is documented in [`docs/on-disk-format.md`](docs/on-disk-format.md). Allocation and inode state are intentionally in-memory only in this milestone; durable allocator or inode metadata requires an explicit future format revision rather than silently reinterpreting version 1.
 
 The intended core progression is:
 
 1. block layer;
 2. versioned superblock/on-disk format;
 3. allocation invariants;
-4. inode and directory model;
+4. inode lifecycle and directory model;
 5. cache/dirty-state semantics;
 6. journal/WAL and deterministic crash injection;
 7. recovery and fsck invariants.
