@@ -4,7 +4,7 @@ A focused filesystem implementation and crash-consistency laboratory for buildin
 
 ## Current milestone
 
-The repository now establishes the block-device foundation, a versioned on-disk superblock, executable allocation invariants, and an in-memory inode lifecycle model:
+The repository now establishes the block-device foundation, a versioned on-disk superblock, executable allocation invariants, an in-memory inode lifecycle model, and an in-memory directory namespace model:
 
 - fixed 4 KiB logical blocks;
 - file-backed block device creation/opening;
@@ -19,9 +19,12 @@ The repository now establishes the block-device foundation, a versioned on-disk 
 - deterministic in-memory inode identifiers and file/directory kinds;
 - explicit inode-to-block ownership with duplicate-owner rejection, reserved/free-block rejection, and detach-before-remove lifecycle rules;
 - executable cross-checks that every inode block reference is allocated and agrees with the reverse ownership index;
-- regression coverage for persistence, bounds, alignment, size overflow, format round trips, incompatible metadata, durable formatting, allocation lifecycle behavior, and inode ownership lifecycle behavior.
+- deterministic directory entries keyed by parent inode and path-component name;
+- directory operation checks for live directory parents, live inode targets, unique names, and valid single path components;
+- executable namespace validation that rejects non-directory parents and dangling inode references;
+- regression coverage for persistence, bounds, alignment, size overflow, format round trips, incompatible metadata, durable formatting, allocation lifecycle behavior, inode ownership lifecycle behavior, and directory namespace behavior.
 
-The version-1 layout is documented in [`docs/on-disk-format.md`](docs/on-disk-format.md). Allocation and inode state are intentionally in-memory only in this milestone; durable allocator or inode metadata requires an explicit future format revision rather than silently reinterpreting version 1.
+The version-1 layout is documented in [`docs/on-disk-format.md`](docs/on-disk-format.md). Allocation, inode, and directory state are intentionally in-memory only in this milestone; durable allocator, inode, or namespace metadata requires an explicit future format revision rather than silently reinterpreting version 1.
 
 The intended core progression is:
 
