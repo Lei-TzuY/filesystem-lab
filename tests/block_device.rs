@@ -23,7 +23,7 @@ fn create_write_flush_reopen_and_read_round_trip() -> io::Result<()> {
 
     let mut written = [0_u8; BLOCK_SIZE];
     for (index, byte) in written.iter_mut().enumerate() {
-        *byte = (index % 251) as u8;
+        *byte = u8::try_from(index % 251).expect("modulo result fits in u8");
     }
     dev.write_block(2, &written)?;
     dev.flush()?;
