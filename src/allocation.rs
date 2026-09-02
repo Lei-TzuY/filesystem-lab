@@ -50,7 +50,10 @@ impl Error for AllocationError {}
 /// Executable invariant violations for [`BlockAllocator`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AllocationInvariantError {
-    AllocatedCountMismatch { recorded: u64, observed: u64 },
+    AllocatedCountMismatch {
+        recorded: u64,
+        observed: u64,
+    },
     AccountingOverflow,
     AccountingMismatch {
         total_blocks: u64,
@@ -152,7 +155,10 @@ impl BlockAllocator {
         let start = usize::try_from(self.reserved_blocks)
             .map_err(|_| AllocationError::AddressSpaceTooLarge(self.total_blocks))?;
 
-        let Some(index) = self.allocated[start..].iter().position(|allocated| !allocated) else {
+        let Some(index) = self.allocated[start..]
+            .iter()
+            .position(|allocated| !allocated)
+        else {
             return Err(AllocationError::Exhausted);
         };
         let absolute_index = start + index;
