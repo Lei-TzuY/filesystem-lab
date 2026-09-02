@@ -279,7 +279,7 @@ fn read_region(device: &mut impl BlockDevice, superblock: &Superblock) -> io::Re
             )
         })?;
         let end = start + BLOCK_SIZE;
-        let target: &mut [u8; BLOCK_SIZE] = image[start..end].try_into().map_err(|_| {
+        let target: &mut [u8; BLOCK_SIZE] = (&mut image[start..end]).try_into().map_err(|_| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 "allocation block slice mismatch",
