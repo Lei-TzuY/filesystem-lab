@@ -4,7 +4,7 @@ A focused filesystem implementation and crash-consistency laboratory for buildin
 
 ## Current milestone
 
-The repository now establishes the block-device foundation, a versioned on-disk superblock, executable allocation invariants, in-memory inode/directory models, an explicit buffer-cache durability state machine, deterministic journal replay semantics, an explicit durable journal reservation, a standalone persistent journal-record codec, and a bounded journal-region image binding:
+The repository now establishes the block-device foundation, a versioned on-disk superblock, executable allocation invariants, in-memory inode/directory models, an explicit buffer-cache durability state machine, deterministic journal replay semantics, an explicit durable journal reservation, a standalone persistent journal-record codec, a bounded journal-region image binding, and committed home-location recovery:
 
 - fixed 4 KiB logical blocks;
 - file-backed block device creation/opening;
@@ -38,10 +38,12 @@ The repository now establishes the block-device foundation, a versioned on-disk 
 - bounded journal-region image v1 with independent magic/version, encoded length, CRC-32, and zero-padding invariant;
 - journal-region writes that issue tail blocks first, the header-bearing first block last, then cross the device `flush` durability boundary;
 - rejection of stale non-zero journal padding, region checksum corruption, malformed transaction order, wrong device geometry, and journal writes that target reserved metadata;
+- committed-only recovery that validates the durable journal before mutating home blocks, applies writes in log order, and flushes home writes through the durability boundary;
+- idempotent recovery after partial home-write failure: rerunning from the unchanged durable journal safely overwrites already-applied blocks and completes the remaining prefix;
 - a two-block default journal reservation so a minimal begin/full-block-write/commit image fits without changing the version-2 superblock schema;
-- focused regression coverage for cache durability, journal crash-before/after-commit behavior, durable journal-region layout validation, record corruption, cross-block region corruption, write ordering, and metadata self-targeting rejection.
+- focused regression coverage for cache durability, journal crash-before/after-commit behavior, durable journal-region layout validation, record corruption, cross-block region corruption, write ordering, metadata self-targeting rejection, uncommitted recovery suppression, and partial-replay retry.
 
-The current filesystem version-2 layout is documented in [`docs/on-disk-format.md`](docs/on-disk-format.md). Version 1 is retained in the document as historical schema information and is intentionally rejected by the version-2 reader; the laboratory does not silently reinterpret old images. The journal region image and journal record codec are independently versioned and documented in [`docs/journal-region-format.md`](docs/journal-region-format.md) and [`docs/journal-record-format.md`](docs/journal-record-format.md). Allocation, inode, and directory contents remain in-memory only. Circular-log head/tail metadata, checkpointing, and home-location recovery writes remain intentionally undefined.
+The current filesystem version-2 layout is documented in [`docs/on-disk-format.md`](docs/on-disk-format.md). Version 1 is retained in the document as historical schema information and is intentionally rejected by the version-2 reader; the laboratory does not silently reinterpret old images. The journal region image and journal record codec are independently versioned and documented in [`docs/journal-region-format.md`](docs/journal-region-format.md) and [`docs/journal-record-format.md`](docs/journal-record-format.md). Recovery ordering is documented in [`docs/recovery.md`](docs/recovery.md). Allocation, inode, and directory contents remain in-memory only. Circular-log head/tail metadata and checkpointing remain intentionally undefined.
 
 The intended core progression is:
 
