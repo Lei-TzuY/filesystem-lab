@@ -7,7 +7,7 @@ pub const SUPERBLOCK_BLOCK: u64 = 0;
 pub const SUPERBLOCK_MAGIC: [u8; 8] = *b"FSLABFS\0";
 pub const FORMAT_VERSION: u32 = 2;
 pub const FORMAT_BLOCK_SIZE: u32 = 4096;
-pub const DEFAULT_JOURNAL_BLOCKS: u64 = 1;
+pub const DEFAULT_JOURNAL_BLOCKS: u64 = 2;
 
 const MAGIC_OFFSET: usize = 0;
 const VERSION_OFFSET: usize = 8;
