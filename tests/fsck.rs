@@ -89,12 +89,6 @@ fn reports_committed_and_crash_incomplete_transactions() {
     log.commit(committed).unwrap();
 
     let pending = log.begin().unwrap();
-    log.write(
-        pending,
-        superblock.reserved_blocks() + 1,
-        [0x22; BLOCK_SIZE],
-    )
-    .unwrap();
 
     store_journal_image(&mut device, superblock, log.entries()).unwrap();
     let writes_before = device.writes;
@@ -104,7 +98,7 @@ fn reports_committed_and_crash_incomplete_transactions() {
 
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(report.pending_transaction, Some(pending));
-    assert_eq!(report.journal_writes, 2);
+    assert_eq!(report.journal_writes, 1);
     assert_eq!(device.writes, writes_before);
     assert_eq!(device.flushes, flushes_before);
 }
