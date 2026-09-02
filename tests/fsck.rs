@@ -68,7 +68,9 @@ fn fresh_device_passes_without_mutation() {
 
     assert_eq!(report.total_blocks, 16);
     assert_eq!(report.reserved_blocks, superblock.reserved_blocks());
-    assert_eq!(report.data_blocks, 13);
+    assert_eq!(report.data_blocks, 12);
+    assert_eq!(report.allocated_blocks, 0);
+    assert_eq!(report.free_blocks, 12);
     assert_eq!(report.journal_entries, 0);
     assert_eq!(report.journal_writes, 0);
     assert_eq!(report.committed_transactions, 0);
@@ -112,6 +114,18 @@ fn detects_superblock_corruption_before_journal_scan() {
     let error = check_device(&mut device).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     assert!(error.to_string().contains("fsck superblock"));
+}
+
+#[test]
+fn detects_allocation_corruption_before_journal_scan() {
+    let mut device = MemoryDevice::new(16);
+    let superblock = format_device(&mut device).unwrap();
+    let allocation_block = usize::try_from(superblock.allocation_start).unwrap();
+    device.blocks[allocation_block][32] ^= 0x80;
+
+    let error = check_device(&mut device).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("fsck allocation"));
 }
 
 #[test]
