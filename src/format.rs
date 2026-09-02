@@ -1,13 +1,15 @@
 use std::io;
 use std::ops::Range;
 
+use crate::allocation_disk::initialize_allocation_region;
 use crate::block::{BlockDevice, BLOCK_SIZE, BLOCK_SIZE_U64};
 
 pub const SUPERBLOCK_BLOCK: u64 = 0;
 pub const SUPERBLOCK_MAGIC: [u8; 8] = *b"FSLABFS\0";
-pub const FORMAT_VERSION: u32 = 2;
+pub const FORMAT_VERSION: u32 = 3;
 pub const FORMAT_BLOCK_SIZE: u32 = 4096;
 pub const DEFAULT_JOURNAL_BLOCKS: u64 = 2;
+pub const ALLOCATION_IMAGE_HEADER_LEN: u64 = 32;
 
 const MAGIC_OFFSET: usize = 0;
 const VERSION_OFFSET: usize = 8;
@@ -15,34 +17,40 @@ const BLOCK_SIZE_OFFSET: usize = 12;
 const TOTAL_BLOCKS_OFFSET: usize = 16;
 const JOURNAL_START_OFFSET: usize = 24;
 const JOURNAL_BLOCKS_OFFSET: usize = 32;
-const HEADER_LEN: usize = 40;
+const ALLOCATION_START_OFFSET: usize = 40;
+const ALLOCATION_BLOCKS_OFFSET: usize = 48;
+const HEADER_LEN: usize = 56;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Superblock {
     pub total_blocks: u64,
     pub journal_start: u64,
     pub journal_blocks: u64,
+    pub allocation_start: u64,
+    pub allocation_blocks: u64,
 }
 
 impl Superblock {
-    /// Creates a version-2 superblock using the default durable journal reservation.
+    /// Creates a version-3 superblock using the default durable journal reservation.
     ///
     /// # Errors
     ///
-    /// Returns an error if the device cannot contain the superblock and journal reservation.
+    /// Returns an error if the device cannot contain the superblock, journal, and allocation
+    /// metadata reservations.
     pub fn new(total_blocks: u64) -> io::Result<Self> {
         Self::with_journal_blocks(total_blocks, DEFAULT_JOURNAL_BLOCKS)
     }
 
-    /// Creates a version-2 superblock with an explicit contiguous journal reservation.
+    /// Creates a version-3 superblock with an explicit contiguous journal reservation.
     ///
-    /// The journal always begins immediately after block zero. This keeps all currently defined
-    /// metadata in one reserved prefix so the in-memory allocator can exclude it deterministically.
+    /// The journal begins immediately after block zero. The allocation bitmap image follows the
+    /// journal and is sized from the filesystem block count, keeping all durable metadata in one
+    /// deterministic reserved prefix.
     ///
     /// # Errors
     ///
-    /// Returns an error if `journal_blocks` is zero, arithmetic overflows, or the journal would not
-    /// fit on the device.
+    /// Returns an error if `journal_blocks` is zero, arithmetic overflows, or the durable metadata
+    /// prefix would not fit on the device.
     pub fn with_journal_blocks(total_blocks: u64, journal_blocks: u64) -> io::Result<Self> {
         if journal_blocks == 0 {
             return Err(io::Error::new(
@@ -52,13 +60,22 @@ impl Superblock {
         }
 
         let journal_start = SUPERBLOCK_BLOCK + 1;
-        let journal_end = journal_start.checked_add(journal_blocks).ok_or_else(|| {
+        let allocation_start = journal_start.checked_add(journal_blocks).ok_or_else(|| {
             io::Error::new(io::ErrorKind::InvalidInput, "journal block range overflow")
         })?;
-        if journal_end > total_blocks {
+        let allocation_blocks = required_allocation_blocks(total_blocks)?;
+        let metadata_end = allocation_start
+            .checked_add(allocation_blocks)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "allocation metadata block range overflow",
+                )
+            })?;
+        if metadata_end > total_blocks {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "filesystem device is too small for the journal reservation",
+                "filesystem device is too small for durable metadata reservations",
             ));
         }
 
@@ -66,6 +83,8 @@ impl Superblock {
             total_blocks,
             journal_start,
             journal_blocks,
+            allocation_start,
+            allocation_blocks,
         })
     }
 
@@ -75,8 +94,13 @@ impl Superblock {
     }
 
     #[must_use]
+    pub fn allocation_range(self) -> Range<u64> {
+        self.allocation_start..self.allocation_start + self.allocation_blocks
+    }
+
+    #[must_use]
     pub fn reserved_blocks(self) -> u64 {
-        self.journal_start + self.journal_blocks
+        self.allocation_start + self.allocation_blocks
     }
 
     #[must_use]
@@ -93,14 +117,18 @@ impl Superblock {
             .copy_from_slice(&self.journal_start.to_le_bytes());
         block[JOURNAL_BLOCKS_OFFSET..JOURNAL_BLOCKS_OFFSET + 8]
             .copy_from_slice(&self.journal_blocks.to_le_bytes());
+        block[ALLOCATION_START_OFFSET..ALLOCATION_START_OFFSET + 8]
+            .copy_from_slice(&self.allocation_start.to_le_bytes());
+        block[ALLOCATION_BLOCKS_OFFSET..ALLOCATION_BLOCKS_OFFSET + 8]
+            .copy_from_slice(&self.allocation_blocks.to_le_bytes());
         block
     }
 
-    /// Decodes and validates a version-2 superblock block.
+    /// Decodes and validates a version-3 superblock block.
     ///
     /// # Errors
     ///
-    /// Returns `InvalidData` when the magic, format version, logical block size, journal layout,
+    /// Returns `InvalidData` when the magic, format version, logical block size, metadata layout,
     /// reserved bytes, or total block count is invalid.
     pub fn decode(block: &[u8; BLOCK_SIZE]) -> io::Result<Self> {
         if block[MAGIC_OFFSET..MAGIC_OFFSET + SUPERBLOCK_MAGIC.len()] != SUPERBLOCK_MAGIC {
@@ -129,19 +157,45 @@ impl Superblock {
         let total_blocks = read_u64_le(block, TOTAL_BLOCKS_OFFSET);
         let journal_start = read_u64_le(block, JOURNAL_START_OFFSET);
         let journal_blocks = read_u64_le(block, JOURNAL_BLOCKS_OFFSET);
+        let allocation_start = read_u64_le(block, ALLOCATION_START_OFFSET);
+        let allocation_blocks = read_u64_le(block, ALLOCATION_BLOCKS_OFFSET);
         if journal_start != SUPERBLOCK_BLOCK + 1 || journal_blocks == 0 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "invalid journal reservation",
             ));
         }
-        let journal_end = journal_start.checked_add(journal_blocks).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "journal block range overflow")
-        })?;
-        if journal_end > total_blocks {
+
+        let expected_allocation_start =
+            journal_start.checked_add(journal_blocks).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "journal block range overflow")
+            })?;
+        if allocation_start != expected_allocation_start {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "journal reservation exceeds filesystem size",
+                "allocation metadata does not immediately follow journal",
+            ));
+        }
+        let expected_allocation_blocks = required_allocation_blocks(total_blocks)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error.to_string()))?;
+        if allocation_blocks != expected_allocation_blocks {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "allocation metadata reservation has invalid length",
+            ));
+        }
+        let metadata_end = allocation_start
+            .checked_add(allocation_blocks)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "allocation metadata block range overflow",
+                )
+            })?;
+        if metadata_end > total_blocks {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "durable metadata reservation exceeds filesystem size",
             ));
         }
 
@@ -156,8 +210,53 @@ impl Superblock {
             total_blocks,
             journal_start,
             journal_blocks,
+            allocation_start,
+            allocation_blocks,
         })
     }
+}
+
+/// Returns the number of bytes needed to represent one allocation bit per filesystem block.
+///
+/// # Errors
+///
+/// Returns an error if rounding arithmetic overflows.
+pub fn allocation_bitmap_bytes(total_blocks: u64) -> io::Result<u64> {
+    total_blocks
+        .checked_add(7)
+        .map(|rounded| rounded / 8)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "allocation bitmap size overflow",
+            )
+        })
+}
+
+/// Returns the number of 4 KiB blocks required by the version-1 allocation image.
+///
+/// # Errors
+///
+/// Returns an error if size arithmetic overflows.
+pub fn required_allocation_blocks(total_blocks: u64) -> io::Result<u64> {
+    let bytes = allocation_bitmap_bytes(total_blocks)?;
+    let image_bytes = ALLOCATION_IMAGE_HEADER_LEN
+        .checked_add(bytes)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "allocation image size overflow",
+            )
+        })?;
+    image_bytes
+        .checked_add(BLOCK_SIZE_U64 - 1)
+        .map(|rounded| rounded / BLOCK_SIZE_U64)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "allocation image size overflow",
+            )
+        })
 }
 
 fn read_u32_le(block: &[u8; BLOCK_SIZE], offset: usize) -> u32 {
@@ -182,15 +281,18 @@ fn read_u64_le(block: &[u8; BLOCK_SIZE], offset: usize) -> u64 {
     ])
 }
 
-/// Writes a freshly encoded superblock to block zero and flushes it through the device durability
-/// boundary.
+/// Writes a fresh format-v3 metadata prefix and flushes it through the device durability boundary.
+///
+/// The allocation image is initialized before the superblock is published so a successful
+/// superblock write never points at an uninitialized allocation reservation.
 ///
 /// # Errors
 ///
-/// Returns an error if the device cannot hold the version-2 metadata reservation, writing fails, or
-/// flushing fails.
+/// Returns an error if the device cannot hold the version-3 metadata reservation, metadata
+/// initialization fails, writing fails, or flushing fails.
 pub fn format_device(device: &mut impl BlockDevice) -> io::Result<Superblock> {
     let superblock = Superblock::new(device.block_count())?;
+    initialize_allocation_region(device, &superblock)?;
     device.write_block(SUPERBLOCK_BLOCK, &superblock.encode())?;
     device.flush()?;
     Ok(superblock)

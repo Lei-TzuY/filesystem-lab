@@ -1,5 +1,6 @@
 use std::io;
 
+use crate::allocation_disk::load_allocator;
 use crate::block::BlockDevice;
 use crate::format::{read_superblock, Superblock};
 use crate::journal::{JournalEntry, TransactionId};
@@ -10,6 +11,8 @@ pub struct FsckReport {
     pub total_blocks: u64,
     pub reserved_blocks: u64,
     pub data_blocks: u64,
+    pub allocated_blocks: u64,
+    pub free_blocks: u64,
     pub journal_entries: usize,
     pub journal_writes: usize,
     pub committed_transactions: usize,
@@ -18,9 +21,10 @@ pub struct FsckReport {
 
 /// Performs a read-only consistency check over the durable filesystem layers that currently exist.
 ///
-/// The check validates the superblock against the opened device, validates and decodes the complete
-/// bounded journal region, and independently audits journal transaction structure and home-block
-/// ownership. It never writes or flushes the device.
+/// The check validates the superblock against the opened device, validates and reconstructs the
+/// durable allocation bitmap, validates and decodes the complete bounded journal region, and
+/// independently audits journal transaction structure and home-block ownership. It never writes or
+/// flushes the device.
 ///
 /// An incomplete final transaction is reported as `pending_transaction` rather than treated as
 /// corruption because it is the expected durable state after a crash before the commit marker.
@@ -28,21 +32,41 @@ pub struct FsckReport {
 /// # Errors
 ///
 /// Returns `InvalidData` for malformed/corrupt durable metadata, including invalid superblock
-/// geometry, journal checksum/record corruption, malformed transaction ordering, or journal writes
-/// that target reserved/out-of-range blocks. Underlying device read errors are propagated.
+/// geometry, allocation-image corruption/accounting errors, journal checksum/record corruption,
+/// malformed transaction ordering, or journal writes that target reserved/out-of-range blocks.
+/// Underlying device read errors are propagated.
 pub fn check_device(device: &mut impl BlockDevice) -> io::Result<FsckReport> {
     let superblock = read_superblock(device).map_err(|error| with_context("superblock", &error))?;
+    let allocator =
+        load_allocator(device, &superblock).map_err(|error| with_context("allocation", &error))?;
     let entries =
         load_journal_image(device, superblock).map_err(|error| with_context("journal", &error))?;
-    audit_journal(superblock, &entries)
+    audit_journal(
+        superblock,
+        &entries,
+        allocator.allocated_blocks(),
+        allocator.free_blocks(),
+    )
 }
 
-fn audit_journal(superblock: Superblock, entries: &[JournalEntry]) -> io::Result<FsckReport> {
+fn audit_journal(
+    superblock: Superblock,
+    entries: &[JournalEntry],
+    allocated_blocks: u64,
+    free_blocks: u64,
+) -> io::Result<FsckReport> {
     let reserved_blocks = superblock.reserved_blocks();
     let data_blocks = superblock
         .total_blocks
         .checked_sub(reserved_blocks)
         .ok_or_else(|| invalid_data("reserved metadata exceeds filesystem size"))?;
+    if allocated_blocks
+        .checked_add(free_blocks)
+        .ok_or_else(|| invalid_data("allocation accounting overflow"))?
+        != data_blocks
+    {
+        return Err(invalid_data("allocation accounting mismatch"));
+    }
 
     let mut active = None;
     let mut journal_writes = 0_usize;
@@ -89,6 +113,8 @@ fn audit_journal(superblock: Superblock, entries: &[JournalEntry]) -> io::Result
         total_blocks: superblock.total_blocks,
         reserved_blocks,
         data_blocks,
+        allocated_blocks,
+        free_blocks,
         journal_entries: entries.len(),
         journal_writes,
         committed_transactions,
@@ -128,12 +154,15 @@ mod tests {
                 data,
             },
         ];
+        let data_blocks = superblock.total_blocks - superblock.reserved_blocks();
 
-        let report = audit_journal(superblock, &entries).unwrap();
+        let report = audit_journal(superblock, &entries, 0, data_blocks).unwrap();
         assert_eq!(report.committed_transactions, 1);
         assert_eq!(report.pending_transaction, Some(2));
         assert_eq!(report.journal_writes, 2);
-        assert_eq!(report.data_blocks, 13);
+        assert_eq!(report.data_blocks, 12);
+        assert_eq!(report.allocated_blocks, 0);
+        assert_eq!(report.free_blocks, 12);
     }
 
     #[test]
@@ -147,9 +176,12 @@ mod tests {
                 data: Box::new([0_u8; BLOCK_SIZE]),
             },
         ];
+        let data_blocks = superblock.total_blocks - superblock.reserved_blocks();
 
         assert_eq!(
-            audit_journal(superblock, &entries).unwrap_err().kind(),
+            audit_journal(superblock, &entries, 0, data_blocks)
+                .unwrap_err()
+                .kind(),
             io::ErrorKind::InvalidData
         );
     }

@@ -2,8 +2,8 @@ use std::io;
 
 use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
 use filesystem_lab::format::{
-    format_device, read_superblock, Superblock, DEFAULT_JOURNAL_BLOCKS, FORMAT_VERSION,
-    SUPERBLOCK_MAGIC,
+    format_device, read_superblock, required_allocation_blocks, Superblock, DEFAULT_JOURNAL_BLOCKS,
+    FORMAT_VERSION, SUPERBLOCK_MAGIC,
 };
 
 #[derive(Debug)]
@@ -65,18 +65,29 @@ fn superblock_round_trip_is_deterministic() {
     );
     assert_eq!(Superblock::decode(&encoded).unwrap(), superblock);
     assert_eq!(superblock.journal_range(), 1..1 + DEFAULT_JOURNAL_BLOCKS);
-    assert_eq!(superblock.reserved_blocks(), 1 + DEFAULT_JOURNAL_BLOCKS);
+    assert_eq!(superblock.allocation_range(), 3..4);
+    assert_eq!(superblock.reserved_blocks(), 4);
 }
 
 #[test]
 fn explicit_journal_reservation_is_encoded() {
     let superblock = Superblock::with_journal_blocks(64, 7).unwrap();
     assert_eq!(superblock.journal_range(), 1..8);
-    assert_eq!(superblock.reserved_blocks(), 8);
+    assert_eq!(superblock.allocation_range(), 8..9);
+    assert_eq!(superblock.reserved_blocks(), 9);
     assert_eq!(
         Superblock::decode(&superblock.encode()).unwrap(),
         superblock
     );
+}
+
+#[test]
+fn allocation_reservation_scales_with_device_size() {
+    let total_blocks = 32_769_u64;
+    assert_eq!(required_allocation_blocks(total_blocks).unwrap(), 2);
+    let superblock = Superblock::new(total_blocks).unwrap();
+    assert_eq!(superblock.allocation_range(), 3..5);
+    assert_eq!(superblock.reserved_blocks(), 5);
 }
 
 #[test]
@@ -98,18 +109,20 @@ fn invalid_journal_reservations_are_rejected() {
 }
 
 #[test]
-fn format_persists_block_zero_and_flushes() {
+fn format_persists_metadata_prefix_and_flushes() {
     let mut device = MemoryBlockDevice::new(16);
     let written = format_device(&mut device).unwrap();
 
     assert_eq!(written.total_blocks, 16);
     assert_eq!(written.journal_range(), 1..1 + DEFAULT_JOURNAL_BLOCKS);
+    assert_eq!(written.allocation_range(), 3..4);
+    assert_ne!(&device.blocks[3][0..8], &[0_u8; 8]);
     assert_eq!(device.flushes, 1);
     assert_eq!(read_superblock(&mut device).unwrap(), written);
 }
 
 #[test]
-fn decode_rejects_bad_magic_version_journal_and_reserved_bytes() {
+fn decode_rejects_bad_magic_version_metadata_layout_and_reserved_bytes() {
     let valid = Superblock::new(8).unwrap().encode();
 
     let mut bad_magic = valid;
@@ -140,6 +153,24 @@ fn decode_rejects_bad_magic_version_journal_and_reserved_bytes() {
         io::ErrorKind::InvalidData
     );
 
+    let mut bad_allocation_start = valid;
+    bad_allocation_start[40..48].copy_from_slice(&4_u64.to_le_bytes());
+    assert_eq!(
+        Superblock::decode(&bad_allocation_start)
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::InvalidData
+    );
+
+    let mut bad_allocation_blocks = valid;
+    bad_allocation_blocks[48..56].copy_from_slice(&2_u64.to_le_bytes());
+    assert_eq!(
+        Superblock::decode(&bad_allocation_blocks)
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::InvalidData
+    );
+
     let mut oversized_journal = valid;
     oversized_journal[32..40].copy_from_slice(&8_u64.to_le_bytes());
     assert_eq!(
@@ -148,7 +179,7 @@ fn decode_rejects_bad_magic_version_journal_and_reserved_bytes() {
     );
 
     let mut bad_reserved = valid;
-    bad_reserved[40] = 1;
+    bad_reserved[56] = 1;
     assert_eq!(
         Superblock::decode(&bad_reserved).unwrap_err().kind(),
         io::ErrorKind::InvalidData
@@ -168,7 +199,7 @@ fn read_rejects_device_size_mismatch() {
 }
 
 #[test]
-fn device_must_fit_superblock_and_journal() {
+fn device_must_fit_all_durable_metadata() {
     let mut empty = MemoryBlockDevice::new(0);
     assert_eq!(
         format_device(&mut empty).unwrap_err().kind(),
@@ -178,6 +209,12 @@ fn device_must_fit_superblock_and_journal() {
     let mut superblock_only = MemoryBlockDevice::new(1);
     assert_eq!(
         format_device(&mut superblock_only).unwrap_err().kind(),
+        io::ErrorKind::InvalidInput
+    );
+
+    let mut no_allocation_block = MemoryBlockDevice::new(3);
+    assert_eq!(
+        format_device(&mut no_allocation_block).unwrap_err().kind(),
         io::ErrorKind::InvalidInput
     );
 }
