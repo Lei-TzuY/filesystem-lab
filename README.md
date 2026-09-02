@@ -4,7 +4,7 @@ A focused filesystem implementation and crash-consistency laboratory for buildin
 
 ## Current milestone
 
-The repository now establishes the block-device foundation and a versioned on-disk superblock:
+The repository now establishes the block-device foundation, a versioned on-disk superblock, and executable allocation invariants:
 
 - fixed 4 KiB logical blocks;
 - file-backed block device creation/opening;
@@ -14,9 +14,13 @@ The repository now establishes the block-device foundation and a versioned on-di
 - explicit durable flush boundary via `sync_data`;
 - version-1 superblock at block zero with magic, format version, block size, and total block count;
 - strict superblock validation, including reserved-byte and device-size consistency checks;
-- regression coverage for persistence, bounds, alignment, size overflow, format round trips, incompatible metadata, and durable formatting.
+- deterministic first-fit block allocator with a reserved metadata prefix;
+- executable allocation invariants for no double ownership, reserved-block exclusion, allocate/free accounting, exhaustion, and double-free rejection;
+- regression coverage for persistence, bounds, alignment, size overflow, format round trips, incompatible metadata, durable formatting, and allocation lifecycle behavior.
 
-The version-1 layout is documented in [`docs/on-disk-format.md`](docs/on-disk-format.md). The intended core progression is:
+The version-1 layout is documented in [`docs/on-disk-format.md`](docs/on-disk-format.md). Allocation state is intentionally in-memory only in this milestone; durable allocator metadata requires an explicit future format revision rather than silently reinterpreting version 1.
+
+The intended core progression is:
 
 1. block layer;
 2. versioned superblock/on-disk format;
