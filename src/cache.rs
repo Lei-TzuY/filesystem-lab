@@ -253,7 +253,11 @@ mod tests {
             if block >= self.blocks {
                 return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "out of range"));
             }
-            *buf = self.durable.get(&block).copied().unwrap_or([0_u8; BLOCK_SIZE]);
+            *buf = self
+                .durable
+                .get(&block)
+                .copied()
+                .unwrap_or([0_u8; BLOCK_SIZE]);
             Ok(())
         }
 
@@ -305,7 +309,10 @@ mod tests {
         assert_eq!(cache.device().flushes, 0);
         assert_eq!(cache.device().pending.get(&2), Some(&data));
         assert!(!cache.device().durable.contains_key(&2));
-        assert_eq!(cache.evict(2).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+        assert_eq!(
+            cache.evict(2).unwrap_err().kind(),
+            io::ErrorKind::WouldBlock
+        );
     }
 
     #[test]
