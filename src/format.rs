@@ -54,10 +54,17 @@ impl Superblock {
     /// total block count is invalid.
     pub fn decode(block: &[u8; BLOCK_SIZE]) -> io::Result<Self> {
         if block[MAGIC_OFFSET..MAGIC_OFFSET + SUPERBLOCK_MAGIC.len()] != SUPERBLOCK_MAGIC {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid superblock magic"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid superblock magic",
+            ));
         }
 
-        let version = u32::from_le_bytes(block[VERSION_OFFSET..VERSION_OFFSET + 4].try_into().expect("fixed slice"));
+        let version = u32::from_le_bytes(
+            block[VERSION_OFFSET..VERSION_OFFSET + 4]
+                .try_into()
+                .expect("fixed slice"),
+        );
         if version != FORMAT_VERSION {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -65,14 +72,28 @@ impl Superblock {
             ));
         }
 
-        let block_size = u32::from_le_bytes(block[BLOCK_SIZE_OFFSET..BLOCK_SIZE_OFFSET + 4].try_into().expect("fixed slice"));
+        let block_size = u32::from_le_bytes(
+            block[BLOCK_SIZE_OFFSET..BLOCK_SIZE_OFFSET + 4]
+                .try_into()
+                .expect("fixed slice"),
+        );
         if u64::from(block_size) != BLOCK_SIZE_U64 {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "unsupported logical block size"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "unsupported logical block size",
+            ));
         }
 
-        let total_blocks = u64::from_le_bytes(block[TOTAL_BLOCKS_OFFSET..TOTAL_BLOCKS_OFFSET + 8].try_into().expect("fixed slice"));
+        let total_blocks = u64::from_le_bytes(
+            block[TOTAL_BLOCKS_OFFSET..TOTAL_BLOCKS_OFFSET + 8]
+                .try_into()
+                .expect("fixed slice"),
+        );
         if total_blocks == 0 {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "superblock declares zero blocks"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "superblock declares zero blocks",
+            ));
         }
 
         if block[HEADER_LEN..].iter().any(|byte| *byte != 0) {
