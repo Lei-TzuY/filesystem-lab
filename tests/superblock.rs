@@ -2,7 +2,8 @@ use std::io;
 
 use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
 use filesystem_lab::format::{
-    format_device, read_superblock, Superblock, FORMAT_VERSION, SUPERBLOCK_MAGIC,
+    format_device, read_superblock, Superblock, DEFAULT_JOURNAL_BLOCKS, FORMAT_VERSION,
+    SUPERBLOCK_MAGIC,
 };
 
 #[derive(Debug)]
@@ -55,13 +56,42 @@ impl BlockDevice for MemoryBlockDevice {
 
 #[test]
 fn superblock_round_trip_is_deterministic() {
-    let encoded = Superblock::new(128).expect("valid superblock").encode();
+    let superblock = Superblock::new(128).expect("valid superblock");
+    let encoded = superblock.encode();
     assert_eq!(&encoded[0..8], &SUPERBLOCK_MAGIC);
     assert_eq!(
         u32::from_le_bytes(encoded[8..12].try_into().unwrap()),
         FORMAT_VERSION
     );
-    assert_eq!(Superblock::decode(&encoded).unwrap().total_blocks, 128);
+    assert_eq!(Superblock::decode(&encoded).unwrap(), superblock);
+    assert_eq!(superblock.journal_range(), 1..1 + DEFAULT_JOURNAL_BLOCKS);
+    assert_eq!(superblock.reserved_blocks(), 1 + DEFAULT_JOURNAL_BLOCKS);
+}
+
+#[test]
+fn explicit_journal_reservation_is_encoded() {
+    let superblock = Superblock::with_journal_blocks(64, 7).unwrap();
+    assert_eq!(superblock.journal_range(), 1..8);
+    assert_eq!(superblock.reserved_blocks(), 8);
+    assert_eq!(Superblock::decode(&superblock.encode()).unwrap(), superblock);
+}
+
+#[test]
+fn invalid_journal_reservations_are_rejected() {
+    assert_eq!(
+        Superblock::with_journal_blocks(16, 0).unwrap_err().kind(),
+        io::ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        Superblock::with_journal_blocks(4, 4).unwrap_err().kind(),
+        io::ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        Superblock::with_journal_blocks(u64::MAX, u64::MAX)
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::InvalidInput
+    );
 }
 
 #[test]
@@ -70,12 +100,13 @@ fn format_persists_block_zero_and_flushes() {
     let written = format_device(&mut device).unwrap();
 
     assert_eq!(written.total_blocks, 16);
+    assert_eq!(written.journal_range(), 1..2);
     assert_eq!(device.flushes, 1);
     assert_eq!(read_superblock(&mut device).unwrap(), written);
 }
 
 #[test]
-fn decode_rejects_bad_magic_version_and_reserved_bytes() {
+fn decode_rejects_bad_magic_version_journal_and_reserved_bytes() {
     let valid = Superblock::new(8).unwrap().encode();
 
     let mut bad_magic = valid;
@@ -92,8 +123,29 @@ fn decode_rejects_bad_magic_version_and_reserved_bytes() {
         io::ErrorKind::InvalidData
     );
 
+    let mut bad_journal_start = valid;
+    bad_journal_start[24..32].copy_from_slice(&2_u64.to_le_bytes());
+    assert_eq!(
+        Superblock::decode(&bad_journal_start).unwrap_err().kind(),
+        io::ErrorKind::InvalidData
+    );
+
+    let mut zero_journal = valid;
+    zero_journal[32..40].copy_from_slice(&0_u64.to_le_bytes());
+    assert_eq!(
+        Superblock::decode(&zero_journal).unwrap_err().kind(),
+        io::ErrorKind::InvalidData
+    );
+
+    let mut oversized_journal = valid;
+    oversized_journal[32..40].copy_from_slice(&8_u64.to_le_bytes());
+    assert_eq!(
+        Superblock::decode(&oversized_journal).unwrap_err().kind(),
+        io::ErrorKind::InvalidData
+    );
+
     let mut bad_reserved = valid;
-    bad_reserved[24] = 1;
+    bad_reserved[40] = 1;
     assert_eq!(
         Superblock::decode(&bad_reserved).unwrap_err().kind(),
         io::ErrorKind::InvalidData
@@ -113,10 +165,16 @@ fn read_rejects_device_size_mismatch() {
 }
 
 #[test]
-fn empty_device_cannot_be_formatted() {
-    let mut device = MemoryBlockDevice::new(0);
+fn device_must_fit_superblock_and_journal() {
+    let mut empty = MemoryBlockDevice::new(0);
     assert_eq!(
-        format_device(&mut device).unwrap_err().kind(),
+        format_device(&mut empty).unwrap_err().kind(),
+        io::ErrorKind::InvalidInput
+    );
+
+    let mut superblock_only = MemoryBlockDevice::new(1);
+    assert_eq!(
+        format_device(&mut superblock_only).unwrap_err().kind(),
         io::ErrorKind::InvalidInput
     );
 }
