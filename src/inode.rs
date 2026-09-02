@@ -52,14 +52,8 @@ pub enum InodeError {
     NotFound(InodeId),
     BlockNotAllocated(u64),
     ReservedBlock(u64),
-    BlockAlreadyOwned {
-        block: u64,
-        owner: InodeId,
-    },
-    BlockNotOwnedByInode {
-        inode: InodeId,
-        block: u64,
-    },
+    BlockAlreadyOwned { block: u64, owner: InodeId },
+    BlockNotOwnedByInode { inode: InodeId, block: u64 },
     InodeStillOwnsBlocks(InodeId),
     Allocation(AllocationError),
 }
@@ -70,7 +64,10 @@ impl fmt::Display for InodeError {
             Self::IdExhausted => formatter.write_str("inode identifier space exhausted"),
             Self::NotFound(id) => write!(formatter, "inode {} does not exist", id.get()),
             Self::BlockNotAllocated(block) => {
-                write!(formatter, "block {block} is not allocated to filesystem data")
+                write!(
+                    formatter,
+                    "block {block} is not allocated to filesystem data"
+                )
             }
             Self::ReservedBlock(block) => write!(formatter, "block {block} is reserved metadata"),
             Self::BlockAlreadyOwned { block, owner } => write!(
@@ -88,7 +85,9 @@ impl fmt::Display for InodeError {
                 "inode {} cannot be removed while it still owns blocks",
                 id.get()
             ),
-            Self::Allocation(error) => write!(formatter, "allocator rejected inode operation: {error}"),
+            Self::Allocation(error) => {
+                write!(formatter, "allocator rejected inode operation: {error}")
+            }
         }
     }
 }
@@ -266,7 +265,10 @@ impl InodeTable {
     ///
     /// Returns an error when the inode is missing or does not own the requested block.
     pub fn detach_block(&mut self, inode: InodeId, block: u64) -> Result<(), InodeError> {
-        let node = self.inodes.get_mut(&inode).ok_or(InodeError::NotFound(inode))?;
+        let node = self
+            .inodes
+            .get_mut(&inode)
+            .ok_or(InodeError::NotFound(inode))?;
         let Some(position) = node.blocks.iter().position(|candidate| *candidate == block) else {
             return Err(InodeError::BlockNotOwnedByInode { inode, block });
         };
@@ -286,7 +288,9 @@ impl InodeTable {
         if !node.blocks.is_empty() {
             return Err(InodeError::InodeStillOwnsBlocks(inode));
         }
-        self.inodes.remove(&inode).ok_or(InodeError::NotFound(inode))
+        self.inodes
+            .remove(&inode)
+            .ok_or(InodeError::NotFound(inode))
     }
 
     /// Validates inode/block ownership against the allocator and reverse ownership index.
