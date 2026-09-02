@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod allocation;
+pub mod allocation_disk;
 pub mod block;
 pub mod cache;
 pub mod directory;
