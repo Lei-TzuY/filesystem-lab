@@ -113,8 +113,12 @@ fn validate_device_geometry(device: &impl BlockDevice, superblock: &Superblock) 
 
 fn bitmap_len(superblock: &Superblock) -> io::Result<usize> {
     let bytes = allocation_bitmap_bytes(superblock.total_blocks)?;
-    usize::try_from(bytes)
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "allocation bitmap is too large"))
+    usize::try_from(bytes).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "allocation bitmap is too large",
+        )
+    })
 }
 
 fn region_len(superblock: &Superblock) -> io::Result<usize> {
@@ -143,9 +147,13 @@ fn encode_image(superblock: &Superblock, bitmap: &[u8]) -> io::Result<Vec<u8>> {
 
     let mut image = vec![0_u8; region_len(superblock)?];
     let payload_end = HEADER_LEN.checked_add(bitmap.len()).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "allocation image length overflow")
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "allocation image length overflow",
+        )
     })?;
-    if payload_end > image.len() || u64::try_from(HEADER_LEN).ok() != Some(ALLOCATION_IMAGE_HEADER_LEN)
+    if payload_end > image.len()
+        || u64::try_from(HEADER_LEN).ok() != Some(ALLOCATION_IMAGE_HEADER_LEN)
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -207,7 +215,10 @@ fn decode_image<'a>(image: &'a [u8], superblock: &Superblock) -> io::Result<&'a 
         io::Error::new(io::ErrorKind::InvalidData, "allocation bitmap is too large")
     })?;
     let payload_end = HEADER_LEN.checked_add(bitmap_bytes).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidData, "allocation image length overflow")
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "allocation image length overflow",
+        )
     })?;
     if payload_end > image.len() {
         return Err(io::Error::new(
@@ -262,11 +273,17 @@ fn read_region(device: &mut impl BlockDevice, superblock: &Superblock) -> io::Re
     let mut image = vec![0_u8; region_len(superblock)?];
     for (index, block) in superblock.allocation_range().enumerate() {
         let start = index.checked_mul(BLOCK_SIZE).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "allocation region offset overflow")
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "allocation region offset overflow",
+            )
         })?;
         let end = start + BLOCK_SIZE;
         let target: &mut [u8; BLOCK_SIZE] = image[start..end].try_into().map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidData, "allocation block slice mismatch")
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "allocation block slice mismatch",
+            )
         })?;
         device.read_block(block, target)?;
     }
@@ -302,11 +319,17 @@ fn write_image_block(
     index: usize,
 ) -> io::Result<()> {
     let start = index.checked_mul(BLOCK_SIZE).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "allocation region offset overflow")
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "allocation region offset overflow",
+        )
     })?;
     let end = start + BLOCK_SIZE;
     let source: &[u8; BLOCK_SIZE] = image[start..end].try_into().map_err(|_| {
-        io::Error::new(io::ErrorKind::InvalidInput, "allocation block slice mismatch")
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "allocation block slice mismatch",
+        )
     })?;
     device.write_block(block, source)
 }
@@ -316,9 +339,9 @@ fn bit_is_set(bitmap: &[u8], block: u64) -> io::Result<bool> {
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "bitmap index overflow"))?;
     let bit_index = u32::try_from(block % 8)
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "bitmap bit overflow"))?;
-    let byte = bitmap.get(byte_index).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidData, "bitmap index out of range")
-    })?;
+    let byte = bitmap
+        .get(byte_index)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "bitmap index out of range"))?;
     Ok(byte & (1_u8 << bit_index) != 0)
 }
 
@@ -327,9 +350,9 @@ fn set_bit(bitmap: &mut [u8], block: u64) -> io::Result<()> {
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "bitmap index overflow"))?;
     let bit_index = u32::try_from(block % 8)
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "bitmap bit overflow"))?;
-    let byte = bitmap.get_mut(byte_index).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "bitmap index out of range")
-    })?;
+    let byte = bitmap
+        .get_mut(byte_index)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "bitmap index out of range"))?;
     *byte |= 1_u8 << bit_index;
     Ok(())
 }
