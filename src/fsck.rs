@@ -31,8 +31,7 @@ pub struct FsckReport {
 /// geometry, journal checksum/record corruption, malformed transaction ordering, or journal writes
 /// that target reserved/out-of-range blocks. Underlying device read errors are propagated.
 pub fn check_device(device: &mut impl BlockDevice) -> io::Result<FsckReport> {
-    let superblock =
-        read_superblock(device).map_err(|error| with_context("superblock", &error))?;
+    let superblock = read_superblock(device).map_err(|error| with_context("superblock", &error))?;
     let entries =
         load_journal_image(device, superblock).map_err(|error| with_context("journal", &error))?;
     audit_journal(superblock, &entries)
