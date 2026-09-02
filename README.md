@@ -4,7 +4,7 @@ A focused filesystem implementation and crash-consistency laboratory for buildin
 
 ## Current milestone
 
-The repository now establishes the block-device foundation, a versioned on-disk superblock, executable allocation invariants, in-memory inode/directory models, an explicit buffer-cache durability state machine, deterministic journal replay semantics, and an explicit durable journal reservation:
+The repository now establishes the block-device foundation, a versioned on-disk superblock, executable allocation invariants, in-memory inode/directory models, an explicit buffer-cache durability state machine, deterministic journal replay semantics, an explicit durable journal reservation, and a standalone persistent journal-record codec:
 
 - fixed 4 KiB logical blocks;
 - file-backed block device creation/opening;
@@ -32,9 +32,12 @@ The repository now establishes the block-device foundation, a versioned on-disk 
 - deterministic crash-prefix construction at every journal-entry boundary;
 - replay semantics that ignore uncommitted tails and atomically apply a transaction only when its commit marker is present;
 - malformed-log validation for nested transactions, mismatched transaction identifiers, writes outside transactions, and invalid commits;
-- focused regression coverage for cache durability, journal crash-before/after-commit behavior, and durable journal-region layout validation.
+- standalone journal record codec v1 with magic/version/kind/length/transaction/block fields and IEEE CRC-32 integrity;
+- deterministic little-endian encoding for begin, full-block write, and commit records;
+- rejection of torn headers/payloads, checksum corruption, unsupported versions/flags, unknown record kinds, and malformed record lengths;
+- focused regression coverage for cache durability, journal crash-before/after-commit behavior, durable journal-region layout validation, and persistent record corruption.
 
-The current version-2 layout is documented in [`docs/on-disk-format.md`](docs/on-disk-format.md). Version 1 is retained in the document as historical schema information and is intentionally rejected by the version-2 reader; the laboratory does not silently reinterpret old images. Allocation, inode, directory, and journal-record contents are still in-memory only. Version 2 reserves durable ownership of the journal region but deliberately does not yet define persistent record encoding, circular-log metadata, checkpointing, or recovery writes.
+The current filesystem version-2 layout is documented in [`docs/on-disk-format.md`](docs/on-disk-format.md). Version 1 is retained in the document as historical schema information and is intentionally rejected by the version-2 reader; the laboratory does not silently reinterpret old images. The standalone journal record codec is documented separately in [`docs/journal-record-format.md`](docs/journal-record-format.md) and is versioned independently. Allocation, inode, and directory contents remain in-memory only. Version 2 reserves durable ownership of the journal region, while circular-log placement, head/tail metadata, checkpointing, recovery writes, and binding the record stream to that region remain intentionally undefined.
 
 The intended core progression is:
 
@@ -45,7 +48,8 @@ The intended core progression is:
 5. cache/dirty-state semantics;
 6. journal transaction/replay semantics and deterministic crash prefixes;
 7. durable journal region layout;
-8. persistent journal record encoding and recovery;
-9. fsck/corruption invariants.
+8. persistent journal record encoding;
+9. journal-region binding and recovery;
+10. fsck/corruption invariants.
 
 Large POSIX surface-area work, FUSE integration, complex extents, permissions, and other broad features are intentionally deferred until crash semantics and the durable core are well specified and executable.
