@@ -5,6 +5,7 @@ use crate::block::{BlockDevice, BLOCK_SIZE, BLOCK_SIZE_U64};
 pub const SUPERBLOCK_BLOCK: u64 = 0;
 pub const SUPERBLOCK_MAGIC: [u8; 8] = *b"FSLABFS\0";
 pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_BLOCK_SIZE: u32 = 4096;
 
 const MAGIC_OFFSET: usize = 0;
 const VERSION_OFFSET: usize = 8;
@@ -40,7 +41,7 @@ impl Superblock {
             .copy_from_slice(&SUPERBLOCK_MAGIC);
         block[VERSION_OFFSET..VERSION_OFFSET + 4].copy_from_slice(&FORMAT_VERSION.to_le_bytes());
         block[BLOCK_SIZE_OFFSET..BLOCK_SIZE_OFFSET + 4]
-            .copy_from_slice(&(BLOCK_SIZE as u32).to_le_bytes());
+            .copy_from_slice(&FORMAT_BLOCK_SIZE.to_le_bytes());
         block[TOTAL_BLOCKS_OFFSET..TOTAL_BLOCKS_OFFSET + 8]
             .copy_from_slice(&self.total_blocks.to_le_bytes());
         block
@@ -60,11 +61,7 @@ impl Superblock {
             ));
         }
 
-        let version = u32::from_le_bytes(
-            block[VERSION_OFFSET..VERSION_OFFSET + 4]
-                .try_into()
-                .expect("fixed slice"),
-        );
+        let version = read_u32_le(block, VERSION_OFFSET);
         if version != FORMAT_VERSION {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -72,23 +69,15 @@ impl Superblock {
             ));
         }
 
-        let block_size = u32::from_le_bytes(
-            block[BLOCK_SIZE_OFFSET..BLOCK_SIZE_OFFSET + 4]
-                .try_into()
-                .expect("fixed slice"),
-        );
-        if u64::from(block_size) != BLOCK_SIZE_U64 {
+        let block_size = read_u32_le(block, BLOCK_SIZE_OFFSET);
+        if block_size != FORMAT_BLOCK_SIZE || u64::from(block_size) != BLOCK_SIZE_U64 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "unsupported logical block size",
             ));
         }
 
-        let total_blocks = u64::from_le_bytes(
-            block[TOTAL_BLOCKS_OFFSET..TOTAL_BLOCKS_OFFSET + 8]
-                .try_into()
-                .expect("fixed slice"),
-        );
+        let total_blocks = read_u64_le(block, TOTAL_BLOCKS_OFFSET);
         if total_blocks == 0 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -105,6 +94,28 @@ impl Superblock {
 
         Ok(Self { total_blocks })
     }
+}
+
+fn read_u32_le(block: &[u8; BLOCK_SIZE], offset: usize) -> u32 {
+    u32::from_le_bytes([
+        block[offset],
+        block[offset + 1],
+        block[offset + 2],
+        block[offset + 3],
+    ])
+}
+
+fn read_u64_le(block: &[u8; BLOCK_SIZE], offset: usize) -> u64 {
+    u64::from_le_bytes([
+        block[offset],
+        block[offset + 1],
+        block[offset + 2],
+        block[offset + 3],
+        block[offset + 4],
+        block[offset + 5],
+        block[offset + 6],
+        block[offset + 7],
+    ])
 }
 
 /// Writes a freshly encoded superblock to block zero and flushes it through the device durability
