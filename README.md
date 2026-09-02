@@ -4,7 +4,7 @@ A focused filesystem implementation and crash-consistency laboratory for buildin
 
 ## Current milestone
 
-The repository currently establishes the block-device foundation only:
+The repository now establishes the block-device foundation and a versioned on-disk superblock:
 
 - fixed 4 KiB logical blocks;
 - file-backed block device creation/opening;
@@ -12,9 +12,11 @@ The repository currently establishes the block-device foundation only:
 - checked device-size/offset arithmetic;
 - rejection of non-block-aligned backing files;
 - explicit durable flush boundary via `sync_data`;
-- regression coverage for persistence, bounds, alignment, and size overflow.
+- version-1 superblock at block zero with magic, format version, block size, and total block count;
+- strict superblock validation, including reserved-byte and device-size consistency checks;
+- regression coverage for persistence, bounds, alignment, size overflow, format round trips, incompatible metadata, and durable formatting.
 
-No on-disk filesystem format is defined yet. The intended core progression is:
+The version-1 layout is documented in [`docs/on-disk-format.md`](docs/on-disk-format.md). The intended core progression is:
 
 1. block layer;
 2. versioned superblock/on-disk format;
