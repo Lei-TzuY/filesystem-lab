@@ -3,3 +3,4 @@
 pub mod allocation;
 pub mod block;
 pub mod format;
+pub mod inode;
