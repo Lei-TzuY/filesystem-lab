@@ -55,7 +55,9 @@ fn duplicate_names_are_rejected_deterministically() {
     let second = inodes.create(InodeKind::File).unwrap();
     let mut directories = DirectoryTable::new();
 
-    directories.insert(directory, "same", first, &inodes).unwrap();
+    directories
+        .insert(directory, "same", first, &inodes)
+        .unwrap();
     assert_eq!(
         directories.insert(directory, "same", second, &inodes),
         Err(DirectoryError::EntryAlreadyExists {
@@ -73,7 +75,9 @@ fn validation_detects_dangling_inode_reference() {
     let file = inodes.create(InodeKind::File).unwrap();
     let mut directories = DirectoryTable::new();
 
-    directories.insert(directory, "gone", file, &inodes).unwrap();
+    directories
+        .insert(directory, "gone", file, &inodes)
+        .unwrap();
     inodes.remove(file).unwrap();
 
     assert_eq!(
