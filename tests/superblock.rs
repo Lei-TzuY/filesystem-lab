@@ -156,14 +156,18 @@ fn decode_rejects_bad_magic_version_metadata_layout_and_reserved_bytes() {
     let mut bad_allocation_start = valid;
     bad_allocation_start[40..48].copy_from_slice(&4_u64.to_le_bytes());
     assert_eq!(
-        Superblock::decode(&bad_allocation_start).unwrap_err().kind(),
+        Superblock::decode(&bad_allocation_start)
+            .unwrap_err()
+            .kind(),
         io::ErrorKind::InvalidData
     );
 
     let mut bad_allocation_blocks = valid;
     bad_allocation_blocks[48..56].copy_from_slice(&2_u64.to_le_bytes());
     assert_eq!(
-        Superblock::decode(&bad_allocation_blocks).unwrap_err().kind(),
+        Superblock::decode(&bad_allocation_blocks)
+            .unwrap_err()
+            .kind(),
         io::ErrorKind::InvalidData
     );
 
