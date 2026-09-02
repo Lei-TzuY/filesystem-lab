@@ -103,7 +103,7 @@ fn format_persists_block_zero_and_flushes() {
     let written = format_device(&mut device).unwrap();
 
     assert_eq!(written.total_blocks, 16);
-    assert_eq!(written.journal_range(), 1..2);
+    assert_eq!(written.journal_range(), 1..1 + DEFAULT_JOURNAL_BLOCKS);
     assert_eq!(device.flushes, 1);
     assert_eq!(read_superblock(&mut device).unwrap(), written);
 }
