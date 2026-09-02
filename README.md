@@ -1,6 +1,6 @@
 # filesystem-lab
 
-A focused ELF-like systems laboratory for building and verifying a small filesystem stack from first principles, with explicit crash-consistency and corruption invariants.
+A focused filesystem implementation and crash-consistency laboratory for building and verifying a small filesystem stack from first principles, with explicit persistence and corruption invariants.
 
 ## Current milestone
 
