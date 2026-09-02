@@ -97,10 +97,9 @@ pub fn load_journal_image(
         let end = start
             .checked_add(BLOCK_SIZE)
             .ok_or_else(|| invalid_data("journal byte range overflow"))?;
-        let chunk: &mut [u8; BLOCK_SIZE] = region[start..end]
-            .try_into()
-            .map_err(|_| invalid_data("journal block slice has invalid size"))?;
-        device.read_block(block, chunk)?;
+        let mut block_data = [0_u8; BLOCK_SIZE];
+        device.read_block(block, &mut block_data)?;
+        region[start..end].copy_from_slice(&block_data);
     }
 
     if region.iter().all(|byte| *byte == 0) {
