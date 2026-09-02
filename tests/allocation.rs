@@ -85,7 +85,10 @@ fn reserved_out_of_range_and_double_free_are_rejected() {
 
     let block = allocator.allocate().unwrap();
     allocator.free(block).unwrap();
-    assert_eq!(allocator.free(block), Err(AllocationError::AlreadyFree(block)));
+    assert_eq!(
+        allocator.free(block),
+        Err(AllocationError::AlreadyFree(block))
+    );
     allocator.validate().unwrap();
 }
 
