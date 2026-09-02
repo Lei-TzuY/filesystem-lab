@@ -64,12 +64,14 @@ impl Superblock {
             io::Error::new(io::ErrorKind::InvalidInput, "journal block range overflow")
         })?;
         let allocation_blocks = required_allocation_blocks(total_blocks)?;
-        let metadata_end = allocation_start.checked_add(allocation_blocks).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "allocation metadata block range overflow",
-            )
-        })?;
+        let metadata_end = allocation_start
+            .checked_add(allocation_blocks)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "allocation metadata block range overflow",
+                )
+            })?;
         if metadata_end > total_blocks {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -164,9 +166,10 @@ impl Superblock {
             ));
         }
 
-        let expected_allocation_start = journal_start.checked_add(journal_blocks).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "journal block range overflow")
-        })?;
+        let expected_allocation_start =
+            journal_start.checked_add(journal_blocks).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "journal block range overflow")
+            })?;
         if allocation_start != expected_allocation_start {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -222,7 +225,12 @@ pub fn allocation_bitmap_bytes(total_blocks: u64) -> io::Result<u64> {
     total_blocks
         .checked_add(7)
         .map(|rounded| rounded / 8)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "allocation bitmap size overflow"))
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "allocation bitmap size overflow",
+            )
+        })
 }
 
 /// Returns the number of 4 KiB blocks required by the version-1 allocation image.
@@ -232,13 +240,23 @@ pub fn allocation_bitmap_bytes(total_blocks: u64) -> io::Result<u64> {
 /// Returns an error if size arithmetic overflows.
 pub fn required_allocation_blocks(total_blocks: u64) -> io::Result<u64> {
     let bytes = allocation_bitmap_bytes(total_blocks)?;
-    let image_bytes = ALLOCATION_IMAGE_HEADER_LEN.checked_add(bytes).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "allocation image size overflow")
-    })?;
+    let image_bytes = ALLOCATION_IMAGE_HEADER_LEN
+        .checked_add(bytes)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "allocation image size overflow",
+            )
+        })?;
     image_bytes
         .checked_add(BLOCK_SIZE_U64 - 1)
         .map(|rounded| rounded / BLOCK_SIZE_U64)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "allocation image size overflow"))
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "allocation image size overflow",
+            )
+        })
 }
 
 fn read_u32_le(block: &[u8; BLOCK_SIZE], offset: usize) -> u32 {
