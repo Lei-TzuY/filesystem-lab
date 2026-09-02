@@ -20,7 +20,11 @@ impl fmt::Display for DirectoryError {
                 write!(formatter, "parent inode {} does not exist", parent.get())
             }
             Self::ParentNotDirectory(parent) => {
-                write!(formatter, "parent inode {} is not a directory", parent.get())
+                write!(
+                    formatter,
+                    "parent inode {} is not a directory",
+                    parent.get()
+                )
             }
             Self::TargetNotFound(target) => {
                 write!(formatter, "target inode {} does not exist", target.get())
@@ -47,7 +51,10 @@ impl Error for DirectoryError {}
 pub enum DirectoryInvariantError {
     ParentMissing(InodeId),
     ParentNotDirectory(InodeId),
-    InvalidName { parent: InodeId, name: String },
+    InvalidName {
+        parent: InodeId,
+        name: String,
+    },
     DanglingTarget {
         parent: InodeId,
         name: String,
@@ -59,7 +66,11 @@ impl fmt::Display for DirectoryInvariantError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ParentMissing(parent) => {
-                write!(formatter, "namespace contains missing parent inode {}", parent.get())
+                write!(
+                    formatter,
+                    "namespace contains missing parent inode {}",
+                    parent.get()
+                )
             }
             Self::ParentNotDirectory(parent) => write!(
                 formatter,
