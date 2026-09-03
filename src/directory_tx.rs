@@ -1,6 +1,6 @@
 use std::io;
 
-use crate::block::{BlockDevice, BLOCK_SIZE};
+use crate::block::BlockDevice;
 use crate::directory_codec::PersistedDirectoryEntry;
 use crate::directory_table::store_directory_table;
 use crate::format::Superblock;
@@ -74,6 +74,7 @@ pub fn store_directory_table_journaled(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::block::BLOCK_SIZE;
     use crate::directory_table::load_directory_table;
     use crate::format::format_device;
     use crate::journal::JournalLog;
