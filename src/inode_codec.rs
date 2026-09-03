@@ -53,11 +53,9 @@ pub fn encode_inode(inode: &PersistedInode) -> io::Result<Vec<u8>> {
             "inode block count exceeds codec limit",
         )
     })?;
-    let payload_len = inode
-        .blocks
-        .len()
-        .checked_mul(8)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "inode record size overflow"))?;
+    let payload_len = inode.blocks.len().checked_mul(8).ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "inode record size overflow")
+    })?;
     let total_len = INODE_RECORD_HEADER_LEN
         .checked_add(payload_len)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "inode record size overflow"))?;
@@ -110,7 +108,10 @@ pub fn decode_inode(bytes: &[u8]) -> io::Result<PersistedInode> {
         ));
     }
     if bytes[MAGIC_OFFSET..MAGIC_OFFSET + 4] != INODE_RECORD_MAGIC {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid inode record magic"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "invalid inode record magic",
+        ));
     }
     let version = read_u16(bytes, VERSION_OFFSET);
     if version != INODE_RECORD_VERSION {
@@ -132,9 +133,8 @@ pub fn decode_inode(bytes: &[u8]) -> io::Result<PersistedInode> {
     let total_len = usize::try_from(read_u32(bytes, TOTAL_LEN_OFFSET)).map_err(|_| {
         io::Error::new(io::ErrorKind::InvalidData, "inode record length is invalid")
     })?;
-    let block_count = usize::try_from(read_u32(bytes, BLOCK_COUNT_OFFSET)).map_err(|_| {
-        io::Error::new(io::ErrorKind::InvalidData, "inode block count is invalid")
-    })?;
+    let block_count = usize::try_from(read_u32(bytes, BLOCK_COUNT_OFFSET))
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "inode block count is invalid"))?;
     let expected_len = INODE_RECORD_HEADER_LEN
         .checked_add(block_count.checked_mul(8).ok_or_else(|| {
             io::Error::new(io::ErrorKind::InvalidData, "inode record size overflow")
@@ -177,7 +177,12 @@ pub fn decode_inode(bytes: &[u8]) -> io::Result<PersistedInode> {
     let kind = match read_u16(bytes, KIND_OFFSET) {
         KIND_FILE => InodeKind::File,
         KIND_DIRECTORY => InodeKind::Directory,
-        _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid inode kind")),
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid inode kind",
+            ))
+        }
     };
 
     let mut blocks = Vec::with_capacity(block_count);
