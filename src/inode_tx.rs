@@ -292,7 +292,8 @@ mod tests {
     #[test]
     fn multi_block_inode_change_rejects_insufficient_journal_capacity() {
         let mut device = FaultDevice::new(64);
-        let superblock = format_device(&mut device).unwrap();
+        let superblock = Superblock::with_journal_blocks(device.block_count(), 2).unwrap();
+        crate::inode_table::initialize_inode_table_region(&mut device, &superblock).unwrap();
         let inodes: Vec<_> = (1..=200)
             .map(|id| PersistedInode {
                 id,
