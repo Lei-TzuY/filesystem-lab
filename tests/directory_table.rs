@@ -9,6 +9,7 @@ use filesystem_lab::format::{format_device, Superblock};
 struct MemoryBlockDevice {
     blocks: Vec<[u8; BLOCK_SIZE]>,
     flushes: usize,
+    fail_write_to: Option<u64>,
 }
 
 impl MemoryBlockDevice {
@@ -16,6 +17,7 @@ impl MemoryBlockDevice {
         Self {
             blocks: vec![[0; BLOCK_SIZE]; blocks],
             flushes: 0,
+            fail_write_to: None,
         }
     }
 }
@@ -37,6 +39,9 @@ impl BlockDevice for MemoryBlockDevice {
     }
 
     fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> io::Result<()> {
+        if self.fail_write_to == Some(block) {
+            return Err(io::Error::other("injected directory write failure"));
+        }
         let index = usize::try_from(block)
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "block index overflow"))?;
         let target = self
@@ -117,6 +122,34 @@ fn corruption_and_stale_padding_are_detected() {
 
     store_directory_table(&mut device, &superblock, &[entry(2, 3, "alpha")]).unwrap();
     device.blocks[first][BLOCK_SIZE - 1] = 1;
+    assert_eq!(
+        load_directory_table(&mut device, &superblock)
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::InvalidData
+    );
+}
+
+#[test]
+fn torn_multi_block_rewrite_is_rejected() {
+    let mut device = MemoryBlockDevice::new(32);
+    let superblock = format_device(&mut device).unwrap();
+    let entries: Vec<_> = (0_u64..16)
+        .map(|index| {
+            let name = format!("{index:03}{}", "x".repeat(252));
+            entry(2, index + 3, &name)
+        })
+        .collect();
+
+    device.fail_write_to = Some(superblock.directory_start);
+    assert_eq!(
+        store_directory_table(&mut device, &superblock, &entries)
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::Other
+    );
+    device.fail_write_to = None;
+
     assert_eq!(
         load_directory_table(&mut device, &superblock)
             .unwrap_err()
