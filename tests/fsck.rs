@@ -1,8 +1,13 @@
 use std::io;
 
+use filesystem_lab::allocation::BlockAllocator;
+use filesystem_lab::allocation_disk::store_allocator;
 use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
 use filesystem_lab::format::format_device;
 use filesystem_lab::fsck::check_device;
+use filesystem_lab::inode::InodeKind;
+use filesystem_lab::inode_codec::PersistedInode;
+use filesystem_lab::inode_table::store_inode_table;
 use filesystem_lab::journal::JournalLog;
 use filesystem_lab::journal_region::store_journal_image;
 
@@ -72,12 +77,119 @@ fn fresh_device_passes_without_mutation() {
     assert_eq!(report.data_blocks, data_blocks);
     assert_eq!(report.allocated_blocks, 0);
     assert_eq!(report.free_blocks, data_blocks);
+    assert_eq!(report.inode_records, 0);
+    assert_eq!(report.referenced_blocks, 0);
     assert_eq!(report.journal_entries, 0);
     assert_eq!(report.journal_writes, 0);
     assert_eq!(report.committed_transactions, 0);
     assert_eq!(report.pending_transaction, None);
     assert_eq!(device.writes, writes_before);
     assert_eq!(device.flushes, flushes_before);
+}
+
+#[test]
+fn accepts_inode_references_that_match_durable_allocation() {
+    let mut device = MemoryDevice::new(16);
+    let superblock = format_device(&mut device).unwrap();
+    let mut allocator =
+        BlockAllocator::new(superblock.total_blocks, superblock.reserved_blocks()).unwrap();
+    let block = allocator.allocate().unwrap();
+    store_allocator(&mut device, &superblock, &allocator).unwrap();
+    store_inode_table(
+        &mut device,
+        &superblock,
+        &[PersistedInode {
+            id: 1,
+            kind: InodeKind::File,
+            blocks: vec![block],
+        }],
+    )
+    .unwrap();
+
+    let writes_before = device.writes;
+    let flushes_before = device.flushes;
+    let report = check_device(&mut device).unwrap();
+
+    assert_eq!(report.allocated_blocks, 1);
+    assert_eq!(report.inode_records, 1);
+    assert_eq!(report.referenced_blocks, 1);
+    assert_eq!(device.writes, writes_before);
+    assert_eq!(device.flushes, flushes_before);
+}
+
+#[test]
+fn rejects_inode_reference_to_unallocated_block() {
+    let mut device = MemoryDevice::new(16);
+    let superblock = format_device(&mut device).unwrap();
+    store_inode_table(
+        &mut device,
+        &superblock,
+        &[PersistedInode {
+            id: 7,
+            kind: InodeKind::File,
+            blocks: vec![superblock.reserved_blocks()],
+        }],
+    )
+    .unwrap();
+
+    let error = check_device(&mut device).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("references unallocated block"));
+}
+
+#[test]
+fn rejects_cross_inode_double_ownership() {
+    let mut device = MemoryDevice::new(16);
+    let superblock = format_device(&mut device).unwrap();
+    let mut allocator =
+        BlockAllocator::new(superblock.total_blocks, superblock.reserved_blocks()).unwrap();
+    let block = allocator.allocate().unwrap();
+    store_allocator(&mut device, &superblock, &allocator).unwrap();
+    store_inode_table(
+        &mut device,
+        &superblock,
+        &[
+            PersistedInode {
+                id: 1,
+                kind: InodeKind::File,
+                blocks: vec![block],
+            },
+            PersistedInode {
+                id: 2,
+                kind: InodeKind::Directory,
+                blocks: vec![block],
+            },
+        ],
+    )
+    .unwrap();
+
+    let error = check_device(&mut device).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("owned by both inode"));
+}
+
+#[test]
+fn rejects_reserved_and_out_of_range_inode_references() {
+    for bad_block in [0, 16] {
+        let mut device = MemoryDevice::new(16);
+        let superblock = format_device(&mut device).unwrap();
+        store_inode_table(
+            &mut device,
+            &superblock,
+            &[PersistedInode {
+                id: 3,
+                kind: InodeKind::File,
+                blocks: vec![bad_block],
+            }],
+        )
+        .unwrap();
+
+        let error = check_device(&mut device).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error
+            .to_string()
+            .contains("references reserved or out-of-range block"));
+    }
 }
 
 #[test]
@@ -107,6 +219,22 @@ fn reports_committed_and_crash_incomplete_transactions() {
 }
 
 #[test]
+fn accepts_inode_table_as_journal_home() {
+    let mut device = MemoryDevice::new(16);
+    let superblock = format_device(&mut device).unwrap();
+    let mut log = JournalLog::new();
+    let txid = log.begin().unwrap();
+    log.write(txid, superblock.inode_start, [0_u8; BLOCK_SIZE])
+        .unwrap();
+    log.commit(txid).unwrap();
+    store_journal_image(&mut device, superblock, log.entries()).unwrap();
+
+    let report = check_device(&mut device).unwrap();
+    assert_eq!(report.journal_writes, 1);
+    assert_eq!(report.committed_transactions, 1);
+}
+
+#[test]
 fn detects_superblock_corruption_before_journal_scan() {
     let mut device = MemoryDevice::new(16);
     format_device(&mut device).unwrap();
@@ -127,6 +255,18 @@ fn detects_allocation_corruption_before_journal_scan() {
     let error = check_device(&mut device).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     assert!(error.to_string().contains("fsck allocation"));
+}
+
+#[test]
+fn detects_inode_table_corruption_before_journal_scan() {
+    let mut device = MemoryDevice::new(16);
+    let superblock = format_device(&mut device).unwrap();
+    let inode_block = usize::try_from(superblock.inode_start).unwrap();
+    device.blocks[inode_block][8] ^= 0x80;
+
+    let error = check_device(&mut device).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("fsck inode table"));
 }
 
 #[test]
