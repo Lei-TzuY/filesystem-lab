@@ -3,6 +3,8 @@ use std::io;
 use filesystem_lab::allocation::BlockAllocator;
 use filesystem_lab::allocation_disk::store_allocator;
 use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
+use filesystem_lab::directory_codec::PersistedDirectoryEntry;
+use filesystem_lab::directory_table::store_directory_table;
 use filesystem_lab::format::format_device;
 use filesystem_lab::fsck::check_device;
 use filesystem_lab::inode::InodeKind;
@@ -79,6 +81,7 @@ fn fresh_device_passes_without_mutation() {
     assert_eq!(report.free_blocks, data_blocks);
     assert_eq!(report.inode_records, 0);
     assert_eq!(report.referenced_blocks, 0);
+    assert_eq!(report.directory_entries, 0);
     assert_eq!(report.journal_entries, 0);
     assert_eq!(report.journal_writes, 0);
     assert_eq!(report.committed_transactions, 0);
@@ -115,6 +118,147 @@ fn accepts_inode_references_that_match_durable_allocation() {
     assert_eq!(report.referenced_blocks, 1);
     assert_eq!(device.writes, writes_before);
     assert_eq!(device.flushes, flushes_before);
+}
+
+#[test]
+fn accepts_durable_namespace_with_existing_directory_parent_and_target() {
+    let mut device = MemoryDevice::new(16);
+    let superblock = format_device(&mut device).unwrap();
+    store_inode_table(
+        &mut device,
+        &superblock,
+        &[
+            PersistedInode {
+                id: 1,
+                kind: InodeKind::Directory,
+                blocks: vec![],
+            },
+            PersistedInode {
+                id: 2,
+                kind: InodeKind::File,
+                blocks: vec![],
+            },
+        ],
+    )
+    .unwrap();
+    store_directory_table(
+        &mut device,
+        &superblock,
+        &[PersistedDirectoryEntry {
+            parent: 1,
+            target: 2,
+            name: "child".to_owned(),
+        }],
+    )
+    .unwrap();
+
+    let writes_before = device.writes;
+    let flushes_before = device.flushes;
+    let report = check_device(&mut device).unwrap();
+
+    assert_eq!(report.inode_records, 2);
+    assert_eq!(report.directory_entries, 1);
+    assert_eq!(device.writes, writes_before);
+    assert_eq!(device.flushes, flushes_before);
+}
+
+#[test]
+fn rejects_directory_entry_with_missing_parent() {
+    let mut device = MemoryDevice::new(16);
+    let superblock = format_device(&mut device).unwrap();
+    store_inode_table(
+        &mut device,
+        &superblock,
+        &[PersistedInode {
+            id: 2,
+            kind: InodeKind::File,
+            blocks: vec![],
+        }],
+    )
+    .unwrap();
+    store_directory_table(
+        &mut device,
+        &superblock,
+        &[PersistedDirectoryEntry {
+            parent: 1,
+            target: 2,
+            name: "child".to_owned(),
+        }],
+    )
+    .unwrap();
+
+    let error = check_device(&mut device).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("missing parent inode 1"));
+}
+
+#[test]
+fn rejects_directory_entry_with_missing_target() {
+    let mut device = MemoryDevice::new(16);
+    let superblock = format_device(&mut device).unwrap();
+    store_inode_table(
+        &mut device,
+        &superblock,
+        &[PersistedInode {
+            id: 1,
+            kind: InodeKind::Directory,
+            blocks: vec![],
+        }],
+    )
+    .unwrap();
+    store_directory_table(
+        &mut device,
+        &superblock,
+        &[PersistedDirectoryEntry {
+            parent: 1,
+            target: 2,
+            name: "child".to_owned(),
+        }],
+    )
+    .unwrap();
+
+    let error = check_device(&mut device).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("missing target inode 2"));
+}
+
+#[test]
+fn rejects_directory_entry_whose_parent_is_not_a_directory() {
+    let mut device = MemoryDevice::new(16);
+    let superblock = format_device(&mut device).unwrap();
+    store_inode_table(
+        &mut device,
+        &superblock,
+        &[
+            PersistedInode {
+                id: 1,
+                kind: InodeKind::File,
+                blocks: vec![],
+            },
+            PersistedInode {
+                id: 2,
+                kind: InodeKind::File,
+                blocks: vec![],
+            },
+        ],
+    )
+    .unwrap();
+    store_directory_table(
+        &mut device,
+        &superblock,
+        &[PersistedDirectoryEntry {
+            parent: 1,
+            target: 2,
+            name: "child".to_owned(),
+        }],
+    )
+    .unwrap();
+
+    let error = check_device(&mut device).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error
+        .to_string()
+        .contains("parent inode 1 is not a directory"));
 }
 
 #[test]
@@ -267,6 +411,18 @@ fn detects_inode_table_corruption_before_journal_scan() {
     let error = check_device(&mut device).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     assert!(error.to_string().contains("fsck inode table"));
+}
+
+#[test]
+fn detects_directory_table_corruption_before_journal_scan() {
+    let mut device = MemoryDevice::new(16);
+    let superblock = format_device(&mut device).unwrap();
+    let directory_block = usize::try_from(superblock.directory_start).unwrap();
+    device.blocks[directory_block][8] ^= 0x80;
+
+    let error = check_device(&mut device).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("fsck directory table"));
 }
 
 #[test]
