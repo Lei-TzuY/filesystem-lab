@@ -138,7 +138,9 @@ fn encode_image(
     image[FLAGS_OFFSET..FLAGS_OFFSET + 4].copy_from_slice(&0_u32.to_le_bytes());
     image[PAYLOAD_BYTES_OFFSET..PAYLOAD_BYTES_OFFSET + 8].copy_from_slice(
         &u64::try_from(payload.len())
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "directory payload too large"))?
+            .map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidInput, "directory payload too large")
+            })?
             .to_le_bytes(),
     );
     image[RECORD_COUNT_OFFSET..RECORD_COUNT_OFFSET + 4].copy_from_slice(
@@ -154,7 +156,9 @@ fn encode_image(
 
 fn decode_image(image: &[u8]) -> io::Result<Vec<PersistedDirectoryEntry>> {
     if image.len() < DIRECTORY_TABLE_HEADER_LEN {
-        return Err(invalid_data("directory table region is shorter than header"));
+        return Err(invalid_data(
+            "directory table region is shorter than header",
+        ));
     }
     if image[MAGIC_OFFSET..MAGIC_OFFSET + DIRECTORY_TABLE_MAGIC.len()] != DIRECTORY_TABLE_MAGIC {
         return Err(invalid_data("invalid directory table magic"));
@@ -174,7 +178,9 @@ fn decode_image(image: &[u8]) -> io::Result<Vec<PersistedDirectoryEntry>> {
         .checked_add(payload_len)
         .ok_or_else(|| invalid_data("directory table used length overflow"))?;
     if used > image.len() {
-        return Err(invalid_data("directory table payload exceeds reserved region"));
+        return Err(invalid_data(
+            "directory table payload exceeds reserved region",
+        ));
     }
     if image[used..].iter().any(|byte| *byte != 0) {
         return Err(invalid_data("directory table trailing padding is non-zero"));
