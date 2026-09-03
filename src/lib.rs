@@ -6,6 +6,7 @@ pub mod allocation_tx;
 pub mod block;
 pub mod cache;
 pub mod directory;
+pub mod directory_codec;
 pub mod format;
 pub mod fsck;
 pub mod inode;
