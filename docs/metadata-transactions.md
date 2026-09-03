@@ -17,7 +17,9 @@ A crash before the commit record is durable changes neither table. A crash after
 
 Journal records contain full 4 KiB home blocks. The transaction is never split merely to fit the reservation. If the complete inode+directory changed-block set and its begin/commit framing exceed the journal region, `store_inode_directory_tables_journaled` returns `InvalidInput` before publishing a new journal image.
 
-With the current record and region codecs, a transaction containing two full-block writes needs more than two 4 KiB journal blocks. Format v5 stores journal geometry explicitly, so filesystems provisioned with at least three journal blocks can execute the common one-inode-block + one-directory-block transaction without changing the on-disk format version. The default formatter still reserves two journal blocks; changing that default is intentionally separate from this milestone.
+With the current record and region codecs, a transaction containing two full-block writes needs more than two 4 KiB journal blocks. New format-v5 filesystems therefore reserve three journal blocks by default. Journal geometry is already explicit in the v5 superblock, so this is a formatter-policy change rather than a disk-format reinterpretation: existing v5 images with a two-block journal remain readable and retain their original bounded capacity, while callers that need a different reservation can continue using the explicit-geometry constructors.
+
+The regression suite exercises the policy through the public formatter: a freshly formatted default filesystem must successfully commit a transaction that changes one inode-table block and one directory-table block in the same WAL transaction. This prevents the default geometry from silently regressing below the minimum capability required by the cross-table primitive.
 
 ## Invariants exercised
 
@@ -29,6 +31,7 @@ Focused deterministic regressions verify that:
 - failure on the second home write leaves a durable transaction that recovery can replay;
 - repeated recovery is idempotent;
 - a too-small journal reservation rejects the combined update before home metadata changes;
+- the default formatter provisions enough journal space for the common one-inode-block + one-directory-block transaction;
 - after successful recovery, read-only fsck accepts the root, reachability, and namespace relationships.
 
 This primitive intentionally does not include allocation changes, rename/unlink semantics, link counts, orphan handling, or broad POSIX behavior. Those require their own bounded lifecycle transactions and invariants.
