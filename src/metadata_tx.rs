@@ -1,6 +1,6 @@
 use std::io;
 
-use crate::block::{BlockDevice, BLOCK_SIZE};
+use crate::block::BlockDevice;
 use crate::directory_codec::PersistedDirectoryEntry;
 use crate::directory_table::store_directory_table;
 use crate::format::Superblock;
@@ -87,6 +87,7 @@ pub fn store_inode_directory_tables_journaled(
 mod tests {
     use super::*;
     use crate::allocation_disk::initialize_allocation_region;
+    use crate::block::BLOCK_SIZE;
     use crate::directory_table::{initialize_directory_table_region, load_directory_table};
     use crate::format::{Superblock, SUPERBLOCK_BLOCK};
     use crate::fsck::check_device;
