@@ -37,7 +37,15 @@ The current unlink primitive is deliberately narrow. Before any new journal imag
 
 Allocator transition validation is equally strict: no new data block may become allocated, and the set of blocks changing from owned to free must equal the removed inode's complete persisted block list. This rejects partial release, unrelated release, and allocation side effects before they can cross the WAL durability boundary.
 
-Hard links, orphan handling, recursive removal, and rename are intentionally rejected rather than approximated. Those semantics need independent lifecycle contracts before they can safely share this primitive.
+Hard links, orphan handling, and recursive removal are intentionally rejected rather than approximated. Those semantics need independent lifecycle contracts before they can safely share this primitive.
+
+## Validated rename transitions
+
+`rename_tx::rename_entry_journaled` defines the first bounded rename contract. It changes exactly one durable namespace key while preserving the target inode and leaving allocation and inode metadata untouched. The source `(parent, name)` must exist, both source and destination parents must be durable directory inodes, and the destination `(parent, name)` must be unused. Overwrite and exchange rename semantics are intentionally not approximated.
+
+The root inode cannot be moved. When the target is itself a directory, the destination parent must not be that directory or any inode reachable below it through the current namespace graph after removing the source edge. This rejects directory-cycle creation before a new journal image is published. Invalid destination component names are rejected by the same `DNT1` entry codec used for durable directory records.
+
+Persistence reuses the existing directory-table WAL primitive. The complete post-rename namespace snapshot is rendered before publication, changed directory-table blocks are placed in one transaction, the journal commit is flushed first, and recovery writes the new namespace home. A crash before commit preserves the old name. A crash after commit but before the home write completes leaves the old home snapshot visible while the committed journal remains authoritative; replay installs the new name idempotently. There is no state in which a successful recovery accepts neither the old key nor the new key.
 
 ## Bounded capacity
 
@@ -64,6 +72,9 @@ Focused deterministic regressions verify that:
 - atomic unlink removes namespace, inode, and block ownership together;
 - a committed unlink interrupted between home writes is repaired by idempotent recovery;
 - unlink validation rejects a target that remains referenced, unrelated block release, and non-empty directory removal before WAL publication;
+- a valid rename replaces exactly one namespace key while retaining the target inode;
+- rename rejects destination overwrite and directory moves into descendants before WAL publication;
+- a committed rename interrupted before its directory home write preserves the old home snapshot until recovery installs the new snapshot, and repeated recovery is idempotent;
 - after successful recovery, read-only fsck accepts allocation ownership, inode references, root reachability, and namespace relationships.
 
-These primitives intentionally do not yet define rename, hard-link counts, orphan handling, recursive removal, data-block contents, or broad POSIX behavior. Those require their own bounded lifecycle transactions and invariants.
+These primitives intentionally do not yet define overwrite/exchange rename, hard-link counts, orphan handling, recursive removal, data-block contents, or broad POSIX behavior. Those require their own bounded lifecycle transactions and invariants.
