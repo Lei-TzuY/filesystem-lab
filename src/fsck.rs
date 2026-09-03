@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 
 use crate::allocation::BlockAllocator;
@@ -12,6 +12,8 @@ use crate::inode_codec::PersistedInode;
 use crate::inode_table::load_inode_table;
 use crate::journal::{JournalEntry, TransactionId};
 use crate::journal_region::load_journal_image;
+
+pub const ROOT_INODE_ID: u64 = 1;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FsckReport {
@@ -35,7 +37,9 @@ pub struct FsckReport {
 /// journal region. It enforces cross-layer ownership and namespace references: every inode block
 /// reference must name an allocated data block, no data block may be owned by more than one inode,
 /// every directory parent/target must name an existing inode, and every directory parent must itself
-/// be a directory. It never writes or flushes the device.
+/// be a directory. Once the inode table is non-empty, inode 1 is the unique root, must be a directory,
+/// every inode must be reachable from it, and the directory subgraph must be acyclic. It never writes
+/// or flushes the device.
 ///
 /// An incomplete final journal transaction is reported as `pending_transaction` rather than treated
 /// as corruption because it is the expected durable state after a crash before the commit marker.
@@ -43,9 +47,9 @@ pub struct FsckReport {
 /// # Errors
 ///
 /// Returns `InvalidData` for malformed/corrupt durable metadata, invalid allocation accounting,
-/// invalid inode references or double ownership, dangling/invalid directory references, malformed
-/// journal ordering, or forbidden journal home locations. Underlying device read errors are
-/// propagated.
+/// invalid inode references or double ownership, dangling/invalid directory references, missing or
+/// invalid root state, unreachable inodes, directory cycles, malformed journal ordering, or forbidden
+/// journal home locations. Underlying device read errors are propagated.
 pub fn check_device(device: &mut impl BlockDevice) -> io::Result<FsckReport> {
     let superblock = read_superblock(device).map_err(|error| with_context("superblock", &error))?;
     let allocator =
@@ -118,6 +122,7 @@ fn audit_namespace(
         .iter()
         .map(|inode| (inode.id, inode.kind))
         .collect::<BTreeMap<_, _>>();
+    let mut adjacency = BTreeMap::<u64, Vec<u64>>::new();
 
     for entry in entries {
         let parent_kind = inode_kinds.get(&entry.parent).ok_or_else(|| {
@@ -138,8 +143,74 @@ fn audit_namespace(
                 entry.name, entry.target
             )));
         }
+        adjacency.entry(entry.parent).or_default().push(entry.target);
     }
 
+    if inodes.is_empty() {
+        return Ok(());
+    }
+
+    let root_kind = inode_kinds
+        .get(&ROOT_INODE_ID)
+        .ok_or_else(|| invalid_data("non-empty inode table is missing root inode 1"))?;
+    if *root_kind != InodeKind::Directory {
+        return Err(invalid_data("root inode 1 is not a directory"));
+    }
+
+    let mut states = BTreeMap::<u64, u8>::new();
+    for inode in inodes
+        .iter()
+        .filter(|inode| inode.kind == InodeKind::Directory)
+    {
+        audit_directory_cycle(inode.id, &inode_kinds, &adjacency, &mut states)?;
+    }
+
+    let mut reachable = BTreeSet::new();
+    let mut pending = vec![ROOT_INODE_ID];
+    while let Some(inode) = pending.pop() {
+        if !reachable.insert(inode) {
+            continue;
+        }
+        if let Some(targets) = adjacency.get(&inode) {
+            pending.extend(targets.iter().copied());
+        }
+    }
+
+    if let Some(unreachable) = inodes.iter().find(|inode| !reachable.contains(&inode.id)) {
+        return Err(invalid_data_owned(format!(
+            "inode {} is unreachable from root inode {}",
+            unreachable.id, ROOT_INODE_ID
+        )));
+    }
+
+    Ok(())
+}
+
+fn audit_directory_cycle(
+    inode: u64,
+    inode_kinds: &BTreeMap<u64, InodeKind>,
+    adjacency: &BTreeMap<u64, Vec<u64>>,
+    states: &mut BTreeMap<u64, u8>,
+) -> io::Result<()> {
+    match states.get(&inode).copied() {
+        Some(1) => {
+            return Err(invalid_data_owned(format!(
+                "directory cycle includes inode {inode}"
+            )))
+        }
+        Some(2) => return Ok(()),
+        _ => {}
+    }
+
+    states.insert(inode, 1);
+    if let Some(targets) = adjacency.get(&inode) {
+        for target in targets {
+            if inode_kinds.get(target) == Some(&InodeKind::Directory) {
+                audit_directory_cycle(*target, inode_kinds, adjacency, states)?;
+            }
+        }
+    }
+    states.insert(inode, 2);
     Ok(())
 }
 
@@ -399,5 +470,80 @@ mod tests {
                 .kind(),
             io::ErrorKind::InvalidData
         );
+    }
+
+    #[test]
+    fn namespace_requires_directory_root_and_full_reachability() {
+        let root = PersistedInode {
+            id: ROOT_INODE_ID,
+            kind: InodeKind::Directory,
+            blocks: vec![],
+        };
+        let file = PersistedInode {
+            id: 2,
+            kind: InodeKind::File,
+            blocks: vec![],
+        };
+
+        let missing_root = vec![file.clone()];
+        assert!(audit_namespace(&missing_root, &[])
+            .unwrap_err()
+            .to_string()
+            .contains("missing root inode 1"));
+
+        let invalid_root = vec![PersistedInode {
+            id: ROOT_INODE_ID,
+            kind: InodeKind::File,
+            blocks: vec![],
+        }];
+        assert!(audit_namespace(&invalid_root, &[])
+            .unwrap_err()
+            .to_string()
+            .contains("root inode 1 is not a directory"));
+
+        assert!(audit_namespace(&[root.clone(), file.clone()], &[])
+            .unwrap_err()
+            .to_string()
+            .contains("inode 2 is unreachable"));
+
+        let link = PersistedDirectoryEntry {
+            parent: ROOT_INODE_ID,
+            target: file.id,
+            name: "file".to_owned(),
+        };
+        audit_namespace(&[root, file], &[link]).unwrap();
+    }
+
+    #[test]
+    fn namespace_rejects_directory_cycles() {
+        let inodes = vec![
+            PersistedInode {
+                id: ROOT_INODE_ID,
+                kind: InodeKind::Directory,
+                blocks: vec![],
+            },
+            PersistedInode {
+                id: 2,
+                kind: InodeKind::Directory,
+                blocks: vec![],
+            },
+        ];
+        let entries = vec![
+            PersistedDirectoryEntry {
+                parent: ROOT_INODE_ID,
+                target: 2,
+                name: "child".to_owned(),
+            },
+            PersistedDirectoryEntry {
+                parent: 2,
+                target: ROOT_INODE_ID,
+                name: "back".to_owned(),
+            },
+        ];
+
+        assert!(audit_namespace(&inodes, &entries)
+            .unwrap_err()
+            .to_string()
+            .contains("directory cycle"));
     }
 }
