@@ -208,7 +208,9 @@ mod tests {
         fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> io::Result<()> {
             if self.fail_once_on == Some(block) {
                 self.fail_once_on = None;
-                return Err(io::Error::other("injected atomic-create home-write failure"));
+                return Err(io::Error::other(
+                    "injected atomic-create home-write failure",
+                ));
             }
             let index = usize::try_from(block)
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "block exceeds usize"))?;
@@ -242,7 +244,12 @@ mod tests {
     fn desired_create(
         device: &mut FaultDevice,
         superblock: &Superblock,
-    ) -> (BlockAllocator, u64, Vec<PersistedInode>, Vec<PersistedDirectoryEntry>) {
+    ) -> (
+        BlockAllocator,
+        u64,
+        Vec<PersistedInode>,
+        Vec<PersistedDirectoryEntry>,
+    ) {
         let mut allocator = load_allocator(device, superblock).unwrap();
         let data_block = allocator.allocate().unwrap();
         let inodes = vec![
