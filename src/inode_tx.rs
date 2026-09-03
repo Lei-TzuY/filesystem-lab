@@ -293,18 +293,16 @@ mod tests {
     fn multi_block_inode_change_rejects_insufficient_journal_capacity() {
         let mut device = FaultDevice::new(64);
         let superblock = format_device(&mut device).unwrap();
-        let mut blocks = Vec::new();
-        for block in superblock.reserved_blocks()..superblock.total_blocks {
-            blocks.push(block);
-        }
-        let inode = PersistedInode {
-            id: 1,
-            kind: InodeKind::File,
-            blocks,
-        };
+        let inodes: Vec<_> = (1..=200)
+            .map(|id| PersistedInode {
+                id,
+                kind: InodeKind::File,
+                blocks: Vec::new(),
+            })
+            .collect();
 
         assert_eq!(
-            store_inode_table_journaled(&mut device, &superblock, &[inode])
+            store_inode_table_journaled(&mut device, &superblock, &inodes)
                 .unwrap_err()
                 .kind(),
             io::ErrorKind::InvalidInput
