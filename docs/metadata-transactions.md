@@ -29,11 +29,21 @@ For the common single-block case this prevents three inconsistent crash states f
 
 A crash after commit can still expose a prefix of home writes temporarily. For example, allocation and inode home blocks may be visible while the directory-table home write fails. That intermediate state is not considered complete; the committed WAL remains authoritative, and recovery must replay all home writes before fsck is expected to accept the namespace again.
 
+## Validated unlink transitions
+
+`unlink_tx::store_unlink_metadata_journaled` reuses the same three-table WAL engine, but it first validates the requested post-unlink snapshots against the currently durable home metadata. Atomicity alone is not enough: without semantic validation, a caller could atomically persist a dangling namespace, leak a block, free a block still referenced elsewhere, or delete a directory that still contains children.
+
+The current unlink primitive is deliberately narrow. Before any new journal image is published, it requires exactly one namespace entry and exactly its target inode to disappear. The root inode cannot be removed. Surviving inode records and namespace entries must remain byte-for-byte semantically unchanged, and the removed inode may have only that one durable namespace reference. A directory target must be empty before removal.
+
+Allocator transition validation is equally strict: no new data block may become allocated, and the set of blocks changing from owned to free must equal the removed inode's complete persisted block list. This rejects partial release, unrelated release, and allocation side effects before they can cross the WAL durability boundary.
+
+Hard links, orphan handling, recursive removal, and rename are intentionally rejected rather than approximated. Those semantics need independent lifecycle contracts before they can safely share this primitive.
+
 ## Bounded capacity
 
 Journal records contain full 4 KiB home blocks. Transactions are never split merely to fit the reservation. If the complete changed-block set and begin/commit framing exceed the journal region, the operation returns `InvalidInput` before publishing a new journal image.
 
-With the current record and region codecs, a transaction containing two full-block writes needs three 4 KiB journal blocks, while a common allocation+inode+directory create changes three home blocks and therefore needs four journal blocks. Newly formatted v5 filesystems now reserve four journal blocks by default so the three-table atomic-create primitive is usable with ordinary `format_device()` geometry. Explicit smaller geometries remain supported for tests and constrained images; an explicit three-block journal must still reject a three-home-block create atomically rather than splitting the transaction.
+With the current record and region codecs, a transaction containing two full-block writes needs three 4 KiB journal blocks, while a common allocation+inode+directory create changes three home blocks and therefore needs four journal blocks. Newly formatted v5 filesystems reserve four journal blocks by default so the three-table atomic-create and atomic-unlink primitives are usable with ordinary `format_device()` geometry. Explicit smaller geometries remain supported for tests and constrained images; an explicit three-block journal must still reject a three-home-block transaction atomically rather than splitting the transaction.
 
 Journal geometry is explicit in the v5 superblock, so this formatter-policy change does not reinterpret existing v5 images. A previously formatted image that persisted a three-block journal continues to use that capacity when reopened.
 
@@ -51,6 +61,9 @@ Focused deterministic regressions verify that:
 - a three-table create commits allocation ownership, inode references, and namespace publication as exactly one transaction;
 - failure on the directory home write after allocation and inode home writes is repaired by replay of the same committed three-table transaction;
 - an explicit three-block journal rejects a three-home-block create before any home metadata changes;
+- atomic unlink removes namespace, inode, and block ownership together;
+- a committed unlink interrupted between home writes is repaired by idempotent recovery;
+- unlink validation rejects a target that remains referenced, unrelated block release, and non-empty directory removal before WAL publication;
 - after successful recovery, read-only fsck accepts allocation ownership, inode references, root reachability, and namespace relationships.
 
-These primitives intentionally do not yet define rename/unlink semantics, link counts, orphan handling, data-block contents, or broad POSIX behavior. Those require their own bounded lifecycle transactions and invariants.
+These primitives intentionally do not yet define rename, hard-link counts, orphan handling, recursive removal, data-block contents, or broad POSIX behavior. Those require their own bounded lifecycle transactions and invariants.
