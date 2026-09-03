@@ -87,8 +87,7 @@ fn audit_journal(
                     ));
                 }
                 let allocation_home = superblock.allocation_range().contains(block);
-                let data_home =
-                    *block >= reserved_blocks && *block < superblock.total_blocks;
+                let data_home = *block >= reserved_blocks && *block < superblock.total_blocks;
                 if !allocation_home && !data_home {
                     return Err(invalid_data(
                         "journal write targets forbidden or invalid block",
