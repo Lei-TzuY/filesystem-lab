@@ -22,4 +22,5 @@ pub mod journal_region;
 pub mod metadata_tx;
 pub mod recovery;
 pub mod rename_tx;
+mod transaction_image;
 pub mod unlink_tx;
