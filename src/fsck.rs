@@ -1,8 +1,12 @@
+use std::collections::BTreeMap;
 use std::io;
 
+use crate::allocation::BlockAllocator;
 use crate::allocation_disk::load_allocator;
 use crate::block::BlockDevice;
 use crate::format::{read_superblock, Superblock};
+use crate::inode_codec::PersistedInode;
+use crate::inode_table::load_inode_table;
 use crate::journal::{JournalEntry, TransactionId};
 use crate::journal_region::load_journal_image;
 
@@ -13,32 +17,36 @@ pub struct FsckReport {
     pub data_blocks: u64,
     pub allocated_blocks: u64,
     pub free_blocks: u64,
+    pub inode_records: usize,
+    pub referenced_blocks: usize,
     pub journal_entries: usize,
     pub journal_writes: usize,
     pub committed_transactions: usize,
     pub pending_transaction: Option<TransactionId>,
 }
 
-/// Performs a read-only consistency check over the durable filesystem layers that currently exist.
+/// Performs a read-only consistency check over all currently durable filesystem metadata.
 ///
-/// The check validates the superblock against the opened device, validates and reconstructs the
-/// durable allocation bitmap, validates and decodes the complete bounded journal region, and
-/// independently audits journal transaction structure and home-block ownership. It never writes or
-/// flushes the device.
+/// The check validates the superblock, allocation bitmap, inode table, and bounded journal region.
+/// It also enforces cross-layer ownership: every inode block reference must name an allocated data
+/// block, no inode may reference reserved/out-of-range storage, and no data block may be owned by
+/// more than one inode. It never writes or flushes the device.
 ///
-/// An incomplete final transaction is reported as `pending_transaction` rather than treated as
-/// corruption because it is the expected durable state after a crash before the commit marker.
+/// An incomplete final journal transaction is reported as `pending_transaction` rather than treated
+/// as corruption because it is the expected durable state after a crash before the commit marker.
 ///
 /// # Errors
 ///
-/// Returns `InvalidData` for malformed/corrupt durable metadata, including invalid superblock
-/// geometry, allocation-image corruption/accounting errors, journal checksum/record corruption,
-/// malformed transaction ordering, or journal writes that target forbidden/out-of-range blocks.
-/// Underlying device read errors are propagated.
+/// Returns `InvalidData` for malformed/corrupt durable metadata, invalid allocation accounting,
+/// invalid inode references or double ownership, malformed journal ordering, or forbidden journal
+/// home locations. Underlying device read errors are propagated.
 pub fn check_device(device: &mut impl BlockDevice) -> io::Result<FsckReport> {
     let superblock = read_superblock(device).map_err(|error| with_context("superblock", &error))?;
     let allocator =
         load_allocator(device, &superblock).map_err(|error| with_context("allocation", &error))?;
+    let inodes = load_inode_table(device, &superblock)
+        .map_err(|error| with_context("inode table", &error))?;
+    let referenced_blocks = audit_inode_ownership(&superblock, &allocator, &inodes)?;
     let entries =
         load_journal_image(device, superblock).map_err(|error| with_context("journal", &error))?;
     audit_journal(
@@ -46,7 +54,50 @@ pub fn check_device(device: &mut impl BlockDevice) -> io::Result<FsckReport> {
         &entries,
         allocator.allocated_blocks(),
         allocator.free_blocks(),
+        inodes.len(),
+        referenced_blocks,
     )
+}
+
+fn audit_inode_ownership(
+    superblock: &Superblock,
+    allocator: &BlockAllocator,
+    inodes: &[PersistedInode],
+) -> io::Result<usize> {
+    let reserved_blocks = superblock.reserved_blocks();
+    let mut owners = BTreeMap::<u64, u64>::new();
+    let mut referenced_blocks = 0_usize;
+
+    for inode in inodes {
+        for block in &inode.blocks {
+            if *block < reserved_blocks || *block >= superblock.total_blocks {
+                return Err(invalid_data_owned(format!(
+                    "inode {} references reserved or out-of-range block {}",
+                    inode.id, block
+                )));
+            }
+            let allocated = allocator
+                .is_owned(*block)
+                .map_err(|error| invalid_data_owned(error.to_string()))?;
+            if !allocated {
+                return Err(invalid_data_owned(format!(
+                    "inode {} references unallocated block {}",
+                    inode.id, block
+                )));
+            }
+            if let Some(previous) = owners.insert(*block, inode.id) {
+                return Err(invalid_data_owned(format!(
+                    "block {} is owned by both inode {} and inode {}",
+                    block, previous, inode.id
+                )));
+            }
+            referenced_blocks = referenced_blocks
+                .checked_add(1)
+                .ok_or_else(|| invalid_data("inode reference count overflow"))?;
+        }
+    }
+
+    Ok(referenced_blocks)
 }
 
 fn audit_journal(
@@ -54,6 +105,8 @@ fn audit_journal(
     entries: &[JournalEntry],
     allocated_blocks: u64,
     free_blocks: u64,
+    inode_records: usize,
+    referenced_blocks: usize,
 ) -> io::Result<FsckReport> {
     let reserved_blocks = superblock.reserved_blocks();
     let data_blocks = superblock
@@ -87,8 +140,9 @@ fn audit_journal(
                     ));
                 }
                 let allocation_home = superblock.allocation_range().contains(block);
+                let inode_home = superblock.inode_range().contains(block);
                 let data_home = *block >= reserved_blocks && *block < superblock.total_blocks;
-                if !allocation_home && !data_home {
+                if !allocation_home && !inode_home && !data_home {
                     return Err(invalid_data(
                         "journal write targets forbidden or invalid block",
                     ));
@@ -117,6 +171,8 @@ fn audit_journal(
         data_blocks,
         allocated_blocks,
         free_blocks,
+        inode_records,
+        referenced_blocks,
         journal_entries: entries.len(),
         journal_writes,
         committed_transactions,
@@ -132,10 +188,16 @@ fn invalid_data(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
 
+fn invalid_data_owned(message: String) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::allocation::BlockAllocator;
     use crate::block::BLOCK_SIZE;
+    use crate::inode::InodeKind;
 
     #[test]
     fn audit_reports_committed_and_pending_transactions() {
@@ -158,7 +220,7 @@ mod tests {
         ];
         let data_blocks = superblock.total_blocks - superblock.reserved_blocks();
 
-        let report = audit_journal(superblock, &entries, 0, data_blocks).unwrap();
+        let report = audit_journal(superblock, &entries, 0, data_blocks, 0, 0).unwrap();
         assert_eq!(report.committed_transactions, 1);
         assert_eq!(report.pending_transaction, Some(2));
         assert_eq!(report.journal_writes, 2);
@@ -168,7 +230,7 @@ mod tests {
     }
 
     #[test]
-    fn audit_accepts_allocation_metadata_as_journal_home() {
+    fn audit_accepts_metadata_regions_as_journal_home() {
         let superblock = Superblock::with_journal_blocks(16, 2).unwrap();
         let entries = vec![
             JournalEntry::Begin { txid: 1 },
@@ -177,12 +239,17 @@ mod tests {
                 block: superblock.allocation_start,
                 data: Box::new([0_u8; BLOCK_SIZE]),
             },
+            JournalEntry::Write {
+                txid: 1,
+                block: superblock.inode_start,
+                data: Box::new([0_u8; BLOCK_SIZE]),
+            },
             JournalEntry::Commit { txid: 1 },
         ];
         let data_blocks = superblock.total_blocks - superblock.reserved_blocks();
 
-        let report = audit_journal(superblock, &entries, 0, data_blocks).unwrap();
-        assert_eq!(report.journal_writes, 1);
+        let report = audit_journal(superblock, &entries, 0, data_blocks, 0, 0).unwrap();
+        assert_eq!(report.journal_writes, 2);
         assert_eq!(report.committed_transactions, 1);
     }
 
@@ -202,11 +269,43 @@ mod tests {
             ];
 
             assert_eq!(
-                audit_journal(superblock, &entries, 0, data_blocks)
+                audit_journal(superblock, &entries, 0, data_blocks, 0, 0)
                     .unwrap_err()
                     .kind(),
                 io::ErrorKind::InvalidData
             );
         }
+    }
+
+    #[test]
+    fn inode_ownership_requires_allocated_unique_data_blocks() {
+        let superblock = Superblock::with_journal_blocks(16, 2).unwrap();
+        let mut allocator =
+            BlockAllocator::new(superblock.total_blocks, superblock.reserved_blocks()).unwrap();
+        let block = allocator.allocate().unwrap();
+        let inodes = vec![PersistedInode {
+            id: 1,
+            kind: InodeKind::File,
+            blocks: vec![block],
+        }];
+        assert_eq!(
+            audit_inode_ownership(&superblock, &allocator, &inodes).unwrap(),
+            1
+        );
+
+        let duplicate = vec![
+            inodes[0].clone(),
+            PersistedInode {
+                id: 2,
+                kind: InodeKind::Directory,
+                blocks: vec![block],
+            },
+        ];
+        assert_eq!(
+            audit_inode_ownership(&superblock, &allocator, &duplicate)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidData
+        );
     }
 }
