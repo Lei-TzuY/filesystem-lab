@@ -2,6 +2,7 @@
 
 pub mod allocation;
 pub mod allocation_disk;
+pub mod allocation_tx;
 pub mod block;
 pub mod cache;
 pub mod directory;

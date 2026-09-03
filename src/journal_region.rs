@@ -19,10 +19,13 @@ const RESERVED_OFFSET: usize = 20;
 /// containing the region header is the final on-device anchor before `flush` establishes the
 /// durability boundary.
 ///
+/// Journal writes may target data blocks or the allocation-metadata home region. They may never
+/// target the superblock or journal reservation itself.
+///
 /// # Errors
 ///
 /// Returns an error if the superblock does not describe this device, the journal reservation is
-/// malformed or too large to address, an entry targets reserved/out-of-range metadata, transaction
+/// malformed or too large to address, an entry targets a forbidden/out-of-range block, transaction
 /// ordering is malformed, the encoded stream does not fit, or an underlying write/flush fails.
 pub fn store_journal_image(
     device: &mut impl BlockDevice,
@@ -73,7 +76,7 @@ pub fn store_journal_image(
 /// Returns an error if the superblock/device relation is invalid, region I/O fails, the persistent
 /// header/version/flags/reserved bytes are invalid, the payload length exceeds the reservation,
 /// trailing padding is non-zero, the checksum fails, a record is corrupt/torn, transaction ordering
-/// is malformed, or a write entry targets reserved/out-of-range metadata.
+/// is malformed, or a write entry targets a forbidden/out-of-range block.
 pub fn load_journal_image(
     device: &mut impl BlockDevice,
     superblock: Superblock,
@@ -190,9 +193,12 @@ fn validate_entries(superblock: Superblock, entries: &[JournalEntry]) -> io::Res
                         "journal write does not match active transaction",
                     ));
                 }
-                if *block < superblock.reserved_blocks() || *block >= superblock.total_blocks {
+                let allocation_home = superblock.allocation_range().contains(block);
+                let data_home =
+                    *block >= superblock.reserved_blocks() && *block < superblock.total_blocks;
+                if !allocation_home && !data_home {
                     return Err(invalid_data(
-                        "journal write targets reserved or invalid block",
+                        "journal write targets forbidden or invalid block",
                     ));
                 }
             }
@@ -393,20 +399,38 @@ mod tests {
     }
 
     #[test]
-    fn writes_cannot_target_reserved_metadata() {
+    fn writes_cannot_target_superblock_or_journal_metadata() {
+        let superblock = Superblock::with_journal_blocks(8, 2).unwrap();
+        for forbidden in [SUPERBLOCK_BLOCK, superblock.journal_start] {
+            let mut log = JournalLog::new();
+            let txid = log.begin().unwrap();
+            log.write(txid, forbidden, [1; BLOCK_SIZE]).unwrap();
+            log.commit(txid).unwrap();
+            let mut device = MemoryDevice::new(8);
+
+            assert_eq!(
+                store_journal_image(&mut device, superblock, log.entries())
+                    .unwrap_err()
+                    .kind(),
+                io::ErrorKind::InvalidData
+            );
+        }
+    }
+
+    #[test]
+    fn writes_may_target_allocation_metadata_home_blocks() {
         let superblock = Superblock::with_journal_blocks(8, 2).unwrap();
         let mut log = JournalLog::new();
         let txid = log.begin().unwrap();
-        log.write(txid, superblock.journal_start, [1; BLOCK_SIZE])
+        log.write(txid, superblock.allocation_start, [0x7c; BLOCK_SIZE])
             .unwrap();
         log.commit(txid).unwrap();
         let mut device = MemoryDevice::new(8);
 
+        store_journal_image(&mut device, superblock, log.entries()).unwrap();
         assert_eq!(
-            store_journal_image(&mut device, superblock, log.entries())
-                .unwrap_err()
-                .kind(),
-            io::ErrorKind::InvalidData
+            load_journal_image(&mut device, superblock).unwrap(),
+            log.entries()
         );
     }
 

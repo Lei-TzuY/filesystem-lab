@@ -1,6 +1,6 @@
 # Journal region image format
 
-The filesystem version-2 superblock reserves a contiguous journal region. This document defines the first bounded persistent image stored inside that reservation. The region-image format is versioned independently from both the filesystem superblock and the journal-record codec.
+The filesystem version-2 superblock introduced a contiguous journal region. Filesystem format v3 retains that reservation and adds allocation metadata immediately after it. This document defines the first bounded persistent journal image stored inside the reservation. The region-image format is versioned independently from both the filesystem superblock and the journal-record codec.
 
 ## Version 1
 
@@ -21,7 +21,7 @@ A completely zeroed reservation is the canonical freshly formatted / never-writt
 
 The payload must fit completely inside the superblock-declared journal reservation. Non-zero trailing padding is invalid; this makes stale or partially overwritten tails observable rather than silently ignored. The decoder also validates the journal-record codec and transaction ordering after the region checksum succeeds.
 
-Journal writes may target only filesystem blocks at or above `Superblock::reserved_blocks()` and below `total_blocks`. A persistent journal image is therefore not allowed to overwrite the superblock or its own journal reservation.
+Journal writes may target ordinary data home blocks or blocks in the allocation-metadata home region. They may never target block zero or any block in the journal reservation itself. This allows the allocation image to participate in the existing WAL/recovery protocol without permitting recovery to overwrite the superblock geometry or the log that drives replay.
 
 ## Write ordering
 
@@ -29,4 +29,4 @@ A bounded image is materialized in memory with zero-filled padding. When more th
 
 This ordering deliberately makes the header-bearing block the final anchor for a new image. Recovery does not assume that a crash produced a valid image: an old anchor combined with new tail blocks, a new anchor combined with stale/torn payload, checksum corruption, non-zero stale padding, or malformed records are all rejected deterministically.
 
-This is a bounded image, not yet a circular journal. Version 1 defines no head/tail wraparound, checkpoint sequence, generation counter, or home-location replay writes. Those remain later milestones.
+This is a bounded image, not yet a circular journal. Version 1 defines no head/tail wraparound, checkpoint sequence, generation counter, or journal clearing. Home-location replay exists, including allocation metadata replay in filesystem format v3, but the journal remains intentionally bounded and persistent until a later checkpointing milestone.

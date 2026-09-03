@@ -14,7 +14,7 @@ The checker validates, in order:
 6. the complete journal-region image has valid magic/version/flags/reserved bytes, length, zero padding, and CRC-32;
 7. every journal record decodes with its own framing/version/checksum constraints;
 8. transaction ordering is structurally valid;
-9. every journal write targets a home block in the data region, never any block in the superblock, journal, or allocation reservations.
+9. every journal write targets either an ordinary data home block or a block in the allocation-metadata home region. Superblock and journal-reservation targets remain forbidden.
 
 The result reports filesystem geometry, allocated/free block counts, journal entry/write counts, committed transaction count, and an optional pending transaction identifier.
 
@@ -22,7 +22,7 @@ The result reports filesystem geometry, allocated/free block counts, journal ent
 
 An incomplete final journal transaction is **not** corruption. It is a valid durable prefix representing a crash before the commit marker reached stable storage. The checker reports it as `pending_transaction`; recovery continues to ignore its writes.
 
-Allocation images use tail-block-first, header-block-last write ordering with a CRC over the bitmap payload. A crash or injected write failure that mixes an old header with newly written tail blocks is therefore rejected as corruption instead of being accepted as a valid ownership map. Direct allocation-image persistence is still a bounded primitive; crash-atomic allocator mutation through the journal remains future work.
+Allocation images still use tail-block-first, header-block-last ordering when the direct persistence primitive is used. The journaled allocator path instead records the complete allocation image in one committed WAL transaction, flushes the journal, replays those allocation home blocks, and then flushes home locations. A crash before commit leaves the old allocation image untouched; a failure after commit remains recoverable by idempotent replay of the durable journal.
 
 `check_device` is intentionally read-only: it performs no block writes and crosses no flush boundary. Repair/checkpoint policy remains a later milestone.
 

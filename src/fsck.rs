@@ -33,7 +33,7 @@ pub struct FsckReport {
 ///
 /// Returns `InvalidData` for malformed/corrupt durable metadata, including invalid superblock
 /// geometry, allocation-image corruption/accounting errors, journal checksum/record corruption,
-/// malformed transaction ordering, or journal writes that target reserved/out-of-range blocks.
+/// malformed transaction ordering, or journal writes that target forbidden/out-of-range blocks.
 /// Underlying device read errors are propagated.
 pub fn check_device(device: &mut impl BlockDevice) -> io::Result<FsckReport> {
     let superblock = read_superblock(device).map_err(|error| with_context("superblock", &error))?;
@@ -86,9 +86,11 @@ fn audit_journal(
                         "journal write does not match active transaction",
                     ));
                 }
-                if *block < reserved_blocks || *block >= superblock.total_blocks {
+                let allocation_home = superblock.allocation_range().contains(block);
+                let data_home = *block >= reserved_blocks && *block < superblock.total_blocks;
+                if !allocation_home && !data_home {
                     return Err(invalid_data(
-                        "journal write targets reserved or invalid block",
+                        "journal write targets forbidden or invalid block",
                     ));
                 }
                 journal_writes = journal_writes
@@ -166,23 +168,45 @@ mod tests {
     }
 
     #[test]
-    fn audit_rejects_reserved_block_ownership() {
+    fn audit_accepts_allocation_metadata_as_journal_home() {
         let superblock = Superblock::with_journal_blocks(16, 2).unwrap();
         let entries = vec![
             JournalEntry::Begin { txid: 1 },
             JournalEntry::Write {
                 txid: 1,
-                block: superblock.journal_start,
+                block: superblock.allocation_start,
                 data: Box::new([0_u8; BLOCK_SIZE]),
             },
+            JournalEntry::Commit { txid: 1 },
         ];
         let data_blocks = superblock.total_blocks - superblock.reserved_blocks();
 
-        assert_eq!(
-            audit_journal(superblock, &entries, 0, data_blocks)
-                .unwrap_err()
-                .kind(),
-            io::ErrorKind::InvalidData
-        );
+        let report = audit_journal(superblock, &entries, 0, data_blocks).unwrap();
+        assert_eq!(report.journal_writes, 1);
+        assert_eq!(report.committed_transactions, 1);
+    }
+
+    #[test]
+    fn audit_rejects_superblock_and_journal_ownership() {
+        let superblock = Superblock::with_journal_blocks(16, 2).unwrap();
+        let data_blocks = superblock.total_blocks - superblock.reserved_blocks();
+
+        for forbidden in [0, superblock.journal_start] {
+            let entries = vec![
+                JournalEntry::Begin { txid: 1 },
+                JournalEntry::Write {
+                    txid: 1,
+                    block: forbidden,
+                    data: Box::new([0_u8; BLOCK_SIZE]),
+                },
+            ];
+
+            assert_eq!(
+                audit_journal(superblock, &entries, 0, data_blocks)
+                    .unwrap_err()
+                    .kind(),
+                io::ErrorKind::InvalidData
+            );
+        }
     }
 }
