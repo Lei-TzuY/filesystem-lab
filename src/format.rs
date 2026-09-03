@@ -139,7 +139,10 @@ impl Superblock {
                 )
             })?;
         let directory_start = inode_start.checked_add(inode_blocks).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "inode table block range overflow")
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "inode table block range overflow",
+            )
         })?;
         let metadata_end = directory_start
             .checked_add(directory_blocks)
