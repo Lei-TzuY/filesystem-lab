@@ -2,7 +2,7 @@ use std::io;
 
 use crate::allocation::BlockAllocator;
 use crate::allocation_disk::store_allocator;
-use crate::block::{BlockDevice, BLOCK_SIZE};
+use crate::block::BlockDevice;
 use crate::directory_codec::PersistedDirectoryEntry;
 use crate::directory_table::store_directory_table;
 use crate::format::Superblock;
@@ -96,6 +96,7 @@ pub fn store_create_metadata_journaled(
 mod tests {
     use super::*;
     use crate::allocation_disk::{initialize_allocation_region, load_allocator};
+    use crate::block::BLOCK_SIZE;
     use crate::directory_table::{initialize_directory_table_region, load_directory_table};
     use crate::format::{Superblock, SUPERBLOCK_BLOCK};
     use crate::fsck::check_device;
@@ -279,14 +280,7 @@ mod tests {
     #[test]
     fn default_three_block_journal_rejects_three_home_block_create_atomically() {
         let mut device = FaultDevice::new(64);
-        let superblock = format_with_journal(device.block_count(), 3).unwrap();
-        initialize_allocation_region(&mut device, &superblock).unwrap();
-        initialize_inode_table_region(&mut device, &superblock).unwrap();
-        initialize_directory_table_region(&mut device, &superblock).unwrap();
-        device
-            .write_block(SUPERBLOCK_BLOCK, &superblock.encode())
-            .unwrap();
-        device.flush().unwrap();
+        let superblock = format_with_journal(&mut device, 3);
         let (allocator, data_block, inodes, entries) = desired_create(&mut device, &superblock);
         let flushes_before = device.flushes;
 
