@@ -88,14 +88,19 @@ impl Superblock {
             io::Error::new(io::ErrorKind::InvalidInput, "journal block range overflow")
         })?;
         let allocation_blocks = required_allocation_blocks(total_blocks)?;
-        let inode_start = allocation_start.checked_add(allocation_blocks).ok_or_else(|| {
+        let inode_start = allocation_start
+            .checked_add(allocation_blocks)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "allocation metadata block range overflow",
+                )
+            })?;
+        let metadata_end = inode_start.checked_add(inode_blocks).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "allocation metadata block range overflow",
+                "inode table block range overflow",
             )
-        })?;
-        let metadata_end = inode_start.checked_add(inode_blocks).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "inode table block range overflow")
         })?;
         if metadata_end > total_blocks {
             return Err(io::Error::new(
@@ -243,7 +248,10 @@ impl Superblock {
             ));
         }
         let metadata_end = inode_start.checked_add(inode_blocks).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "inode table block range overflow")
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "inode table block range overflow",
+            )
         })?;
         if metadata_end > total_blocks {
             return Err(io::Error::new(
