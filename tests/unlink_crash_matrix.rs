@@ -62,7 +62,11 @@ fn desired_unlink(
     device: &mut CrashDevice,
     superblock: &Superblock,
     data_block: u64,
-) -> (BlockAllocator, Vec<PersistedInode>, Vec<PersistedDirectoryEntry>) {
+) -> (
+    BlockAllocator,
+    Vec<PersistedInode>,
+    Vec<PersistedDirectoryEntry>,
+) {
     let mut allocator = load_allocator(device, superblock).unwrap();
     allocator.free(data_block).unwrap();
     (allocator, vec![root_inode()], Vec::new())
