@@ -33,9 +33,9 @@ A crash after commit can still expose a prefix of home writes temporarily. For e
 
 Journal records contain full 4 KiB home blocks. Transactions are never split merely to fit the reservation. If the complete changed-block set and begin/commit framing exceed the journal region, the operation returns `InvalidInput` before publishing a new journal image.
 
-With the current record and region codecs, a transaction containing two full-block writes needs three 4 KiB journal blocks, which is why newly formatted v5 filesystems reserve three journal blocks by default. A common allocation+inode+directory create changes three home blocks and therefore needs four journal blocks. The three-table primitive deliberately exposes that capacity boundary instead of silently changing the format policy in the same milestone: callers can use explicit four-block journal geometry, while the default three-block geometry rejects the operation atomically.
+With the current record and region codecs, a transaction containing two full-block writes needs three 4 KiB journal blocks, while a common allocation+inode+directory create changes three home blocks and therefore needs four journal blocks. Newly formatted v5 filesystems now reserve four journal blocks by default so the three-table atomic-create primitive is usable with ordinary `format_device()` geometry. Explicit smaller geometries remain supported for tests and constrained images; an explicit three-block journal must still reject a three-home-block create atomically rather than splitting the transaction.
 
-Journal geometry is explicit in the v5 superblock, so future formatter-policy changes do not reinterpret existing images.
+Journal geometry is explicit in the v5 superblock, so this formatter-policy change does not reinterpret existing v5 images. A previously formatted image that persisted a three-block journal continues to use that capacity when reopened.
 
 ## Invariants exercised
 
@@ -47,10 +47,10 @@ Focused deterministic regressions verify that:
 - failure on the second inode/directory home write leaves a durable transaction that recovery can replay;
 - repeated recovery is idempotent;
 - a too-small journal reservation rejects the combined update before home metadata changes;
-- the default formatter provisions enough journal space for the common one-inode-block + one-directory-block transaction;
-- a three-table create commits allocation ownership, inode references, and namespace publication as exactly one transaction when four journal blocks are reserved;
+- the default formatter provisions enough journal space for the common allocation+inode+directory create transaction;
+- a three-table create commits allocation ownership, inode references, and namespace publication as exactly one transaction;
 - failure on the directory home write after allocation and inode home writes is repaired by replay of the same committed three-table transaction;
-- the default three-block journal rejects a three-home-block create before any home metadata changes;
+- an explicit three-block journal rejects a three-home-block create before any home metadata changes;
 - after successful recovery, read-only fsck accepts allocation ownership, inode references, root reachability, and namespace relationships.
 
 These primitives intentionally do not yet define rename/unlink semantics, link counts, orphan handling, data-block contents, or broad POSIX behavior. Those require their own bounded lifecycle transactions and invariants.
