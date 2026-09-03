@@ -403,12 +403,14 @@ mod tests {
         let (data_block, _, _) = seed_linked_file(&mut device, &superblock);
         let mut allocator = load_allocator(&mut device, &superblock).unwrap();
         let extra = allocator.allocate().unwrap();
+        let current_inodes = load_inode_table(&mut device, &superblock).unwrap();
+        let current_entries = load_directory_table(&mut device, &superblock).unwrap();
         store_create_metadata_journaled(
             &mut device,
             &superblock,
             &allocator,
-            &load_inode_table(&mut device, &superblock).unwrap(),
-            &load_directory_table(&mut device, &superblock).unwrap(),
+            &current_inodes,
+            &current_entries,
         )
         .unwrap();
         let mut desired = load_allocator(&mut device, &superblock).unwrap();
@@ -469,8 +471,14 @@ mod tests {
                 name: "child".to_owned(),
             },
         ];
-        store_create_metadata_journaled(device.as_mut(), &superblock, &allocator, &inodes, &entries)
-            .unwrap();
+        store_create_metadata_journaled(
+            &mut device,
+            &superblock,
+            &allocator,
+            &inodes,
+            &entries,
+        )
+        .unwrap();
 
         let desired_inodes = vec![inodes[0].clone(), inodes[2].clone()];
         let desired_entries = vec![entries[1].clone()];
