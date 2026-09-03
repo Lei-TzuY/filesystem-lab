@@ -80,7 +80,9 @@ mod tests {
         fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> io::Result<()> {
             if self.fail_once_on == Some(block) {
                 self.fail_once_on = None;
-                return Err(io::Error::other("injected atomic-unlink home-write failure"));
+                return Err(io::Error::other(
+                    "injected atomic-unlink home-write failure",
+                ));
             }
             let index = usize::try_from(block)
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "block exceeds usize"))?;
