@@ -233,14 +233,15 @@ impl Superblock {
                 "allocation metadata reservation has invalid length",
             ));
         }
-        let expected_inode_start = allocation_start
-            .checked_add(allocation_blocks)
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "allocation metadata block range overflow",
-                )
-            })?;
+        let expected_inode_start =
+            allocation_start
+                .checked_add(allocation_blocks)
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "allocation metadata block range overflow",
+                    )
+                })?;
         if inode_start != expected_inode_start {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
