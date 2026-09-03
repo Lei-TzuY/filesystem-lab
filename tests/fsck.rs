@@ -256,7 +256,9 @@ fn rejects_directory_entry_whose_parent_is_not_a_directory() {
 
     let error = check_device(&mut device).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
-    assert!(error.to_string().contains("parent inode 1 is not a directory"));
+    assert!(error
+        .to_string()
+        .contains("parent inode 1 is not a directory"));
 }
 
 #[test]
