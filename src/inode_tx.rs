@@ -137,7 +137,8 @@ impl BlockDevice for CaptureDevice {
 mod tests {
     use super::*;
     use crate::format::format_device;
-    use crate::inode_codec::{InodeKind, PersistedInode};
+    use crate::inode::InodeKind;
+    use crate::inode_codec::PersistedInode;
     use crate::inode_table::load_inode_table;
     use crate::journal::JournalLog;
     use crate::journal_region::store_journal_image;
