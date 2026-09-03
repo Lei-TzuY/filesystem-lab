@@ -1,6 +1,6 @@
 use std::io;
 
-use filesystem_lab::allocation_disk::{load_allocator, load_allocator as reload_allocator};
+use filesystem_lab::allocation_disk::load_allocator;
 use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
 use filesystem_lab::create_tx::store_create_metadata_journaled;
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
@@ -92,7 +92,7 @@ fn default_format_can_commit_allocation_inode_and_directory_atomically() {
 
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(report.home_writes, 3);
-    assert!(reload_allocator(&mut device, &superblock)
+    assert!(load_allocator(&mut device, &superblock)
         .unwrap()
         .is_owned(data_block)
         .unwrap());
