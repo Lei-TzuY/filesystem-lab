@@ -203,7 +203,9 @@ mod tests {
         fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> io::Result<()> {
             if self.fail_once_on == Some(block) {
                 self.fail_once_on = None;
-                return Err(io::Error::other("injected combined metadata home-write failure"));
+                return Err(io::Error::other(
+                    "injected combined metadata home-write failure",
+                ));
             }
             let index = usize::try_from(block)
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "block exceeds usize"))?;
@@ -262,13 +264,9 @@ mod tests {
         let (inodes, entries) = desired_metadata();
         let flushes_before = device.flushes;
 
-        let report = store_inode_directory_tables_journaled(
-            &mut device,
-            &superblock,
-            &inodes,
-            &entries,
-        )
-        .unwrap();
+        let report =
+            store_inode_directory_tables_journaled(&mut device, &superblock, &inodes, &entries)
+                .unwrap();
 
         assert_eq!(report.committed_transactions, 1);
         assert_eq!(report.home_writes, 2);
@@ -292,13 +290,9 @@ mod tests {
             .unwrap();
         let flushes_before = device.flushes;
 
-        let report = store_inode_directory_tables_journaled(
-            &mut device,
-            &superblock,
-            &inodes,
-            &entries,
-        )
-        .unwrap();
+        let report =
+            store_inode_directory_tables_journaled(&mut device, &superblock, &inodes, &entries)
+                .unwrap();
 
         assert_eq!(report, RecoveryReport::default());
         assert_eq!(device.flushes, flushes_before);
@@ -319,12 +313,12 @@ mod tests {
         let report = recover_journal(&mut device, superblock).unwrap();
 
         assert_eq!(report, RecoveryReport::default());
-        assert!(load_inode_table(&mut device, &superblock).unwrap().is_empty());
-        assert!(
-            load_directory_table(&mut device, &superblock)
-                .unwrap()
-                .is_empty()
-        );
+        assert!(load_inode_table(&mut device, &superblock)
+            .unwrap()
+            .is_empty());
+        assert!(load_directory_table(&mut device, &superblock)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -335,23 +329,16 @@ mod tests {
         device.fail_once_on = Some(superblock.directory_start);
 
         assert_eq!(
-            store_inode_directory_tables_journaled(
-                &mut device,
-                &superblock,
-                &inodes,
-                &entries,
-            )
-            .unwrap_err()
-            .kind(),
+            store_inode_directory_tables_journaled(&mut device, &superblock, &inodes, &entries,)
+                .unwrap_err()
+                .kind(),
             io::ErrorKind::Other
         );
 
         assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes);
-        assert!(
-            load_directory_table(&mut device, &superblock)
-                .unwrap()
-                .is_empty()
-        );
+        assert!(load_directory_table(&mut device, &superblock)
+            .unwrap()
+            .is_empty());
 
         let report = recover_journal(&mut device, superblock).unwrap();
         assert_eq!(report.committed_transactions, 1);
@@ -375,23 +362,18 @@ mod tests {
         let flushes_before = device.flushes;
 
         assert_eq!(
-            store_inode_directory_tables_journaled(
-                &mut device,
-                &superblock,
-                &inodes,
-                &entries,
-            )
-            .unwrap_err()
-            .kind(),
+            store_inode_directory_tables_journaled(&mut device, &superblock, &inodes, &entries,)
+                .unwrap_err()
+                .kind(),
             io::ErrorKind::InvalidInput
         );
 
         assert_eq!(device.flushes, flushes_before);
-        assert!(load_inode_table(&mut device, &superblock).unwrap().is_empty());
-        assert!(
-            load_directory_table(&mut device, &superblock)
-                .unwrap()
-                .is_empty()
-        );
+        assert!(load_inode_table(&mut device, &superblock)
+            .unwrap()
+            .is_empty());
+        assert!(load_directory_table(&mut device, &superblock)
+            .unwrap()
+            .is_empty());
     }
 }
