@@ -80,7 +80,10 @@ fn directory_table_round_trip_and_flush() {
     store_directory_table(&mut device, &superblock, &entries).unwrap();
 
     assert_eq!(device.flushes, before + 1);
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries);
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        entries
+    );
 }
 
 #[test]
