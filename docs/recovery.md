@@ -14,14 +14,18 @@ The journal is not cleared by recovery in this milestone. Replaying the same dur
 
 ## Allowed home locations
 
-Journal writes may target ordinary data blocks and the allocation-metadata home region. The superblock and the journal reservation itself remain forbidden targets so recovery can never overwrite the metadata that defines filesystem geometry or the log that is currently driving replay.
+Journal writes may target ordinary data blocks plus the allocation-metadata and inode-table home regions. The superblock and the journal reservation itself remain forbidden targets so recovery can never overwrite the metadata that defines filesystem geometry or the log that is currently driving replay.
 
 `allocation_tx::store_allocator_journaled` renders the complete checksummed allocation image, records every allocation home block in one transaction, persists the committed journal image, and only then invokes normal recovery to write the allocation image home. A failure during the home-write phase leaves the committed journal available for idempotent retry.
 
-The allocator transaction is deliberately whole-image and bounded. If the journal reservation is too small to contain every allocation-image block plus transaction framing, the update is rejected rather than split across commits. This keeps the atomicity argument explicit while the laboratory still uses a bounded non-circular journal.
+`inode_tx::store_inode_table_journaled` renders the complete checksummed inode-table image and compares it with the current durable inode region. Every changed inode-table home block is placed in one transaction; unchanged blocks are omitted. The committed journal is persisted before recovery writes changed inode blocks home. An already-identical inode snapshot is a no-op that does not rewrite the journal.
+
+Both metadata transaction paths are deliberately bounded. If the journal reservation is too small to contain all blocks required for one logical metadata update plus transaction framing, the update is rejected rather than split across commits. This keeps the atomicity argument explicit while the laboratory still uses a bounded non-circular journal.
 
 ## Safety properties
 
-The journal-region loader validates checksums, record framing, transaction ordering, device geometry, and target-block bounds before recovery mutates home blocks. Crash-before-commit therefore leaves allocation metadata unchanged; crash or I/O failure after a durable commit can be repaired by replaying the same journal until the home flush succeeds.
+The journal-region loader validates checksums, record framing, transaction ordering, device geometry, and target-block bounds before recovery mutates home blocks. Crash-before-commit therefore leaves allocation or inode metadata unchanged; crash or I/O failure after a durable commit can be repaired by replaying the same journal until the home flush succeeds.
 
-This milestone does **not** define checkpointing, journal clearing, circular head/tail state, generation numbers, persistent inode metadata, or namespace persistence. Those require later bounded milestones and, where the durable schema changes, explicit format versioning.
+Journaled inode-table regressions additionally verify that a committed inode update survives an injected first-home-write failure, that replay is idempotent, and that an update requiring more changed inode blocks than the journal can hold is rejected instead of partially committed.
+
+This milestone does **not** define checkpointing, journal clearing, circular head/tail state, generation numbers, directory persistence, or atomic multi-object allocation+inode transactions. Those require later bounded milestones and, where the durable schema changes, explicit format versioning.

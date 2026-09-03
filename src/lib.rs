@@ -11,6 +11,7 @@ pub mod fsck;
 pub mod inode;
 pub mod inode_codec;
 pub mod inode_table;
+pub mod inode_tx;
 pub mod journal;
 pub mod journal_codec;
 pub mod journal_region;
