@@ -1,11 +1,15 @@
 use std::io;
 
+use filesystem_lab::allocation_disk::{load_allocator, load_allocator as reload_allocator};
 use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
+use filesystem_lab::create_tx::store_create_metadata_journaled;
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
+use filesystem_lab::directory_table::load_directory_table;
 use filesystem_lab::format::{format_device, DEFAULT_JOURNAL_BLOCKS};
+use filesystem_lab::fsck::check_device;
 use filesystem_lab::inode::InodeKind;
 use filesystem_lab::inode_codec::PersistedInode;
-use filesystem_lab::metadata_tx::store_inode_directory_tables_journaled;
+use filesystem_lab::inode_table::load_inode_table;
 
 #[derive(Debug)]
 struct MemoryDevice {
@@ -51,12 +55,14 @@ impl BlockDevice for MemoryDevice {
 }
 
 #[test]
-fn default_format_can_commit_one_inode_and_one_directory_block_atomically() {
+fn default_format_can_commit_allocation_inode_and_directory_atomically() {
     let mut device = MemoryDevice::new(32);
     let superblock = format_device(&mut device).unwrap();
     assert_eq!(superblock.journal_blocks, DEFAULT_JOURNAL_BLOCKS);
-    assert_eq!(DEFAULT_JOURNAL_BLOCKS, 3);
+    assert_eq!(DEFAULT_JOURNAL_BLOCKS, 4);
 
+    let mut allocator = load_allocator(&mut device, &superblock).unwrap();
+    let data_block = allocator.allocate().unwrap();
     let inodes = vec![
         PersistedInode {
             id: 1,
@@ -66,7 +72,7 @@ fn default_format_can_commit_one_inode_and_one_directory_block_atomically() {
         PersistedInode {
             id: 2,
             kind: InodeKind::File,
-            blocks: Vec::new(),
+            blocks: vec![data_block],
         },
     ];
     let entries = vec![PersistedDirectoryEntry {
@@ -75,10 +81,25 @@ fn default_format_can_commit_one_inode_and_one_directory_block_atomically() {
         name: "file".to_owned(),
     }];
 
-    let report =
-        store_inode_directory_tables_journaled(&mut device, &superblock, &inodes, &entries)
-            .unwrap();
+    let report = store_create_metadata_journaled(
+        &mut device,
+        &superblock,
+        &allocator,
+        &inodes,
+        &entries,
+    )
+    .unwrap();
 
     assert_eq!(report.committed_transactions, 1);
-    assert_eq!(report.home_writes, 2);
+    assert_eq!(report.home_writes, 3);
+    assert!(reload_allocator(&mut device, &superblock)
+        .unwrap()
+        .is_owned(data_block)
+        .unwrap());
+    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes);
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        entries
+    );
+    check_device(&mut device).unwrap();
 }
