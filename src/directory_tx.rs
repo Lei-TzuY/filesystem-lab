@@ -177,7 +177,9 @@ mod tests {
         fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> io::Result<()> {
             if self.fail_once_on == Some(block) {
                 self.fail_once_on = None;
-                return Err(io::Error::other("injected home directory-table write failure"));
+                return Err(io::Error::other(
+                    "injected home directory-table write failure",
+                ));
             }
             let index = usize::try_from(block)
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "block exceeds usize"))?;
@@ -231,12 +233,8 @@ mod tests {
         let mut device = FaultDevice::new(64);
         let superblock = format_device(&mut device).unwrap();
         let desired = entry(1, 2, "child");
-        store_directory_table_journaled(
-            &mut device,
-            &superblock,
-            std::slice::from_ref(&desired),
-        )
-        .unwrap();
+        store_directory_table_journaled(&mut device, &superblock, std::slice::from_ref(&desired))
+            .unwrap();
         let flushes_before = device.flushes;
 
         let report = store_directory_table_journaled(&mut device, &superblock, &[desired]).unwrap();
