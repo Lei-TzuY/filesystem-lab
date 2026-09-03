@@ -143,7 +143,10 @@ fn audit_namespace(
                 entry.name, entry.target
             )));
         }
-        adjacency.entry(entry.parent).or_default().push(entry.target);
+        adjacency
+            .entry(entry.parent)
+            .or_default()
+            .push(entry.target);
     }
 
     if inodes.is_empty() {
