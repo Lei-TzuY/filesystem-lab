@@ -216,12 +216,8 @@ mod tests {
         let superblock = format_device(&mut device).unwrap();
         let mut log = JournalLog::new();
         let txid = log.begin().unwrap();
-        log.write(
-            txid,
-            superblock.allocation_start,
-            [0xa5; BLOCK_SIZE],
-        )
-        .unwrap();
+        log.write(txid, superblock.allocation_start, [0xa5; BLOCK_SIZE])
+            .unwrap();
         store_journal_image(&mut device, superblock, log.entries()).unwrap();
 
         let report = recover_journal(&mut device, superblock).unwrap();
