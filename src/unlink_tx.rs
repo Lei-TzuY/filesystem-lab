@@ -47,6 +47,13 @@ pub fn store_unlink_metadata_journaled(
 /// This is deliberately narrower than general POSIX unlink semantics. Hard links, orphan handling,
 /// recursive directory removal, and rename are not modeled yet, so this validator rejects any
 /// transition that would require those semantics.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` when allocator geometry changes, when the inode or namespace delta is not
+/// exactly one unlink, or when the allocator delta does not free exactly the removed inode's blocks.
+/// Durable allocation, inode-table, and directory-table decoding failures are propagated.
+#[allow(clippy::too_many_lines)]
 pub fn validate_unlink_transition(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
