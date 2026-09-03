@@ -141,8 +141,9 @@ fn audit_journal(
                 }
                 let allocation_home = superblock.allocation_range().contains(block);
                 let inode_home = superblock.inode_range().contains(block);
+                let directory_home = superblock.directory_range().contains(block);
                 let data_home = *block >= reserved_blocks && *block < superblock.total_blocks;
-                if !allocation_home && !inode_home && !data_home {
+                if !allocation_home && !inode_home && !directory_home && !data_home {
                     return Err(invalid_data(
                         "journal write targets forbidden or invalid block",
                     ));
@@ -244,12 +245,17 @@ mod tests {
                 block: superblock.inode_start,
                 data: Box::new([0_u8; BLOCK_SIZE]),
             },
+            JournalEntry::Write {
+                txid: 1,
+                block: superblock.directory_start,
+                data: Box::new([0_u8; BLOCK_SIZE]),
+            },
             JournalEntry::Commit { txid: 1 },
         ];
         let data_blocks = superblock.total_blocks - superblock.reserved_blocks();
 
         let report = audit_journal(superblock, &entries, 0, data_blocks, 0, 0).unwrap();
-        assert_eq!(report.journal_writes, 2);
+        assert_eq!(report.journal_writes, 3);
         assert_eq!(report.committed_transactions, 1);
     }
 
