@@ -211,12 +211,9 @@ mod tests {
         let inode = file_inode(1, superblock.reserved_blocks());
         let flushes_before = device.flushes;
 
-        let report = store_inode_table_journaled(
-            &mut device,
-            &superblock,
-            std::slice::from_ref(&inode),
-        )
-        .unwrap();
+        let report =
+            store_inode_table_journaled(&mut device, &superblock, std::slice::from_ref(&inode))
+                .unwrap();
 
         assert_eq!(report.committed_transactions, 1);
         assert_eq!(report.home_writes, 1);
@@ -232,7 +229,8 @@ mod tests {
         let mut device = FaultDevice::new(64);
         let superblock = format_device(&mut device).unwrap();
         let inode = file_inode(1, superblock.reserved_blocks());
-        store_inode_table_journaled(&mut device, &superblock, std::slice::from_ref(&inode)).unwrap();
+        store_inode_table_journaled(&mut device, &superblock, std::slice::from_ref(&inode))
+            .unwrap();
         let flushes_before = device.flushes;
 
         let report = store_inode_table_journaled(&mut device, &superblock, &[inode]).unwrap();
@@ -269,13 +267,9 @@ mod tests {
         device.fail_once_on = Some(superblock.inode_start);
 
         assert_eq!(
-            store_inode_table_journaled(
-                &mut device,
-                &superblock,
-                std::slice::from_ref(&inode),
-            )
-            .unwrap_err()
-            .kind(),
+            store_inode_table_journaled(&mut device, &superblock, std::slice::from_ref(&inode),)
+                .unwrap_err()
+                .kind(),
             io::ErrorKind::Other
         );
 
