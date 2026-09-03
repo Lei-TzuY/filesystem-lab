@@ -19,16 +19,21 @@ The checker validates, in order:
 11. every directory-entry parent inode exists;
 12. every directory-entry parent inode has directory kind;
 13. every directory-entry target inode exists;
-14. the complete journal-region image has valid magic/version/flags/reserved bytes, length, zero padding, and CRC-32;
-15. every journal record decodes with its own framing/version/checksum constraints;
-16. transaction ordering is structurally valid;
-17. every journal write targets an ordinary data home block, allocation metadata, inode-table metadata, or directory-table metadata. Superblock and journal-reservation targets remain forbidden.
+14. an empty inode table is accepted as the freshly formatted bootstrap state; once any inode exists, inode `1` is the root and must have directory kind;
+15. every inode in a non-empty namespace is reachable from root inode `1` by following durable directory entries;
+16. the directory-to-directory subgraph is acyclic, including cycles that are not reachable from the root;
+17. the complete journal-region image has valid magic/version/flags/reserved bytes, length, zero padding, and CRC-32;
+18. every journal record decodes with its own framing/version/checksum constraints;
+19. transaction ordering is structurally valid;
+20. every journal write targets an ordinary data home block, allocation metadata, inode-table metadata, or directory-table metadata. Superblock and journal-reservation targets remain forbidden.
 
 The result reports filesystem geometry, allocated/free block counts, inode record/reference counts, directory-entry count, journal entry/write counts, committed transaction count, and an optional pending transaction identifier.
 
 The inode/allocation check is intentionally directional at this stage: every inode reference must be allocated and uniquely owned, but an allocated data block is not yet required to have an inode owner. The latter would be too strong before complete inode/file lifecycle transaction semantics define when temporarily allocated but not yet referenced blocks are legal across transactions.
 
-The namespace check is also intentionally local rather than graph-complete. It rejects dangling parent/target inode references and non-directory parents, but it does not yet designate a root inode, require reachability from a root, reject directory cycles, or enforce link counts. Those policies need an explicit durable root/lifecycle contract rather than being inferred by fsck.
+The root policy is intentionally simple and explicit. Inode `1` is the only root identity once the inode table becomes non-empty. The formatter still creates an empty inode table, so a just-formatted image is a valid pre-root bootstrap state. Fsck does not infer another root, and it rejects a non-empty inode table that omits inode `1` or gives it non-directory kind.
+
+Reachability treats every durable directory entry as a namespace edge from `parent` to `target`. Every inode record must be reachable from root inode `1`; this catches durable orphan inode records without requiring link-count metadata. Directory cycles are checked separately over directory targets so a cycle is corruption even when its component is otherwise unreachable. Multiple links to the same file or directory are not yet rejected because durable link-count and directory-parent policy remain intentionally undefined.
 
 ## Crash semantics
 
@@ -40,4 +45,4 @@ Allocation, inode-table, and directory-table images use tail-block-first, header
 
 ## Future extension
 
-Once root and inode/directory lifecycle semantics are explicit, fsck can extend the namespace model with root uniqueness, reachability, directory-cycle detection, link/lifecycle accounting, orphan handling, and eventually checks for leaked allocated blocks once transaction semantics make that invariant unambiguous.
+Once inode/directory lifecycle semantics are explicit, fsck can extend the namespace model with link-count validation, a stronger single-parent directory policy if desired, orphan-recovery rules, and eventually checks for leaked allocated blocks once transaction semantics make that invariant unambiguous.
