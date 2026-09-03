@@ -24,4 +24,23 @@ For every crash point, the regression requires:
 
 The matrix therefore turns the rename durability contract into an executable invariant: every bounded crash point resolves to either the old namespace or a committed journal that deterministically recovers the new namespace. It does not add overwrite/exchange rename semantics or alter filesystem format v5.
 
-Future lifecycle operations can reuse the same `CrashDevice` and enumeration pattern so create, unlink, truncate, and later multi-block namespace transitions are checked against every write/flush boundary rather than isolated injected failures.
+## Create matrix
+
+`tests/create_crash_matrix.rs` applies the same enumeration to the three-table atomic create path. A crash may occur while publishing the journal or while installing allocation, inode, and directory home blocks. Before recovery, a durable image is accepted only when it is the complete old state or complete new state; any partially installed combination must be rejected by fsck. A durable commit must replay all three home writes, and replay must remain idempotent.
+
+## Unlink matrix
+
+`tests/unlink_crash_matrix.rs` starts from a directly seeded, fsck-clean linked file so the journal is empty before the unlink transaction begins. It then measures one successful validated unlink and injects a crash before every `write_block` or `flush` in that operation.
+
+For every crash point, the regression requires:
+
+1. a pre-commit crash reboots to the complete linked-file state and recovery remains a no-op;
+2. a fully installed unlink is accepted directly by fsck;
+3. any partially installed allocation/inode/directory home state is rejected by fsck before recovery;
+4. a durable unlink commit replays exactly the three changed home blocks and converges to the complete unlinked state;
+5. the recovered state has no namespace entry, no removed inode, and no ownership of the removed inode's data block;
+6. a second recovery returns the same report and leaves the state unchanged.
+
+Together, the create and unlink matrices exercise opposite directions of the same cross-layer ownership invariant: namespace publication must agree with inode existence and data-block ownership at every durable boundary or be repairable from one committed WAL transaction.
+
+Future lifecycle operations can reuse the same `CrashDevice` and enumeration pattern so truncate and later multi-block namespace transitions are checked against every write/flush boundary rather than isolated injected failures.
