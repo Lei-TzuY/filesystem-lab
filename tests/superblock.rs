@@ -66,13 +66,22 @@ fn superblock_round_trip_is_deterministic() {
     );
     assert_eq!(Superblock::decode(&encoded).unwrap(), superblock);
     assert_eq!(superblock.journal_range(), 1..1 + DEFAULT_JOURNAL_BLOCKS);
-    assert_eq!(superblock.allocation_range(), 3..4);
-    assert_eq!(superblock.inode_range(), 4..4 + DEFAULT_INODE_BLOCKS);
+    assert_eq!(
+        superblock.allocation_range(),
+        superblock.allocation_start..superblock.allocation_start + superblock.allocation_blocks
+    );
+    assert_eq!(
+        superblock.inode_range(),
+        superblock.inode_start..superblock.inode_start + DEFAULT_INODE_BLOCKS
+    );
     assert_eq!(
         superblock.directory_range(),
-        6..6 + DEFAULT_DIRECTORY_BLOCKS
+        superblock.directory_start..superblock.directory_start + DEFAULT_DIRECTORY_BLOCKS
     );
-    assert_eq!(superblock.reserved_blocks(), 8);
+    assert_eq!(
+        superblock.reserved_blocks(),
+        superblock.directory_start + DEFAULT_DIRECTORY_BLOCKS
+    );
 }
 
 #[test]
@@ -94,10 +103,17 @@ fn allocation_reservation_scales_with_device_size() {
     let total_blocks = 32_769_u64;
     assert_eq!(required_allocation_blocks(total_blocks).unwrap(), 2);
     let superblock = Superblock::new(total_blocks).unwrap();
-    assert_eq!(superblock.allocation_range(), 3..5);
-    assert_eq!(superblock.inode_range(), 5..7);
-    assert_eq!(superblock.directory_range(), 7..9);
-    assert_eq!(superblock.reserved_blocks(), 9);
+    assert_eq!(superblock.allocation_blocks, 2);
+    assert_eq!(superblock.allocation_start, 1 + DEFAULT_JOURNAL_BLOCKS);
+    assert_eq!(superblock.inode_start, superblock.allocation_start + 2);
+    assert_eq!(
+        superblock.directory_start,
+        superblock.inode_start + DEFAULT_INODE_BLOCKS
+    );
+    assert_eq!(
+        superblock.reserved_blocks(),
+        superblock.directory_start + DEFAULT_DIRECTORY_BLOCKS
+    );
 }
 
 #[test]
@@ -137,19 +153,29 @@ fn format_persists_metadata_prefix_and_flushes() {
 
     assert_eq!(written.total_blocks, 16);
     assert_eq!(written.journal_range(), 1..1 + DEFAULT_JOURNAL_BLOCKS);
-    assert_eq!(written.allocation_range(), 3..4);
-    assert_eq!(written.inode_range(), 4..6);
-    assert_eq!(written.directory_range(), 6..8);
-    assert_ne!(&device.blocks[3][0..8], &[0_u8; 8]);
-    assert_ne!(&device.blocks[4][0..8], &[0_u8; 8]);
-    assert_ne!(&device.blocks[6][0..8], &[0_u8; 8]);
+    assert_eq!(written.allocation_start, 1 + DEFAULT_JOURNAL_BLOCKS);
+    assert_eq!(
+        written.inode_start,
+        written.allocation_start + written.allocation_blocks
+    );
+    assert_eq!(
+        written.directory_start,
+        written.inode_start + DEFAULT_INODE_BLOCKS
+    );
+    let allocation_index = usize::try_from(written.allocation_start).unwrap();
+    let inode_index = usize::try_from(written.inode_start).unwrap();
+    let directory_index = usize::try_from(written.directory_start).unwrap();
+    assert_ne!(&device.blocks[allocation_index][0..8], &[0_u8; 8]);
+    assert_ne!(&device.blocks[inode_index][0..8], &[0_u8; 8]);
+    assert_ne!(&device.blocks[directory_index][0..8], &[0_u8; 8]);
     assert_eq!(device.flushes, 1);
     assert_eq!(read_superblock(&mut device).unwrap(), written);
 }
 
 #[test]
 fn decode_rejects_bad_magic_version_metadata_layout_and_reserved_bytes() {
-    let valid = Superblock::new(10).unwrap().encode();
+    let geometry = Superblock::new(10).unwrap();
+    let valid = geometry.encode();
 
     let mut bad_magic = valid;
     bad_magic[0] ^= 0xff;
@@ -180,7 +206,7 @@ fn decode_rejects_bad_magic_version_metadata_layout_and_reserved_bytes() {
     );
 
     let mut bad_allocation_start = valid;
-    bad_allocation_start[40..48].copy_from_slice(&4_u64.to_le_bytes());
+    bad_allocation_start[40..48].copy_from_slice(&(geometry.allocation_start + 1).to_le_bytes());
     assert_eq!(
         Superblock::decode(&bad_allocation_start)
             .unwrap_err()
@@ -189,7 +215,7 @@ fn decode_rejects_bad_magic_version_metadata_layout_and_reserved_bytes() {
     );
 
     let mut bad_allocation_blocks = valid;
-    bad_allocation_blocks[48..56].copy_from_slice(&2_u64.to_le_bytes());
+    bad_allocation_blocks[48..56].copy_from_slice(&(geometry.allocation_blocks + 1).to_le_bytes());
     assert_eq!(
         Superblock::decode(&bad_allocation_blocks)
             .unwrap_err()
@@ -198,7 +224,7 @@ fn decode_rejects_bad_magic_version_metadata_layout_and_reserved_bytes() {
     );
 
     let mut bad_inode_start = valid;
-    bad_inode_start[56..64].copy_from_slice(&5_u64.to_le_bytes());
+    bad_inode_start[56..64].copy_from_slice(&(geometry.inode_start + 1).to_le_bytes());
     assert_eq!(
         Superblock::decode(&bad_inode_start).unwrap_err().kind(),
         io::ErrorKind::InvalidData
@@ -212,7 +238,7 @@ fn decode_rejects_bad_magic_version_metadata_layout_and_reserved_bytes() {
     );
 
     let mut bad_directory_start = valid;
-    bad_directory_start[72..80].copy_from_slice(&7_u64.to_le_bytes());
+    bad_directory_start[72..80].copy_from_slice(&(geometry.directory_start + 1).to_le_bytes());
     assert_eq!(
         Superblock::decode(&bad_directory_start).unwrap_err().kind(),
         io::ErrorKind::InvalidData
