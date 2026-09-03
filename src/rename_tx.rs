@@ -106,10 +106,7 @@ fn would_create_directory_cycle(
     let mut children: BTreeMap<u64, Vec<u64>> = BTreeMap::new();
     for (index, entry) in entries.iter().enumerate() {
         if index != source_index {
-            children
-                .entry(entry.parent)
-                .or_default()
-                .push(entry.target);
+            children.entry(entry.parent).or_default().push(entry.target);
         }
     }
 
@@ -183,7 +180,8 @@ mod tests {
             *self
                 .blocks
                 .get_mut(index)
-                .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "invalid block"))? = *buf;
+                .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "invalid block"))? =
+                *buf;
             Ok(())
         }
 
@@ -231,8 +229,7 @@ mod tests {
         let original = [entry(1, 4, "old")];
         let (mut device, superblock) = setup(&original);
 
-        let report =
-            rename_entry_journaled(&mut device, &superblock, 1, "old", 2, "new").unwrap();
+        let report = rename_entry_journaled(&mut device, &superblock, 1, "old", 2, "new").unwrap();
 
         assert_eq!(report.committed_transactions, 1);
         assert_eq!(report.home_writes, 1);
