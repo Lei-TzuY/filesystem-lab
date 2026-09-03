@@ -46,7 +46,9 @@ pub fn encode_directory_entry(entry: &PersistedDirectoryEntry) -> io::Result<Vec
     })?;
     let total_len = DIRECTORY_ENTRY_HEADER_LEN
         .checked_add(entry.name.len())
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "directory entry size overflow"))?;
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "directory entry size overflow")
+        })?;
     let total_len_u32 = u32::try_from(total_len).map_err(|_| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -115,7 +117,9 @@ pub fn decode_directory_entry(bytes: &[u8]) -> io::Result<PersistedDirectoryEntr
     let name_len = usize::from(read_u16(bytes, NAME_LEN_OFFSET));
     let expected_len = DIRECTORY_ENTRY_HEADER_LEN
         .checked_add(name_len)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "directory entry size overflow"))?;
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "directory entry size overflow")
+        })?;
     if total_len != expected_len {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -152,8 +156,12 @@ pub fn decode_directory_entry(bytes: &[u8]) -> io::Result<PersistedDirectoryEntr
         ));
     }
 
-    let name = str::from_utf8(&bytes[DIRECTORY_ENTRY_HEADER_LEN..])
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "directory entry name is not UTF-8"))?;
+    let name = str::from_utf8(&bytes[DIRECTORY_ENTRY_HEADER_LEN..]).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "directory entry name is not UTF-8",
+        )
+    })?;
     validate_name(name, io::ErrorKind::InvalidData)?;
 
     Ok(PersistedDirectoryEntry {
@@ -245,7 +253,10 @@ mod tests {
             target: 8,
             name: "a".repeat(DIRECTORY_NAME_MAX_BYTES),
         };
-        assert_eq!(decode_directory_entry(&encode_directory_entry(&entry).unwrap()).unwrap(), entry);
+        assert_eq!(
+            decode_directory_entry(&encode_directory_entry(&entry).unwrap()).unwrap(),
+            entry
+        );
     }
 
     #[test]
