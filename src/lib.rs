@@ -21,3 +21,4 @@ pub mod journal_codec;
 pub mod journal_region;
 pub mod metadata_tx;
 pub mod recovery;
+pub mod unlink_tx;
