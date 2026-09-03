@@ -65,12 +65,13 @@ fn fresh_device_passes_without_mutation() {
     let flushes_before = device.flushes;
 
     let report = check_device(&mut device).unwrap();
+    let data_blocks = superblock.total_blocks - superblock.reserved_blocks();
 
     assert_eq!(report.total_blocks, 16);
     assert_eq!(report.reserved_blocks, superblock.reserved_blocks());
-    assert_eq!(report.data_blocks, 12);
+    assert_eq!(report.data_blocks, data_blocks);
     assert_eq!(report.allocated_blocks, 0);
-    assert_eq!(report.free_blocks, 12);
+    assert_eq!(report.free_blocks, data_blocks);
     assert_eq!(report.journal_entries, 0);
     assert_eq!(report.journal_writes, 0);
     assert_eq!(report.committed_transactions, 0);

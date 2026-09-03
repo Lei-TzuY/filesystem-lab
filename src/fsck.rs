@@ -162,9 +162,9 @@ mod tests {
         assert_eq!(report.committed_transactions, 1);
         assert_eq!(report.pending_transaction, Some(2));
         assert_eq!(report.journal_writes, 2);
-        assert_eq!(report.data_blocks, 12);
+        assert_eq!(report.data_blocks, data_blocks);
         assert_eq!(report.allocated_blocks, 0);
-        assert_eq!(report.free_blocks, 12);
+        assert_eq!(report.free_blocks, data_blocks);
     }
 
     #[test]
