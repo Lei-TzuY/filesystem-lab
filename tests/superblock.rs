@@ -100,7 +100,9 @@ fn invalid_metadata_reservations_are_rejected() {
         io::ErrorKind::InvalidInput
     );
     assert_eq!(
-        Superblock::with_metadata_blocks(16, 2, 0).unwrap_err().kind(),
+        Superblock::with_metadata_blocks(16, 2, 0)
+            .unwrap_err()
+            .kind(),
         io::ErrorKind::InvalidInput
     );
     assert_eq!(
