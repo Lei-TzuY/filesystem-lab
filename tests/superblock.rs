@@ -104,10 +104,7 @@ fn allocation_reservation_scales_with_device_size() {
     assert_eq!(required_allocation_blocks(total_blocks).unwrap(), 2);
     let superblock = Superblock::new(total_blocks).unwrap();
     assert_eq!(superblock.allocation_blocks, 2);
-    assert_eq!(
-        superblock.allocation_start,
-        1 + DEFAULT_JOURNAL_BLOCKS
-    );
+    assert_eq!(superblock.allocation_start, 1 + DEFAULT_JOURNAL_BLOCKS);
     assert_eq!(superblock.inode_start, superblock.allocation_start + 2);
     assert_eq!(
         superblock.directory_start,
@@ -157,7 +154,10 @@ fn format_persists_metadata_prefix_and_flushes() {
     assert_eq!(written.total_blocks, 16);
     assert_eq!(written.journal_range(), 1..1 + DEFAULT_JOURNAL_BLOCKS);
     assert_eq!(written.allocation_start, 1 + DEFAULT_JOURNAL_BLOCKS);
-    assert_eq!(written.inode_start, written.allocation_start + written.allocation_blocks);
+    assert_eq!(
+        written.inode_start,
+        written.allocation_start + written.allocation_blocks
+    );
     assert_eq!(
         written.directory_start,
         written.inode_start + DEFAULT_INODE_BLOCKS
