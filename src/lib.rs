@@ -18,4 +18,5 @@ pub mod inode_tx;
 pub mod journal;
 pub mod journal_codec;
 pub mod journal_region;
+pub mod metadata_tx;
 pub mod recovery;
