@@ -81,14 +81,9 @@ fn default_format_can_commit_allocation_inode_and_directory_atomically() {
         name: "file".to_owned(),
     }];
 
-    let report = store_create_metadata_journaled(
-        &mut device,
-        &superblock,
-        &allocator,
-        &inodes,
-        &entries,
-    )
-    .unwrap();
+    let report =
+        store_create_metadata_journaled(&mut device, &superblock, &allocator, &inodes, &entries)
+            .unwrap();
 
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(report.home_writes, 3);
