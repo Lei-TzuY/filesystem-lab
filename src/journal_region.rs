@@ -194,8 +194,8 @@ fn validate_entries(superblock: Superblock, entries: &[JournalEntry]) -> io::Res
                     ));
                 }
                 let allocation_home = superblock.allocation_range().contains(block);
-                let data_home = *block >= superblock.reserved_blocks()
-                    && *block < superblock.total_blocks;
+                let data_home =
+                    *block >= superblock.reserved_blocks() && *block < superblock.total_blocks;
                 if !allocation_home && !data_home {
                     return Err(invalid_data(
                         "journal write targets forbidden or invalid block",
