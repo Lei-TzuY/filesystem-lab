@@ -381,15 +381,22 @@ mod tests {
         };
         audit_namespace(&inodes, std::slice::from_ref(&entry)).unwrap();
 
-        let missing_parent = PersistedDirectoryEntry { parent: 3, ..entry.clone() };
+        let missing_parent = PersistedDirectoryEntry {
+            parent: 3,
+            ..entry.clone()
+        };
         assert_eq!(
-            audit_namespace(&inodes, &[missing_parent]).unwrap_err().kind(),
+            audit_namespace(&inodes, &[missing_parent])
+                .unwrap_err()
+                .kind(),
             io::ErrorKind::InvalidData
         );
 
         let missing_target = PersistedDirectoryEntry { target: 3, ..entry };
         assert_eq!(
-            audit_namespace(&inodes, &[missing_target]).unwrap_err().kind(),
+            audit_namespace(&inodes, &[missing_target])
+                .unwrap_err()
+                .kind(),
             io::ErrorKind::InvalidData
         );
     }
