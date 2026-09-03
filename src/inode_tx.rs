@@ -210,12 +210,16 @@ mod tests {
         let inode = file_inode(1, superblock.reserved_blocks());
         let flushes_before = device.flushes;
 
-        let report = store_inode_table_journaled(&mut device, &superblock, &[inode.clone()]).unwrap();
+        let report =
+            store_inode_table_journaled(&mut device, &superblock, &[inode.clone()]).unwrap();
 
         assert_eq!(report.committed_transactions, 1);
         assert_eq!(report.home_writes, 1);
         assert_eq!(device.flushes, flushes_before + 2);
-        assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), vec![inode]);
+        assert_eq!(
+            load_inode_table(&mut device, &superblock).unwrap(),
+            vec![inode]
+        );
     }
 
     #[test]
@@ -246,7 +250,10 @@ mod tests {
         let report = recover_journal(&mut device, superblock).unwrap();
 
         assert_eq!(report, RecoveryReport::default());
-        assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), original);
+        assert_eq!(
+            load_inode_table(&mut device, &superblock).unwrap(),
+            original
+        );
     }
 
     #[test]
@@ -266,11 +273,17 @@ mod tests {
         let report = recover_journal(&mut device, superblock).unwrap();
         assert_eq!(report.committed_transactions, 1);
         assert_eq!(report.home_writes, 1);
-        assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), vec![inode.clone()]);
+        assert_eq!(
+            load_inode_table(&mut device, &superblock).unwrap(),
+            vec![inode.clone()]
+        );
 
         let second_replay = recover_journal(&mut device, superblock).unwrap();
         assert_eq!(second_replay, report);
-        assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), vec![inode]);
+        assert_eq!(
+            load_inode_table(&mut device, &superblock).unwrap(),
+            vec![inode]
+        );
     }
 
     #[test]
