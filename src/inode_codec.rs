@@ -53,9 +53,10 @@ pub fn encode_inode(inode: &PersistedInode) -> io::Result<Vec<u8>> {
             "inode block count exceeds codec limit",
         )
     })?;
-    let payload_len = inode.blocks.len().checked_mul(8).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "inode record size overflow")
-    })?;
+    let payload_len =
+        inode.blocks.len().checked_mul(8).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "inode record size overflow")
+        })?;
     let total_len = INODE_RECORD_HEADER_LEN
         .checked_add(payload_len)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "inode record size overflow"))?;
