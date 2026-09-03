@@ -1,6 +1,6 @@
 use std::io;
 
-use crate::block::{BlockDevice, BLOCK_SIZE};
+use crate::block::BlockDevice;
 use crate::format::Superblock;
 use crate::inode_codec::PersistedInode;
 use crate::inode_table::store_inode_table;
@@ -73,6 +73,7 @@ pub fn store_inode_table_journaled(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::block::BLOCK_SIZE;
     use crate::format::format_device;
     use crate::inode::InodeKind;
     use crate::inode_codec::PersistedInode;
