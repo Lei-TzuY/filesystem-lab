@@ -327,7 +327,9 @@ fn rejects_unreachable_inode_from_root() {
 
     let error = check_device(&mut device).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
-    assert!(error.to_string().contains("inode 2 is unreachable from root inode 1"));
+    assert!(error
+        .to_string()
+        .contains("inode 2 is unreachable from root inode 1"));
 }
 
 #[test]
