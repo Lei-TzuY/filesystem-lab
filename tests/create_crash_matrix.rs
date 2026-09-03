@@ -62,7 +62,10 @@ fn assert_old_state(device: &mut CrashDevice, superblock: &Superblock, data_bloc
         .unwrap()
         .is_owned(data_block)
         .unwrap());
-    assert_eq!(load_inode_table(device, superblock).unwrap(), vec![root_inode()]);
+    assert_eq!(
+        load_inode_table(device, superblock).unwrap(),
+        vec![root_inode()]
+    );
     assert!(load_directory_table(device, superblock).unwrap().is_empty());
 }
 
@@ -94,13 +97,7 @@ fn every_create_mutation_crash_point_is_old_or_recoverable_new_state() {
         mutation_operations >= 5,
         "atomic create must cross journal and three home-write durability operations"
     );
-    assert_new_state(
-        &mut probe,
-        &superblock,
-        data_block,
-        &inodes,
-        &entries,
-    );
+    assert_new_state(&mut probe, &superblock, data_block, &inodes, &entries);
     check_device(&mut probe).unwrap();
 
     for crash_at in 0..mutation_operations {
@@ -153,13 +150,7 @@ fn every_create_mutation_crash_point_is_old_or_recoverable_new_state() {
         } else {
             assert_eq!(report.committed_transactions, 1);
             assert_eq!(report.home_writes, 3);
-            assert_new_state(
-                &mut device,
-                &superblock,
-                data_block,
-                &inodes,
-                &entries,
-            );
+            assert_new_state(&mut device, &superblock, data_block, &inodes, &entries);
         }
         check_device(&mut device).unwrap();
 
@@ -168,13 +159,7 @@ fn every_create_mutation_crash_point_is_old_or_recoverable_new_state() {
         if report.committed_transactions == 0 {
             assert_old_state(&mut device, &superblock, data_block);
         } else {
-            assert_new_state(
-                &mut device,
-                &superblock,
-                data_block,
-                &inodes,
-                &entries,
-            );
+            assert_new_state(&mut device, &superblock, data_block, &inodes, &entries);
         }
     }
 }
