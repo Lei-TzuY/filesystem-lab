@@ -64,10 +64,14 @@ pub fn validate_unlink_transition(
         return invalid("unlink allocator geometry changed");
     }
 
-    let current_by_id: BTreeMap<u64, &PersistedInode> =
-        current_inodes.iter().map(|inode| (inode.id, inode)).collect();
-    let desired_by_id: BTreeMap<u64, &PersistedInode> =
-        desired_inodes.iter().map(|inode| (inode.id, inode)).collect();
+    let current_by_id: BTreeMap<u64, &PersistedInode> = current_inodes
+        .iter()
+        .map(|inode| (inode.id, inode))
+        .collect();
+    let desired_by_id: BTreeMap<u64, &PersistedInode> = desired_inodes
+        .iter()
+        .map(|inode| (inode.id, inode))
+        .collect();
     if current_by_id.len() != current_inodes.len() || desired_by_id.len() != desired_inodes.len() {
         return invalid("unlink inode snapshot contains duplicate identifiers");
     }
@@ -80,7 +84,10 @@ pub fn validate_unlink_transition(
     if removed_ids.len() != 1 {
         return invalid("unlink must remove exactly one inode");
     }
-    if desired_by_id.keys().any(|id| !current_by_id.contains_key(id)) {
+    if desired_by_id
+        .keys()
+        .any(|id| !current_by_id.contains_key(id))
+    {
         return invalid("unlink may not add an inode");
     }
     for (id, current) in &current_by_id {
@@ -141,7 +148,9 @@ pub fn validate_unlink_transition(
         return invalid("unlink leaves a namespace reference to the removed inode");
     }
     if removed_inode.kind == InodeKind::Directory
-        && current_entries.iter().any(|entry| entry.parent == removed_id)
+        && current_entries
+            .iter()
+            .any(|entry| entry.parent == removed_id)
     {
         return invalid("unlink cannot remove a non-empty directory");
     }
@@ -471,14 +480,8 @@ mod tests {
                 name: "child".to_owned(),
             },
         ];
-        store_create_metadata_journaled(
-            &mut device,
-            &superblock,
-            &allocator,
-            &inodes,
-            &entries,
-        )
-        .unwrap();
+        store_create_metadata_journaled(&mut device, &superblock, &allocator, &inodes, &entries)
+            .unwrap();
 
         let desired_inodes = vec![inodes[0].clone(), inodes[2].clone()];
         let desired_entries = vec![entries[1].clone()];
