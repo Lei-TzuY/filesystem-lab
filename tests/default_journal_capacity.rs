@@ -75,13 +75,9 @@ fn default_format_can_commit_one_inode_and_one_directory_block_atomically() {
         name: "file".to_owned(),
     }];
 
-    let report = store_inode_directory_tables_journaled(
-        &mut device,
-        &superblock,
-        &inodes,
-        &entries,
-    )
-    .unwrap();
+    let report =
+        store_inode_directory_tables_journaled(&mut device, &superblock, &inodes, &entries)
+            .unwrap();
 
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(report.home_writes, 2);
