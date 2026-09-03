@@ -23,7 +23,9 @@ The image decoder validates the region checksum before accepting records, decode
 
 Direct snapshot persistence writes non-header blocks first and writes the header-bearing first block last, then crosses the block-device `flush` boundary. A mixed old/new multi-block image is therefore expected to fail its checksum or padding invariants rather than be silently accepted.
 
-This ordering is corruption-detecting, not yet transactionally atomic with inode updates. Journaled namespace mutation is intentionally a later milestone.
+`store_directory_table_journaled()` provides crash-atomic replacement within the bounded WAL. It renders the complete desired image, compares it with the durable directory region, and journals every changed directory-table block in one transaction. The journal image is flushed before recovery writes committed home blocks and crosses the home-location flush boundary. An identical snapshot is a no-op. If every changed block cannot fit in the fixed journal reservation, the update is rejected instead of being split across commits.
+
+A crash before the commit record leaves the prior directory snapshot authoritative. After a durable commit, a crash or I/O failure during home writes is recovered idempotently from the still-durable journal.
 
 ## Relationship to filesystem format v5
 
@@ -33,4 +35,4 @@ The record payload format remains independently versioned by [`directory-entry-f
 
 ## Scope boundary
 
-This region format does not yet establish WAL semantics for directory mutation, rename/unlink ordering, parent/target existence checks, reachability, hard-link counts, or root-directory policy. Those cross-layer invariants require the durable namespace to be connected to inode lifecycle and recovery in later bounded milestones.
+Journaled directory-table replacement is atomic only for the directory snapshot itself. This region format does not yet establish one transaction spanning directory + inode lifecycle changes, rename/unlink ordering, parent/target existence checks, reachability, hard-link counts, or root-directory policy. Those cross-layer invariants remain later bounded milestones.

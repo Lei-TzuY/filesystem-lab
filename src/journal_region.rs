@@ -19,8 +19,8 @@ const RESERVED_OFFSET: usize = 20;
 /// containing the region header is the final on-device anchor before `flush` establishes the
 /// durability boundary.
 ///
-/// Journal writes may target data blocks or the allocation/inode metadata home regions. They may
-/// never target the superblock or journal reservation itself.
+/// Journal writes may target data blocks or the allocation/inode/directory metadata home regions.
+/// They may never target the superblock or journal reservation itself.
 ///
 /// # Errors
 ///
@@ -195,9 +195,10 @@ fn validate_entries(superblock: Superblock, entries: &[JournalEntry]) -> io::Res
                 }
                 let allocation_home = superblock.allocation_range().contains(block);
                 let inode_home = superblock.inode_range().contains(block);
+                let directory_home = superblock.directory_range().contains(block);
                 let data_home =
                     *block >= superblock.reserved_blocks() && *block < superblock.total_blocks;
-                if !allocation_home && !inode_home && !data_home {
+                if !allocation_home && !inode_home && !directory_home && !data_home {
                     return Err(invalid_data(
                         "journal write targets forbidden or invalid block",
                     ));
@@ -441,6 +442,23 @@ mod tests {
         let mut log = JournalLog::new();
         let txid = log.begin().unwrap();
         log.write(txid, superblock.inode_start, [0x6d; BLOCK_SIZE])
+            .unwrap();
+        log.commit(txid).unwrap();
+        let mut device = MemoryDevice::new(16);
+
+        store_journal_image(&mut device, superblock, log.entries()).unwrap();
+        assert_eq!(
+            load_journal_image(&mut device, superblock).unwrap(),
+            log.entries()
+        );
+    }
+
+    #[test]
+    fn writes_may_target_directory_metadata_home_blocks() {
+        let superblock = Superblock::with_journal_blocks(16, 2).unwrap();
+        let mut log = JournalLog::new();
+        let txid = log.begin().unwrap();
+        log.write(txid, superblock.directory_start, [0x4f; BLOCK_SIZE])
             .unwrap();
         log.commit(txid).unwrap();
         let mut device = MemoryDevice::new(16);
