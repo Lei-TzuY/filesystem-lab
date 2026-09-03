@@ -4,7 +4,7 @@ A focused filesystem implementation and crash-consistency laboratory for buildin
 
 ## Current milestone
 
-The repository now establishes the block-device foundation, an explicitly versioned on-disk format, executable allocation/inode/directory invariants, buffer-cache durability semantics, deterministic journal replay, a durable bounded journal, committed home-location recovery, read-only fsck, and the first persistent allocation metadata:
+The repository now establishes the block-device foundation, an explicitly versioned on-disk format, executable allocation/inode/directory invariants, buffer-cache durability semantics, deterministic journal replay, a durable bounded journal, committed home-location recovery, read-only fsck, persistent allocation metadata, and crash-atomic allocator persistence through the WAL:
 
 - fixed 4 KiB logical blocks and a file-backed block device with strict bounds/size checking;
 - explicit durable flush boundary via `sync_data`;
@@ -12,20 +12,22 @@ The repository now establishes the block-device foundation, an explicitly versio
 - deterministic metadata prefix: superblock → journal → allocation bitmap image;
 - allocation image v1 with magic/version/bitmap length/CRC-32, strict zero padding, and exact geometry validation;
 - one persistent ownership bit per filesystem block while reserved metadata ownership remains implicit in the superblock geometry;
-- tail-block-first, header-block-last allocation-image writes so mixed multi-block updates are rejected by checksum validation;
+- tail-block-first, header-block-last direct allocation-image writes so mixed multi-block updates are rejected by checksum validation;
 - deterministic first-fit allocator with reserved-block exclusion, no-double-ownership behavior, accounting invariants, exhaustion, and double-free rejection;
 - persistent allocator round-trip that reconstructs exact sparse data-block ownership;
+- one bounded whole-image **journaled allocator update** path that persists the WAL before allocation home writes and supports idempotent recovery after a home-write failure;
+- journal target validation that permits allocation-metadata home blocks while still forbidding superblock and journal self-overwrite;
 - in-memory inode lifecycle and directory namespace models with executable ownership/reference invariants;
 - cache entries with explicit `Clean`, `Dirty`, and `Writeback` states and durability-aware eviction rules;
 - logical journal transactions with begin/full-block-write/commit records and deterministic crash prefixes;
 - independently versioned persistent journal record codec and bounded journal-region image with CRC validation;
 - committed-only recovery that validates the journal before home writes and remains idempotent across partial replay failure;
 - read-only fsck over superblock, allocation metadata, journal integrity, transaction structure, reserved-region protection, and allocated/free accounting;
-- focused corruption/fault regressions, including deterministic detection of a failed allocation header write after a tail-block update.
+- focused corruption/fault regressions, including crash-before-commit allocator suppression and retry after a committed allocation home-write failure.
 
-The current filesystem format is documented in [`docs/on-disk-format.md`](docs/on-disk-format.md). Versions 1 and 2 are retained there as historical schemas and are intentionally rejected by the version-3 reader; durable semantics are never silently reinterpreted. Journal region/record formats remain independently versioned in [`docs/journal-region-format.md`](docs/journal-region-format.md) and [`docs/journal-record-format.md`](docs/journal-record-format.md). Recovery ordering is documented in [`docs/recovery.md`](docs/recovery.md), and fsck invariants in [`docs/fsck.md`](docs/fsck.md).
+The current filesystem format is documented in [`docs/on-disk-format.md`](docs/on-disk-format.md). Versions 1 and 2 are retained there as historical schemas and are intentionally rejected by the version-3 reader; durable semantics are never silently reinterpreted. Journal region/record formats remain independently versioned in [`docs/journal-region-format.md`](docs/journal-region-format.md) and [`docs/journal-record-format.md`](docs/journal-record-format.md). Recovery ordering, including journaled allocation mutation, is documented in [`docs/recovery.md`](docs/recovery.md), and fsck invariants in [`docs/fsck.md`](docs/fsck.md).
 
-Allocation is now durable, but direct allocation-image persistence is deliberately only a bounded laboratory primitive. Crash-atomic allocator mutation through the journal, persistent inode/directory formats, checkpointing, and circular journal head/tail metadata remain intentionally undefined.
+Allocation is durable and can now be mutated through the bounded WAL, but the journaled path deliberately keeps the complete allocation image in one transaction. Large allocation images that do not fit the fixed journal are rejected rather than split. Persistent inode/directory formats, checkpointing, journal clearing, and circular journal head/tail metadata remain intentionally undefined.
 
 The intended core progression is:
 
@@ -41,6 +43,7 @@ The intended core progression is:
 10. recovery/home-location replay;
 11. fsck/corruption invariants;
 12. persistent allocation metadata;
-13. journaled allocation mutation / persistent inode metadata.
+13. journaled allocation mutation;
+14. persistent inode metadata and cross-layer ownership fsck.
 
 Large POSIX surface-area work, FUSE integration, complex extents, permissions, and other broad features are intentionally deferred until the durable metadata core and crash semantics are well specified and executable.
