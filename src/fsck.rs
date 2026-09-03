@@ -56,7 +56,9 @@ fn audit_journal(
         .filter(|total| *total == data_blocks)
         .is_none()
     {
-        return Err(invalid_data("allocation accounting does not cover data blocks"));
+        return Err(invalid_data(
+            "allocation accounting does not cover data blocks",
+        ));
     }
 
     let mut active = None;
