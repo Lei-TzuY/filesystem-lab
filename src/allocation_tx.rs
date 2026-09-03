@@ -261,7 +261,8 @@ mod tests {
     #[test]
     fn whole_allocator_transaction_rejects_insufficient_journal_capacity() {
         let mut device = FaultDevice::new(33_000);
-        let superblock = format_device(&mut device).unwrap();
+        let superblock = Superblock::with_journal_blocks(device.block_count(), 2).unwrap();
+        crate::allocation_disk::initialize_allocation_region(&mut device, &superblock).unwrap();
         assert_eq!(superblock.allocation_blocks, 2);
         let allocator = load_allocator(&mut device, &superblock).unwrap();
 
