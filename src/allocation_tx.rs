@@ -2,7 +2,7 @@ use std::io;
 
 use crate::allocation::BlockAllocator;
 use crate::allocation_disk::store_allocator;
-use crate::block::{BlockDevice, BLOCK_SIZE};
+use crate::block::BlockDevice;
 use crate::format::Superblock;
 use crate::journal::JournalLog;
 use crate::journal_region::store_journal_image;
@@ -73,6 +73,7 @@ pub fn store_allocator_journaled(
 mod tests {
     use super::*;
     use crate::allocation_disk::load_allocator;
+    use crate::block::BLOCK_SIZE;
     use crate::format::format_device;
     use crate::journal::JournalLog;
     use crate::journal_region::store_journal_image;
