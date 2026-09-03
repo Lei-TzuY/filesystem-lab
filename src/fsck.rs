@@ -4,7 +4,10 @@ use std::io;
 use crate::allocation::BlockAllocator;
 use crate::allocation_disk::load_allocator;
 use crate::block::BlockDevice;
+use crate::directory_codec::PersistedDirectoryEntry;
+use crate::directory_table::load_directory_table;
 use crate::format::{read_superblock, Superblock};
+use crate::inode::InodeKind;
 use crate::inode_codec::PersistedInode;
 use crate::inode_table::load_inode_table;
 use crate::journal::{JournalEntry, TransactionId};
@@ -19,6 +22,7 @@ pub struct FsckReport {
     pub free_blocks: u64,
     pub inode_records: usize,
     pub referenced_blocks: usize,
+    pub directory_entries: usize,
     pub journal_entries: usize,
     pub journal_writes: usize,
     pub committed_transactions: usize,
@@ -27,10 +31,11 @@ pub struct FsckReport {
 
 /// Performs a read-only consistency check over all currently durable filesystem metadata.
 ///
-/// The check validates the superblock, allocation bitmap, inode table, and bounded journal region.
-/// It also enforces cross-layer ownership: every inode block reference must name an allocated data
-/// block, no inode may reference reserved/out-of-range storage, and no data block may be owned by
-/// more than one inode. It never writes or flushes the device.
+/// The check validates the superblock, allocation bitmap, inode table, directory table, and bounded
+/// journal region. It enforces cross-layer ownership and namespace references: every inode block
+/// reference must name an allocated data block, no data block may be owned by more than one inode,
+/// every directory parent/target must name an existing inode, and every directory parent must itself
+/// be a directory. It never writes or flushes the device.
 ///
 /// An incomplete final journal transaction is reported as `pending_transaction` rather than treated
 /// as corruption because it is the expected durable state after a crash before the commit marker.
@@ -38,8 +43,9 @@ pub struct FsckReport {
 /// # Errors
 ///
 /// Returns `InvalidData` for malformed/corrupt durable metadata, invalid allocation accounting,
-/// invalid inode references or double ownership, malformed journal ordering, or forbidden journal
-/// home locations. Underlying device read errors are propagated.
+/// invalid inode references or double ownership, dangling/invalid directory references, malformed
+/// journal ordering, or forbidden journal home locations. Underlying device read errors are
+/// propagated.
 pub fn check_device(device: &mut impl BlockDevice) -> io::Result<FsckReport> {
     let superblock = read_superblock(device).map_err(|error| with_context("superblock", &error))?;
     let allocator =
@@ -47,6 +53,9 @@ pub fn check_device(device: &mut impl BlockDevice) -> io::Result<FsckReport> {
     let inodes = load_inode_table(device, &superblock)
         .map_err(|error| with_context("inode table", &error))?;
     let referenced_blocks = audit_inode_ownership(&superblock, &allocator, &inodes)?;
+    let directory_entries = load_directory_table(device, &superblock)
+        .map_err(|error| with_context("directory table", &error))?;
+    audit_namespace(&inodes, &directory_entries)?;
     let entries =
         load_journal_image(device, superblock).map_err(|error| with_context("journal", &error))?;
     audit_journal(
@@ -56,6 +65,7 @@ pub fn check_device(device: &mut impl BlockDevice) -> io::Result<FsckReport> {
         allocator.free_blocks(),
         inodes.len(),
         referenced_blocks,
+        directory_entries.len(),
     )
 }
 
@@ -100,6 +110,39 @@ fn audit_inode_ownership(
     Ok(referenced_blocks)
 }
 
+fn audit_namespace(
+    inodes: &[PersistedInode],
+    entries: &[PersistedDirectoryEntry],
+) -> io::Result<()> {
+    let inode_kinds = inodes
+        .iter()
+        .map(|inode| (inode.id, inode.kind))
+        .collect::<BTreeMap<_, _>>();
+
+    for entry in entries {
+        let parent_kind = inode_kinds.get(&entry.parent).ok_or_else(|| {
+            invalid_data_owned(format!(
+                "directory entry '{}' references missing parent inode {}",
+                entry.name, entry.parent
+            ))
+        })?;
+        if *parent_kind != InodeKind::Directory {
+            return Err(invalid_data_owned(format!(
+                "directory entry '{}' parent inode {} is not a directory",
+                entry.name, entry.parent
+            )));
+        }
+        if !inode_kinds.contains_key(&entry.target) {
+            return Err(invalid_data_owned(format!(
+                "directory entry '{}' references missing target inode {}",
+                entry.name, entry.target
+            )));
+        }
+    }
+
+    Ok(())
+}
+
 fn audit_journal(
     superblock: Superblock,
     entries: &[JournalEntry],
@@ -107,6 +150,7 @@ fn audit_journal(
     free_blocks: u64,
     inode_records: usize,
     referenced_blocks: usize,
+    directory_entries: usize,
 ) -> io::Result<FsckReport> {
     let reserved_blocks = superblock.reserved_blocks();
     let data_blocks = superblock
@@ -174,6 +218,7 @@ fn audit_journal(
         free_blocks,
         inode_records,
         referenced_blocks,
+        directory_entries,
         journal_entries: entries.len(),
         journal_writes,
         committed_transactions,
@@ -198,7 +243,6 @@ mod tests {
     use super::*;
     use crate::allocation::BlockAllocator;
     use crate::block::BLOCK_SIZE;
-    use crate::inode::InodeKind;
 
     #[test]
     fn audit_reports_committed_and_pending_transactions() {
@@ -221,13 +265,14 @@ mod tests {
         ];
         let data_blocks = superblock.total_blocks - superblock.reserved_blocks();
 
-        let report = audit_journal(superblock, &entries, 0, data_blocks, 0, 0).unwrap();
+        let report = audit_journal(superblock, &entries, 0, data_blocks, 0, 0, 0).unwrap();
         assert_eq!(report.committed_transactions, 1);
         assert_eq!(report.pending_transaction, Some(2));
         assert_eq!(report.journal_writes, 2);
         assert_eq!(report.data_blocks, data_blocks);
         assert_eq!(report.allocated_blocks, 0);
         assert_eq!(report.free_blocks, data_blocks);
+        assert_eq!(report.directory_entries, 0);
     }
 
     #[test]
@@ -254,7 +299,7 @@ mod tests {
         ];
         let data_blocks = superblock.total_blocks - superblock.reserved_blocks();
 
-        let report = audit_journal(superblock, &entries, 0, data_blocks, 0, 0).unwrap();
+        let report = audit_journal(superblock, &entries, 0, data_blocks, 0, 0, 0).unwrap();
         assert_eq!(report.journal_writes, 3);
         assert_eq!(report.committed_transactions, 1);
     }
@@ -275,7 +320,7 @@ mod tests {
             ];
 
             assert_eq!(
-                audit_journal(superblock, &entries, 0, data_blocks, 0, 0)
+                audit_journal(superblock, &entries, 0, data_blocks, 0, 0, 0)
                     .unwrap_err()
                     .kind(),
                 io::ErrorKind::InvalidData
@@ -311,6 +356,40 @@ mod tests {
             audit_inode_ownership(&superblock, &allocator, &duplicate)
                 .unwrap_err()
                 .kind(),
+            io::ErrorKind::InvalidData
+        );
+    }
+
+    #[test]
+    fn namespace_requires_existing_directory_parent_and_target() {
+        let inodes = vec![
+            PersistedInode {
+                id: 1,
+                kind: InodeKind::Directory,
+                blocks: vec![],
+            },
+            PersistedInode {
+                id: 2,
+                kind: InodeKind::File,
+                blocks: vec![],
+            },
+        ];
+        let entry = PersistedDirectoryEntry {
+            parent: 1,
+            target: 2,
+            name: "child".to_owned(),
+        };
+        audit_namespace(&inodes, std::slice::from_ref(&entry)).unwrap();
+
+        let missing_parent = PersistedDirectoryEntry { parent: 3, ..entry.clone() };
+        assert_eq!(
+            audit_namespace(&inodes, &[missing_parent]).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+
+        let missing_target = PersistedDirectoryEntry { target: 3, ..entry };
+        assert_eq!(
+            audit_namespace(&inodes, &[missing_target]).unwrap_err().kind(),
             io::ErrorKind::InvalidData
         );
     }
