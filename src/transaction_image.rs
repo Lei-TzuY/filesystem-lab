@@ -115,20 +115,34 @@ mod tests {
                 blocks: vec![[0_u8; BLOCK_SIZE]; blocks],
             }
         }
+
+        fn block_index(&self, block: u64) -> io::Result<usize> {
+            let index = usize::try_from(block)
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "block exceeds usize"))?;
+            if index >= self.blocks.len() {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "invalid block",
+                ));
+            }
+            Ok(index)
+        }
     }
 
     impl BlockDevice for MemoryDevice {
         fn block_count(&self) -> u64 {
-            self.blocks.len() as u64
+            u64::try_from(self.blocks.len()).expect("test device length fits u64")
         }
 
         fn read_block(&mut self, block: u64, buf: &mut [u8; BLOCK_SIZE]) -> io::Result<()> {
-            *buf = self.blocks[block as usize];
+            let index = self.block_index(block)?;
+            *buf = self.blocks[index];
             Ok(())
         }
 
         fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> io::Result<()> {
-            self.blocks[block as usize] = *buf;
+            let index = self.block_index(block)?;
+            self.blocks[index] = *buf;
             Ok(())
         }
 
