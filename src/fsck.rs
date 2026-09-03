@@ -2,40 +2,48 @@ use std::io;
 
 use crate::allocation_disk::load_allocator;
 use crate::block::BlockDevice;
-use crate::format::Superblock;
-use crate::journal::{JournalEntry, JournalImage};
+use crate::format::{read_superblock, Superblock};
+use crate::journal::{JournalEntry, TransactionId};
 use crate::journal_region::load_journal_image;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FsckReport {
     pub total_blocks: u64,
     pub reserved_blocks: u64,
     pub data_blocks: u64,
     pub allocated_blocks: u64,
     pub free_blocks: u64,
+    pub journal_entries: usize,
     pub journal_writes: usize,
     pub committed_transactions: usize,
-    pub pending_transaction: Option<u64>,
+    pub pending_transaction: Option<TransactionId>,
 }
 
-/// Audits the durable filesystem layers that currently have defined on-disk formats.
+/// Performs a read-only consistency check over the durable filesystem layers that currently exist.
 ///
-/// This checker is deliberately read-only. It validates the superblock/device geometry, the
-/// persistent journal image and transaction state, and the durable allocation bitmap accounting.
-/// A trailing uncommitted transaction is a valid crash state and is reported rather than treated
-/// as corruption.
+/// The check validates the superblock against the opened device, validates and reconstructs the
+/// durable allocation bitmap, validates and decodes the complete bounded journal region, and
+/// independently audits journal transaction structure and home-block ownership. It never writes or
+/// flushes the device.
+///
+/// An incomplete final transaction is reported as `pending_transaction` rather than treated as
+/// corruption because it is the expected durable state after a crash before the commit marker.
 ///
 /// # Errors
 ///
-/// Returns an error when any durable metadata layer is malformed or when a journal write targets
-/// a forbidden home location.
-pub fn check_device<D: BlockDevice>(device: &mut D) -> io::Result<FsckReport> {
-    let superblock = Superblock::read_from(device)?;
-    let image = load_journal_image(device, superblock)?;
-    let allocator = load_allocator(device, superblock)?;
+/// Returns `InvalidData` for malformed/corrupt durable metadata, including invalid superblock
+/// geometry, allocation-image corruption/accounting errors, journal checksum/record corruption,
+/// malformed transaction ordering, or journal writes that target forbidden/out-of-range blocks.
+/// Underlying device read errors are propagated.
+pub fn check_device(device: &mut impl BlockDevice) -> io::Result<FsckReport> {
+    let superblock = read_superblock(device).map_err(|error| with_context("superblock", &error))?;
+    let allocator =
+        load_allocator(device, &superblock).map_err(|error| with_context("allocation", &error))?;
+    let entries =
+        load_journal_image(device, superblock).map_err(|error| with_context("journal", &error))?;
     audit_journal(
         superblock,
-        image.entries(),
+        &entries,
         allocator.allocated_blocks(),
         allocator.free_blocks(),
     )
@@ -47,18 +55,17 @@ fn audit_journal(
     allocated_blocks: u64,
     free_blocks: u64,
 ) -> io::Result<FsckReport> {
+    let reserved_blocks = superblock.reserved_blocks();
     let data_blocks = superblock
         .total_blocks
-        .checked_sub(superblock.reserved_blocks())
+        .checked_sub(reserved_blocks)
         .ok_or_else(|| invalid_data("reserved metadata exceeds filesystem size"))?;
     if allocated_blocks
         .checked_add(free_blocks)
-        .filter(|total| *total == data_blocks)
-        .is_none()
+        .ok_or_else(|| invalid_data("allocation accounting overflow"))?
+        != data_blocks
     {
-        return Err(invalid_data(
-            "allocation accounting does not cover data blocks",
-        ));
+        return Err(invalid_data("allocation accounting mismatch"));
     }
 
     let mut active = None;
@@ -68,47 +75,57 @@ fn audit_journal(
     for entry in entries {
         match entry {
             JournalEntry::Begin { txid } => {
-                if active.replace(*txid).is_some() {
+                if active.is_some() {
                     return Err(invalid_data("nested journal transaction"));
                 }
+                active = Some(*txid);
             }
             JournalEntry::Write { txid, block, .. } => {
                 if active != Some(*txid) {
-                    return Err(invalid_data("journal write outside active transaction"));
+                    return Err(invalid_data(
+                        "journal write does not match active transaction",
+                    ));
                 }
-                validate_home_block(superblock, *block)?;
-                journal_writes += 1;
+                let allocation_home = superblock.allocation_range().contains(block);
+                let data_home = *block >= reserved_blocks && *block < superblock.total_blocks;
+                if !allocation_home && !data_home {
+                    return Err(invalid_data(
+                        "journal write targets forbidden or invalid block",
+                    ));
+                }
+                journal_writes = journal_writes
+                    .checked_add(1)
+                    .ok_or_else(|| invalid_data("journal write count overflow"))?;
             }
             JournalEntry::Commit { txid } => {
                 if active != Some(*txid) {
-                    return Err(invalid_data("journal commit outside active transaction"));
+                    return Err(invalid_data(
+                        "journal commit does not match active transaction",
+                    ));
                 }
                 active = None;
-                committed_transactions += 1;
+                committed_transactions = committed_transactions
+                    .checked_add(1)
+                    .ok_or_else(|| invalid_data("committed transaction count overflow"))?;
             }
         }
     }
 
     Ok(FsckReport {
         total_blocks: superblock.total_blocks,
-        reserved_blocks: superblock.reserved_blocks(),
+        reserved_blocks,
         data_blocks,
         allocated_blocks,
         free_blocks,
+        journal_entries: entries.len(),
         journal_writes,
         committed_transactions,
         pending_transaction: active,
     })
 }
 
-fn validate_home_block(superblock: Superblock, block: u64) -> io::Result<()> {
-    if block >= superblock.total_blocks {
-        return Err(invalid_data("journal write target is outside filesystem"));
-    }
-    if block == 0 || superblock.journal_range().contains(&block) {
-        return Err(invalid_data("journal write targets protected metadata"));
-    }
-    Ok(())
+fn with_context(layer: &'static str, error: &io::Error) -> io::Error {
+    io::Error::new(error.kind(), format!("fsck {layer}: {error}"))
 }
 
 fn invalid_data(message: &'static str) -> io::Error {
@@ -165,6 +182,7 @@ mod tests {
         let data_blocks = superblock.total_blocks - superblock.reserved_blocks();
 
         let report = audit_journal(superblock, &entries, 0, data_blocks).unwrap();
+        assert_eq!(report.journal_writes, 1);
         assert_eq!(report.committed_transactions, 1);
     }
 
@@ -173,18 +191,22 @@ mod tests {
         let superblock = Superblock::with_journal_blocks(16, 2).unwrap();
         let data_blocks = superblock.total_blocks - superblock.reserved_blocks();
 
-        for block in [0, superblock.journal_start] {
+        for forbidden in [0, superblock.journal_start] {
             let entries = vec![
                 JournalEntry::Begin { txid: 1 },
                 JournalEntry::Write {
                     txid: 1,
-                    block,
+                    block: forbidden,
                     data: Box::new([0_u8; BLOCK_SIZE]),
                 },
-                JournalEntry::Commit { txid: 1 },
             ];
-            let err = audit_journal(superblock, &entries, 0, data_blocks).unwrap_err();
-            assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+
+            assert_eq!(
+                audit_journal(superblock, &entries, 0, data_blocks)
+                    .unwrap_err()
+                    .kind(),
+                io::ErrorKind::InvalidData
+            );
         }
     }
 }
