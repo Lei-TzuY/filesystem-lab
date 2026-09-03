@@ -1,13 +1,13 @@
-use std::collections::BTreeMap;
 use std::io;
 
 use crate::allocation::BlockAllocator;
 use crate::allocation_disk::store_allocator;
-use crate::block::{BlockDevice, BLOCK_SIZE};
+use crate::block::BlockDevice;
 use crate::format::Superblock;
 use crate::journal::JournalLog;
 use crate::journal_region::store_journal_image;
 use crate::recovery::{recover_journal, RecoveryReport};
+use crate::transaction_image::CaptureDevice;
 
 /// Persists one complete allocator image through the existing write-ahead log and recovery path.
 ///
@@ -43,20 +43,13 @@ pub fn store_allocator_journaled(
     let mut log = JournalLog::new();
     let txid = log.begin()?;
     for block in superblock.allocation_range() {
-        let data = capture.blocks.remove(&block).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                "allocator image did not render every allocation metadata block",
-            )
-        })?;
+        let data = capture.take_rendered_block(
+            block,
+            "allocator image did not render every allocation metadata block",
+        )?;
         log.write(txid, block, data)?;
     }
-    if !capture.blocks.is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "allocator image rendered outside allocation metadata region",
-        ));
-    }
+    capture.ensure_empty("allocator image rendered outside allocation metadata region")?;
     log.commit(txid)?;
 
     store_journal_image(device, *superblock, log.entries())?;
@@ -76,61 +69,11 @@ pub fn store_allocator_journaled(
     Ok(report)
 }
 
-#[derive(Debug)]
-struct CaptureDevice {
-    block_count: u64,
-    blocks: BTreeMap<u64, [u8; BLOCK_SIZE]>,
-}
-
-impl CaptureDevice {
-    fn new(block_count: u64) -> Self {
-        Self {
-            block_count,
-            blocks: BTreeMap::new(),
-        }
-    }
-}
-
-impl BlockDevice for CaptureDevice {
-    fn block_count(&self) -> u64 {
-        self.block_count
-    }
-
-    fn read_block(&mut self, block: u64, buf: &mut [u8; BLOCK_SIZE]) -> io::Result<()> {
-        if block >= self.block_count {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "capture-device read is out of range",
-            ));
-        }
-        if let Some(data) = self.blocks.get(&block) {
-            *buf = *data;
-        } else {
-            buf.fill(0);
-        }
-        Ok(())
-    }
-
-    fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> io::Result<()> {
-        if block >= self.block_count {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "capture-device write is out of range",
-            ));
-        }
-        self.blocks.insert(block, *buf);
-        Ok(())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::allocation_disk::load_allocator;
+    use crate::block::BLOCK_SIZE;
     use crate::format::format_device;
     use crate::journal::JournalLog;
     use crate::journal_region::store_journal_image;

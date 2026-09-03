@@ -1,13 +1,13 @@
-use std::collections::BTreeMap;
 use std::io;
 
-use crate::block::{BlockDevice, BLOCK_SIZE};
+use crate::block::BlockDevice;
 use crate::directory_codec::PersistedDirectoryEntry;
 use crate::directory_table::store_directory_table;
 use crate::format::Superblock;
 use crate::journal::JournalLog;
 use crate::journal_region::store_journal_image;
 use crate::recovery::{recover_journal, RecoveryReport};
+use crate::transaction_image::CaptureDevice;
 
 /// Persists one directory-table snapshot through the bounded write-ahead log.
 ///
@@ -42,25 +42,13 @@ pub fn store_directory_table_journaled(
     store_directory_table(&mut capture, superblock, entries)?;
 
     let mut changed = Vec::new();
-    for block in superblock.directory_range() {
-        let desired = capture.blocks.remove(&block).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                "directory-table image did not render every directory metadata block",
-            )
-        })?;
-        let mut current = [0_u8; BLOCK_SIZE];
-        device.read_block(block, &mut current)?;
-        if current != desired {
-            changed.push((block, desired));
-        }
-    }
-    if !capture.blocks.is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "directory-table image rendered outside directory metadata region",
-        ));
-    }
+    capture.collect_changed_range(
+        device,
+        superblock.directory_range(),
+        "directory-table image did not render every directory metadata block",
+        &mut changed,
+    )?;
+    capture.ensure_empty("directory-table image rendered outside directory metadata region")?;
     if changed.is_empty() {
         return Ok(RecoveryReport::default());
     }
@@ -83,60 +71,10 @@ pub fn store_directory_table_journaled(
     Ok(report)
 }
 
-#[derive(Debug)]
-struct CaptureDevice {
-    block_count: u64,
-    blocks: BTreeMap<u64, [u8; BLOCK_SIZE]>,
-}
-
-impl CaptureDevice {
-    fn new(block_count: u64) -> Self {
-        Self {
-            block_count,
-            blocks: BTreeMap::new(),
-        }
-    }
-}
-
-impl BlockDevice for CaptureDevice {
-    fn block_count(&self) -> u64 {
-        self.block_count
-    }
-
-    fn read_block(&mut self, block: u64, buf: &mut [u8; BLOCK_SIZE]) -> io::Result<()> {
-        if block >= self.block_count {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "capture-device read is out of range",
-            ));
-        }
-        if let Some(data) = self.blocks.get(&block) {
-            *buf = *data;
-        } else {
-            buf.fill(0);
-        }
-        Ok(())
-    }
-
-    fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> io::Result<()> {
-        if block >= self.block_count {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "capture-device write is out of range",
-            ));
-        }
-        self.blocks.insert(block, *buf);
-        Ok(())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::block::BLOCK_SIZE;
     use crate::directory_table::load_directory_table;
     use crate::format::format_device;
     use crate::journal::JournalLog;

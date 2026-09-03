@@ -1,7 +1,6 @@
-use std::collections::BTreeMap;
 use std::io;
 
-use crate::block::{BlockDevice, BLOCK_SIZE};
+use crate::block::BlockDevice;
 use crate::directory_codec::PersistedDirectoryEntry;
 use crate::directory_table::store_directory_table;
 use crate::format::Superblock;
@@ -10,6 +9,7 @@ use crate::inode_table::store_inode_table;
 use crate::journal::JournalLog;
 use crate::journal_region::store_journal_image;
 use crate::recovery::{recover_journal, RecoveryReport};
+use crate::transaction_image::CaptureDevice;
 
 /// Persists inode-table and directory-table snapshots in one bounded WAL transaction.
 ///
@@ -48,19 +48,19 @@ pub fn store_inode_directory_tables_journaled(
     store_directory_table(&mut capture, superblock, entries)?;
 
     let mut changed = Vec::new();
-    collect_region_changes(device, &mut capture, superblock.inode_range(), &mut changed)?;
-    collect_region_changes(
+    capture.collect_changed_range(
         device,
-        &mut capture,
-        superblock.directory_range(),
+        superblock.inode_range(),
+        "combined metadata image did not render every inode metadata block",
         &mut changed,
     )?;
-    if !capture.blocks.is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "combined metadata image rendered outside inode and directory regions",
-        ));
-    }
+    capture.collect_changed_range(
+        device,
+        superblock.directory_range(),
+        "combined metadata image did not render every directory metadata block",
+        &mut changed,
+    )?;
+    capture.ensure_empty("combined metadata image rendered outside inode and directory regions")?;
     if changed.is_empty() {
         return Ok(RecoveryReport::default());
     }
@@ -83,83 +83,11 @@ pub fn store_inode_directory_tables_journaled(
     Ok(report)
 }
 
-fn collect_region_changes(
-    device: &mut impl BlockDevice,
-    capture: &mut CaptureDevice,
-    range: std::ops::Range<u64>,
-    changed: &mut Vec<(u64, [u8; BLOCK_SIZE])>,
-) -> io::Result<()> {
-    for block in range {
-        let desired = capture.blocks.remove(&block).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                "combined metadata image did not render every metadata block",
-            )
-        })?;
-        let mut current = [0_u8; BLOCK_SIZE];
-        device.read_block(block, &mut current)?;
-        if current != desired {
-            changed.push((block, desired));
-        }
-    }
-    Ok(())
-}
-
-#[derive(Debug)]
-struct CaptureDevice {
-    block_count: u64,
-    blocks: BTreeMap<u64, [u8; BLOCK_SIZE]>,
-}
-
-impl CaptureDevice {
-    fn new(block_count: u64) -> Self {
-        Self {
-            block_count,
-            blocks: BTreeMap::new(),
-        }
-    }
-}
-
-impl BlockDevice for CaptureDevice {
-    fn block_count(&self) -> u64 {
-        self.block_count
-    }
-
-    fn read_block(&mut self, block: u64, buf: &mut [u8; BLOCK_SIZE]) -> io::Result<()> {
-        if block >= self.block_count {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "capture-device read is out of range",
-            ));
-        }
-        if let Some(data) = self.blocks.get(&block) {
-            *buf = *data;
-        } else {
-            buf.fill(0);
-        }
-        Ok(())
-    }
-
-    fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> io::Result<()> {
-        if block >= self.block_count {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "capture-device write is out of range",
-            ));
-        }
-        self.blocks.insert(block, *buf);
-        Ok(())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::allocation_disk::initialize_allocation_region;
+    use crate::block::BLOCK_SIZE;
     use crate::directory_table::{initialize_directory_table_region, load_directory_table};
     use crate::format::{Superblock, SUPERBLOCK_BLOCK};
     use crate::fsck::check_device;
