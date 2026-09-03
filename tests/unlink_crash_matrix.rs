@@ -101,7 +101,7 @@ fn assert_new_state(device: &mut CrashDevice, superblock: &Superblock, data_bloc
 
 #[test]
 fn every_unlink_mutation_crash_point_is_old_or_recoverable_new_state() {
-    let (mut probe, superblock, data_block, original_inodes, original_entries) = setup();
+    let (mut probe, superblock, data_block, _, _) = setup();
     let (allocator, remaining_inodes, remaining_entries) =
         desired_unlink(&mut probe, &superblock, data_block);
     probe.arm(None);
