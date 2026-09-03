@@ -101,10 +101,27 @@ fn accepts_inode_references_that_match_durable_allocation() {
     store_inode_table(
         &mut device,
         &superblock,
-        &[PersistedInode {
-            id: 1,
-            kind: InodeKind::File,
-            blocks: vec![block],
+        &[
+            PersistedInode {
+                id: 1,
+                kind: InodeKind::Directory,
+                blocks: vec![],
+            },
+            PersistedInode {
+                id: 2,
+                kind: InodeKind::File,
+                blocks: vec![block],
+            },
+        ],
+    )
+    .unwrap();
+    store_directory_table(
+        &mut device,
+        &superblock,
+        &[PersistedDirectoryEntry {
+            parent: 1,
+            target: 2,
+            name: "file".to_owned(),
         }],
     )
     .unwrap();
@@ -114,8 +131,9 @@ fn accepts_inode_references_that_match_durable_allocation() {
     let report = check_device(&mut device).unwrap();
 
     assert_eq!(report.allocated_blocks, 1);
-    assert_eq!(report.inode_records, 1);
+    assert_eq!(report.inode_records, 2);
     assert_eq!(report.referenced_blocks, 1);
+    assert_eq!(report.directory_entries, 1);
     assert_eq!(device.writes, writes_before);
     assert_eq!(device.flushes, flushes_before);
 }
@@ -259,6 +277,101 @@ fn rejects_directory_entry_whose_parent_is_not_a_directory() {
     assert!(error
         .to_string()
         .contains("parent inode 1 is not a directory"));
+}
+
+#[test]
+fn rejects_nonempty_inode_table_without_directory_root() {
+    for inodes in [
+        vec![PersistedInode {
+            id: 2,
+            kind: InodeKind::File,
+            blocks: vec![],
+        }],
+        vec![PersistedInode {
+            id: 1,
+            kind: InodeKind::File,
+            blocks: vec![],
+        }],
+    ] {
+        let mut device = MemoryDevice::new(16);
+        let superblock = format_device(&mut device).unwrap();
+        store_inode_table(&mut device, &superblock, &inodes).unwrap();
+
+        let error = check_device(&mut device).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("root inode 1"));
+    }
+}
+
+#[test]
+fn rejects_unreachable_inode_from_root() {
+    let mut device = MemoryDevice::new(16);
+    let superblock = format_device(&mut device).unwrap();
+    store_inode_table(
+        &mut device,
+        &superblock,
+        &[
+            PersistedInode {
+                id: 1,
+                kind: InodeKind::Directory,
+                blocks: vec![],
+            },
+            PersistedInode {
+                id: 2,
+                kind: InodeKind::File,
+                blocks: vec![],
+            },
+        ],
+    )
+    .unwrap();
+
+    let error = check_device(&mut device).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("inode 2 is unreachable from root inode 1"));
+}
+
+#[test]
+fn rejects_directory_cycle_even_when_all_inodes_are_reachable() {
+    let mut device = MemoryDevice::new(16);
+    let superblock = format_device(&mut device).unwrap();
+    store_inode_table(
+        &mut device,
+        &superblock,
+        &[
+            PersistedInode {
+                id: 1,
+                kind: InodeKind::Directory,
+                blocks: vec![],
+            },
+            PersistedInode {
+                id: 2,
+                kind: InodeKind::Directory,
+                blocks: vec![],
+            },
+        ],
+    )
+    .unwrap();
+    store_directory_table(
+        &mut device,
+        &superblock,
+        &[
+            PersistedDirectoryEntry {
+                parent: 1,
+                target: 2,
+                name: "child".to_owned(),
+            },
+            PersistedDirectoryEntry {
+                parent: 2,
+                target: 1,
+                name: "back".to_owned(),
+            },
+        ],
+    )
+    .unwrap();
+
+    let error = check_device(&mut device).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("directory cycle"));
 }
 
 #[test]
