@@ -7,6 +7,7 @@ pub mod block;
 pub mod cache;
 pub mod directory;
 pub mod directory_codec;
+pub mod directory_table;
 pub mod format;
 pub mod fsck;
 pub mod inode;

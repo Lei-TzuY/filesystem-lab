@@ -10,22 +10,28 @@ Version 1 images are intentionally not accepted by newer readers. The laboratory
 
 Version 2 added an explicit contiguous journal reservation immediately after the superblock. Its superblock fields ended at byte 40 and all later bytes were reserved and required to be zero. Allocation state remained in-memory only.
 
-Version 2 images are intentionally rejected by newer readers. The schema is retained here as historical documentation rather than reinterpreted in place.
+Version 2 images are intentionally rejected by newer readers.
 
 ## Version 3
 
-Version 3 added a durable allocation-metadata reservation immediately after the journal. Its superblock fields ended at byte 56. Allocation bytes used allocation image v1: a checksummed bitmap image whose reserved/trailing bits and padding are required to remain zero.
+Version 3 added a durable allocation-metadata reservation immediately after the journal. Its superblock fields ended at byte 56. Allocation bytes use allocation image v1: a checksummed bitmap image whose reserved/trailing bits and padding are required to remain zero.
 
-Version 3 images are intentionally rejected by the version-4 reader. There is no implicit upgrade path.
+Version 3 images are intentionally rejected by newer readers.
 
 ## Version 4
 
-Filesystem block 0 remains the superblock. All integer fields are little-endian. Version 4 adds an explicit inode-table reservation immediately after allocation metadata. The rest of the 4 KiB superblock is reserved and MUST be zero.
+Version 4 added an explicit inode-table reservation immediately after allocation metadata. Its superblock fields ended at byte 72. The inode-table payload uses independently versioned `INO1` records inside a checksummed inode-table region image.
 
-| Offset | Size | Field | Version 4 value |
+Version 4 images are intentionally rejected by the version-5 reader; there is no implicit upgrade path.
+
+## Version 5
+
+Filesystem block 0 remains the superblock. All integer fields are little-endian. Version 5 adds an explicit directory-table reservation immediately after the inode table. The rest of the 4 KiB superblock is reserved and MUST be zero.
+
+| Offset | Size | Field | Version 5 value |
 | ---: | ---: | --- | --- |
 | 0 | 8 | magic | `FSLABFS\0` |
-| 8 | 4 | format version | `4` |
+| 8 | 4 | format version | `5` |
 | 12 | 4 | logical block size | `4096` |
 | 16 | 8 | total block count | exact backing-device block count |
 | 24 | 8 | journal start block | `1` |
@@ -34,16 +40,18 @@ Filesystem block 0 remains the superblock. All integer fields are little-endian.
 | 48 | 8 | allocation block count | exact size required by allocation image v1 |
 | 56 | 8 | inode-table start block | exactly `allocation_start + allocation_block_count` |
 | 64 | 8 | inode-table block count | non-zero and fully inside the device |
-| 72 | 4024 | reserved | all zero |
+| 72 | 8 | directory-table start block | exactly `inode_start + inode_block_count` |
+| 80 | 8 | directory-table block count | non-zero and fully inside the device |
+| 88 | 4008 | reserved | all zero |
 
-The durable metadata prefix is ordered as superblock → journal → allocation image → inode table. `Superblock::reserved_blocks()` returns the first data block after the inode table.
+The durable metadata prefix is ordered as superblock → journal → allocation image → inode table → directory table. `Superblock::reserved_blocks()` returns the first ordinary data block after the directory table.
 
-Allocation-image capacity remains deterministic from `total_blocks`: one bit per filesystem block plus the 32-byte allocation-image header, rounded up to 4 KiB blocks. The bitmap represents data-block ownership only; every bit corresponding to the complete version-4 metadata prefix MUST remain zero.
+Allocation-image capacity remains deterministic from `total_blocks`: one bit per filesystem block plus the 32-byte allocation-image header, rounded up to 4 KiB blocks. The bitmap represents ordinary data-block ownership only; every bit corresponding to the complete version-5 metadata prefix MUST remain zero.
 
-The inode table uses the independently versioned region image documented in [`inode-table-format.md`](inode-table-format.md). Its payload consists of independently versioned `INO1` records documented in [`inode-record-format.md`](inode-record-format.md). The default formatter reserves two inode-table blocks. `Superblock::with_metadata_blocks` permits deterministic alternative journal/inode reservations for tests and later tooling.
+The inode table uses [`inode-table-format.md`](inode-table-format.md), with records defined by [`inode-record-format.md`](inode-record-format.md). The directory table uses [`directory-table-format.md`](directory-table-format.md), with records defined by [`directory-entry-format.md`](directory-entry-format.md). The default formatter reserves two blocks each for inode and directory tables. `Superblock::with_metadata_blocks` retains the default directory reservation for existing callers; `Superblock::with_all_metadata_blocks` exposes all three explicit reservation sizes.
 
-A version-4 implementation MUST reject invalid magic, version, block size, journal geometry, allocation geometry, inode geometry, reserved bytes, arithmetic overflow, or a recorded total block count that differs from the opened block device.
+A version-5 implementation MUST reject invalid magic, version, block size, journal geometry, allocation geometry, inode geometry, directory geometry, reserved bytes, arithmetic overflow, or a recorded total block count that differs from the opened block device.
 
-Formatting initializes the allocation image and empty inode-table image before publishing block zero, then writes the superblock and crosses the block-device durability boundary with `flush`. Thus a successfully published version-4 superblock never points at an uninitialized allocation or inode reservation.
+Formatting initializes allocation, empty inode-table, and empty directory-table images before publishing block zero, then writes the superblock and crosses the block-device durability boundary with `flush`. A successfully published version-5 superblock therefore never points at an uninitialized durable metadata reservation.
 
-The journal bytes still use the independently versioned bounded journal-region image documented in [`journal-region-format.md`](journal-region-format.md), whose payload is the independently versioned record stream documented in [`journal-record-format.md`](journal-record-format.md). Allocation mutations may already be routed through the WAL. Inode-table persistence in this version is deliberately only a direct checksummed snapshot primitive; journaled inode mutation, cross-layer inode/allocation ownership fsck, directory persistence, checkpointing, and circular journal head/tail metadata remain future milestones.
+The journal region remains independently versioned as documented in [`journal-region-format.md`](journal-region-format.md), with records documented in [`journal-record-format.md`](journal-record-format.md). Allocation and inode-table mutations can already use the WAL. Directory-table persistence in version 5 is intentionally only a direct checksummed snapshot primitive; journaled namespace mutation, namespace fsck/reachability, rename/unlink crash ordering, checkpointing, and circular journal head/tail metadata remain future bounded milestones.

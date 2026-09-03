@@ -3,14 +3,16 @@ use std::ops::Range;
 
 use crate::allocation_disk::initialize_allocation_region;
 use crate::block::{BlockDevice, BLOCK_SIZE, BLOCK_SIZE_U64};
+use crate::directory_table::initialize_directory_table_region;
 use crate::inode_table::initialize_inode_table_region;
 
 pub const SUPERBLOCK_BLOCK: u64 = 0;
 pub const SUPERBLOCK_MAGIC: [u8; 8] = *b"FSLABFS\0";
-pub const FORMAT_VERSION: u32 = 4;
+pub const FORMAT_VERSION: u32 = 5;
 pub const FORMAT_BLOCK_SIZE: u32 = 4096;
 pub const DEFAULT_JOURNAL_BLOCKS: u64 = 2;
 pub const DEFAULT_INODE_BLOCKS: u64 = 2;
+pub const DEFAULT_DIRECTORY_BLOCKS: u64 = 2;
 pub const ALLOCATION_IMAGE_HEADER_LEN: u64 = 32;
 
 const MAGIC_OFFSET: usize = 0;
@@ -23,7 +25,9 @@ const ALLOCATION_START_OFFSET: usize = 40;
 const ALLOCATION_BLOCKS_OFFSET: usize = 48;
 const INODE_START_OFFSET: usize = 56;
 const INODE_BLOCKS_OFFSET: usize = 64;
-const HEADER_LEN: usize = 72;
+const DIRECTORY_START_OFFSET: usize = 72;
+const DIRECTORY_BLOCKS_OFFSET: usize = 80;
+const HEADER_LEN: usize = 88;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Superblock {
@@ -34,33 +38,42 @@ pub struct Superblock {
     pub allocation_blocks: u64,
     pub inode_start: u64,
     pub inode_blocks: u64,
+    pub directory_start: u64,
+    pub directory_blocks: u64,
 }
 
 impl Superblock {
-    /// Creates a version-4 superblock using the default journal and inode reservations.
+    /// Creates a version-5 superblock using the default metadata reservations.
     ///
     /// # Errors
     ///
     /// Returns an error if the device cannot contain all durable metadata reservations.
     pub fn new(total_blocks: u64) -> io::Result<Self> {
-        Self::with_metadata_blocks(total_blocks, DEFAULT_JOURNAL_BLOCKS, DEFAULT_INODE_BLOCKS)
+        Self::with_all_metadata_blocks(
+            total_blocks,
+            DEFAULT_JOURNAL_BLOCKS,
+            DEFAULT_INODE_BLOCKS,
+            DEFAULT_DIRECTORY_BLOCKS,
+        )
     }
 
-    /// Creates a version-4 superblock with an explicit contiguous journal reservation.
-    ///
-    /// The default inode-table reservation is retained.
+    /// Creates a version-5 superblock with an explicit journal reservation.
     ///
     /// # Errors
     ///
     /// Returns an error if metadata geometry is invalid or exceeds the device.
     pub fn with_journal_blocks(total_blocks: u64, journal_blocks: u64) -> io::Result<Self> {
-        Self::with_metadata_blocks(total_blocks, journal_blocks, DEFAULT_INODE_BLOCKS)
+        Self::with_all_metadata_blocks(
+            total_blocks,
+            journal_blocks,
+            DEFAULT_INODE_BLOCKS,
+            DEFAULT_DIRECTORY_BLOCKS,
+        )
     }
 
-    /// Creates a version-4 superblock with explicit journal and inode-table reservations.
+    /// Creates a version-5 superblock with explicit journal and inode reservations.
     ///
-    /// Durable metadata occupies one deterministic prefix: superblock, journal, allocation image,
-    /// then inode table. Allocation reservation length is derived from filesystem size.
+    /// The default directory-table reservation is retained for compatibility with existing callers.
     ///
     /// # Errors
     ///
@@ -69,6 +82,29 @@ impl Superblock {
         total_blocks: u64,
         journal_blocks: u64,
         inode_blocks: u64,
+    ) -> io::Result<Self> {
+        Self::with_all_metadata_blocks(
+            total_blocks,
+            journal_blocks,
+            inode_blocks,
+            DEFAULT_DIRECTORY_BLOCKS,
+        )
+    }
+
+    /// Creates a version-5 superblock with explicit journal, inode, and directory reservations.
+    ///
+    /// Durable metadata occupies one deterministic prefix: superblock, journal, allocation image,
+    /// inode table, then directory table. Allocation reservation length is derived from filesystem
+    /// size.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for zero-sized reservations, arithmetic overflow, or insufficient space.
+    pub fn with_all_metadata_blocks(
+        total_blocks: u64,
+        journal_blocks: u64,
+        inode_blocks: u64,
+        directory_blocks: u64,
     ) -> io::Result<Self> {
         if journal_blocks == 0 {
             return Err(io::Error::new(
@@ -80,6 +116,12 @@ impl Superblock {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "filesystem inode table must reserve at least one block",
+            ));
+        }
+        if directory_blocks == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "filesystem directory table must reserve at least one block",
             ));
         }
 
@@ -96,12 +138,20 @@ impl Superblock {
                     "allocation metadata block range overflow",
                 )
             })?;
-        let metadata_end = inode_start.checked_add(inode_blocks).ok_or_else(|| {
+        let directory_start = inode_start.checked_add(inode_blocks).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "inode table block range overflow",
             )
         })?;
+        let metadata_end = directory_start
+            .checked_add(directory_blocks)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "directory table block range overflow",
+                )
+            })?;
         if metadata_end > total_blocks {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -117,6 +167,8 @@ impl Superblock {
             allocation_blocks,
             inode_start,
             inode_blocks,
+            directory_start,
+            directory_blocks,
         })
     }
 
@@ -136,8 +188,13 @@ impl Superblock {
     }
 
     #[must_use]
+    pub fn directory_range(self) -> Range<u64> {
+        self.directory_start..self.directory_start + self.directory_blocks
+    }
+
+    #[must_use]
     pub fn reserved_blocks(self) -> u64 {
-        self.inode_start + self.inode_blocks
+        self.directory_start + self.directory_blocks
     }
 
     #[must_use]
@@ -162,21 +219,22 @@ impl Superblock {
             .copy_from_slice(&self.inode_start.to_le_bytes());
         block[INODE_BLOCKS_OFFSET..INODE_BLOCKS_OFFSET + 8]
             .copy_from_slice(&self.inode_blocks.to_le_bytes());
+        block[DIRECTORY_START_OFFSET..DIRECTORY_START_OFFSET + 8]
+            .copy_from_slice(&self.directory_start.to_le_bytes());
+        block[DIRECTORY_BLOCKS_OFFSET..DIRECTORY_BLOCKS_OFFSET + 8]
+            .copy_from_slice(&self.directory_blocks.to_le_bytes());
         block
     }
 
-    /// Decodes and validates a version-4 superblock block.
+    /// Decodes and validates a version-5 superblock block.
     ///
     /// # Errors
     ///
     /// Returns `InvalidData` for unsupported versions, malformed geometry, or non-zero reserved
-    /// bytes. Version-3 images are intentionally not reinterpreted as version 4.
+    /// bytes. Version-4 images are intentionally not reinterpreted as version 5.
     pub fn decode(block: &[u8; BLOCK_SIZE]) -> io::Result<Self> {
         if block[MAGIC_OFFSET..MAGIC_OFFSET + SUPERBLOCK_MAGIC.len()] != SUPERBLOCK_MAGIC {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "invalid superblock magic",
-            ));
+            return Err(invalid_data("invalid superblock magic"));
         }
 
         let version = read_u32_le(block, VERSION_OFFSET);
@@ -186,13 +244,9 @@ impl Superblock {
                 format!("unsupported filesystem format version {version}"),
             ));
         }
-
         let block_size = read_u32_le(block, BLOCK_SIZE_OFFSET);
         if block_size != FORMAT_BLOCK_SIZE || u64::from(block_size) != BLOCK_SIZE_U64 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "unsupported logical block size",
-            ));
+            return Err(invalid_data("unsupported logical block size"));
         }
 
         let total_blocks = read_u64_le(block, TOTAL_BLOCKS_OFFSET);
@@ -202,70 +256,60 @@ impl Superblock {
         let allocation_blocks = read_u64_le(block, ALLOCATION_BLOCKS_OFFSET);
         let inode_start = read_u64_le(block, INODE_START_OFFSET);
         let inode_blocks = read_u64_le(block, INODE_BLOCKS_OFFSET);
+        let directory_start = read_u64_le(block, DIRECTORY_START_OFFSET);
+        let directory_blocks = read_u64_le(block, DIRECTORY_BLOCKS_OFFSET);
+
         if journal_start != SUPERBLOCK_BLOCK + 1 || journal_blocks == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "invalid journal reservation",
-            ));
+            return Err(invalid_data("invalid journal reservation"));
         }
         if inode_blocks == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "invalid inode table reservation",
-            ));
+            return Err(invalid_data("invalid inode table reservation"));
+        }
+        if directory_blocks == 0 {
+            return Err(invalid_data("invalid directory table reservation"));
         }
 
-        let expected_allocation_start =
-            journal_start.checked_add(journal_blocks).ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidData, "journal block range overflow")
-            })?;
+        let expected_allocation_start = journal_start
+            .checked_add(journal_blocks)
+            .ok_or_else(|| invalid_data("journal block range overflow"))?;
         if allocation_start != expected_allocation_start {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
+            return Err(invalid_data(
                 "allocation metadata does not immediately follow journal",
             ));
         }
         let expected_allocation_blocks = required_allocation_blocks(total_blocks)
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error.to_string()))?;
         if allocation_blocks != expected_allocation_blocks {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
+            return Err(invalid_data(
                 "allocation metadata reservation has invalid length",
             ));
         }
-        let expected_inode_start =
-            allocation_start
-                .checked_add(allocation_blocks)
-                .ok_or_else(|| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "allocation metadata block range overflow",
-                    )
-                })?;
+        let expected_inode_start = allocation_start
+            .checked_add(allocation_blocks)
+            .ok_or_else(|| invalid_data("allocation metadata block range overflow"))?;
         if inode_start != expected_inode_start {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
+            return Err(invalid_data(
                 "inode table does not immediately follow allocation metadata",
             ));
         }
-        let metadata_end = inode_start.checked_add(inode_blocks).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                "inode table block range overflow",
-            )
-        })?;
+        let expected_directory_start = inode_start
+            .checked_add(inode_blocks)
+            .ok_or_else(|| invalid_data("inode table block range overflow"))?;
+        if directory_start != expected_directory_start {
+            return Err(invalid_data(
+                "directory table does not immediately follow inode table",
+            ));
+        }
+        let metadata_end = directory_start
+            .checked_add(directory_blocks)
+            .ok_or_else(|| invalid_data("directory table block range overflow"))?;
         if metadata_end > total_blocks {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
+            return Err(invalid_data(
                 "durable metadata reservation exceeds filesystem size",
             ));
         }
-
         if block[HEADER_LEN..].iter().any(|byte| *byte != 0) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "superblock reserved bytes are non-zero",
-            ));
+            return Err(invalid_data("superblock reserved bytes are non-zero"));
         }
 
         Ok(Self {
@@ -276,6 +320,8 @@ impl Superblock {
             allocation_blocks,
             inode_start,
             inode_blocks,
+            directory_start,
+            directory_blocks,
         })
     }
 }
@@ -345,10 +391,14 @@ fn read_u64_le(block: &[u8; BLOCK_SIZE], offset: usize) -> u64 {
     ])
 }
 
-/// Writes a fresh format-v4 metadata prefix and flushes it through the durability boundary.
+fn invalid_data(message: &'static str) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message)
+}
+
+/// Writes a fresh format-v5 metadata prefix and flushes it through the durability boundary.
 ///
-/// Allocation and inode metadata are initialized before the superblock is published, so a
-/// successful superblock write never points at uninitialized durable metadata.
+/// Allocation, inode, and directory metadata are initialized before the superblock is published,
+/// so a successful superblock write never points at uninitialized durable metadata.
 ///
 /// # Errors
 ///
@@ -357,6 +407,7 @@ pub fn format_device(device: &mut impl BlockDevice) -> io::Result<Superblock> {
     let superblock = Superblock::new(device.block_count())?;
     initialize_allocation_region(device, &superblock)?;
     initialize_inode_table_region(device, &superblock)?;
+    initialize_directory_table_region(device, &superblock)?;
     device.write_block(SUPERBLOCK_BLOCK, &superblock.encode())?;
     device.flush()?;
     Ok(superblock)
@@ -373,10 +424,7 @@ pub fn read_superblock(device: &mut impl BlockDevice) -> io::Result<Superblock> 
     device.read_block(SUPERBLOCK_BLOCK, &mut block)?;
     let superblock = Superblock::decode(&block)?;
     if superblock.total_blocks != device.block_count() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "superblock block count does not match device",
-        ));
+        return Err(invalid_data("superblock block count does not match device"));
     }
     Ok(superblock)
 }
