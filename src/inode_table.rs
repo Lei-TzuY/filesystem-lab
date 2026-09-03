@@ -107,10 +107,6 @@ fn encode_image(superblock: &Superblock, inodes: &[PersistedInode]) -> io::Resul
             ));
         }
         let record = encode_inode(inode)?;
-        payload
-            .len()
-            .checked_add(record.len())
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "inode payload overflow"))?;
         payload.extend_from_slice(&record);
     }
 
@@ -208,7 +204,9 @@ fn decode_image(image: &[u8]) -> io::Result<Vec<PersistedInode>> {
         }
         let inode = decode_inode(&payload[offset..end])?;
         if !seen.insert(inode.id) {
-            return Err(invalid_data("inode table contains duplicate inode identifiers"));
+            return Err(invalid_data(
+                "inode table contains duplicate inode identifiers",
+            ));
         }
         inodes.push(inode);
         offset = end;
@@ -267,7 +265,10 @@ fn write_image_block(
     })?;
     let end = start + BLOCK_SIZE;
     let source: &[u8; BLOCK_SIZE] = image[start..end].try_into().map_err(|_| {
-        io::Error::new(io::ErrorKind::InvalidInput, "inode table block slice mismatch")
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "inode table block slice mismatch",
+        )
     })?;
     device.write_block(block, source)
 }
