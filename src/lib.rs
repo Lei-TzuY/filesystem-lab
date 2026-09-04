@@ -23,4 +23,5 @@ pub mod metadata_tx;
 pub mod recovery;
 pub mod rename_tx;
 mod transaction_image;
+pub mod truncate_tx;
 pub mod unlink_tx;
