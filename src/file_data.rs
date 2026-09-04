@@ -150,7 +150,8 @@ pub fn append_file_block_journaled(
         "file append image did not render every inode metadata block",
         &mut changed,
     )?;
-    capture.ensure_empty("file append image rendered outside allocation and inode regions")?;
+    capture
+        .ensure_empty("file append image rendered outside allocation and inode regions")?;
     changed.push((block, data));
 
     let mut log = JournalLog::new();
