@@ -6,8 +6,9 @@ use crate::format::Superblock;
 use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
 use crate::journal::JournalLog;
+use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::journal_region::store_journal_image;
-use crate::recovery::{recover_journal, RecoveryReport};
+use crate::recovery::RecoveryReport;
 
 /// Reads one existing logical data block from a durable regular file.
 ///
@@ -37,8 +38,10 @@ pub fn read_file_block(
 ///
 /// The target physical block must already be referenced by the inode and owned by the allocator.
 /// The new 4 KiB image is committed through the existing WAL before recovery installs it at the
-/// data-block home location. A crash before durable commit leaves the old block durable; a crash
-/// after durable commit is recoverable to the complete new block image.
+/// data-block home location. After the home write is durable, the same operation checkpoints the
+/// fixed journal reservation before returning success so the reservation can be reused immediately.
+/// A crash before durable commit leaves the old block durable; a crash after durable commit remains
+/// recoverable to the complete new block image even if it happens during home replay or checkpoint.
 ///
 /// This bounded format-v5 slice intentionally does not allocate blocks, change inode metadata, or
 /// model byte lengths. Extending a file, partial-block writes, sparse files, and append semantics are
@@ -48,9 +51,9 @@ pub fn read_file_block(
 ///
 /// Returns `InvalidInput` when the inode is missing, is not a regular file, or the logical block
 /// index is outside the inode's existing block list. Returns `InvalidData` when allocator ownership
-/// disagrees with the inode reference. Journal-capacity, journal I/O, recovery, home-write, and flush
-/// failures are propagated. A home-write failure may occur after commit is durable; callers must
-/// recover the journal before interpreting the data block.
+/// disagrees with the inode reference. Journal-capacity, journal I/O, recovery, home-write,
+/// checkpoint, and flush failures are propagated. A failure may occur after commit is durable;
+/// callers must recover and checkpoint the journal before interpreting the operation as complete.
 pub fn write_file_block_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -72,7 +75,7 @@ pub fn write_file_block_journaled(
     log.commit(txid)?;
     store_journal_image(device, *superblock, log.entries())?;
 
-    let report = recover_journal(device, *superblock)?;
+    let report = recover_journal_and_checkpoint(device, *superblock)?;
     if report.committed_transactions != 1 || report.home_writes != 1 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
