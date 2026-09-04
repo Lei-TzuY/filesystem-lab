@@ -51,6 +51,12 @@ Together, the create and unlink matrices exercise opposite directions of the sam
 
 The test enumerates every journal publication, allocation/inode home-write, home flush, journal-clear, and checkpoint-flush boundary. After reboot, a directly fsck-valid image must be either the complete old two-block file or the complete new one-block file. Any partial allocator/inode combination must be rejected by fsck. `recover_journal_and_checkpoint` must converge a durable commit, leave the fixed journal reservation empty, and a second recovery/checkpoint pass must be a no-op.
 
-This contract remains block-granular because format v5 does not persist byte length. Partial-block truncation, sparse holes, and byte-stream POSIX truncate semantics remain separate format and lifecycle decisions.
+## Multi-block tail truncate matrix
+
+`tests/truncate_to_blocks_crash_matrix.rs` extends the same contract to shrinking a regular file to an exact count of complete logical blocks. All trailing inode references and all corresponding allocator ownership bits are advanced in one WAL transaction; inode identity and namespace are unchanged.
+
+The regression truncates a four-block file to one block and enumerates every deterministic mutation boundary through journal publication, allocation/inode replay, home durability, journal clearing, and checkpoint durability. A reboot-visible state accepted by fsck must be either the complete four-block old state or the complete one-block new state. Any mixed allocator/inode tail must be rejected before recovery. A durable commit must converge to the complete new state, the fixed journal reservation must end empty, and a second recovery/checkpoint pass must be a no-op.
+
+These truncate contracts remain block-granular because format v5 does not persist byte length. Partial-block truncation, sparse holes, and byte-stream POSIX truncate semantics remain separate format and lifecycle decisions.
 
 Future lifecycle operations can reuse the same `CrashDevice` and enumeration pattern so later multi-block namespace and file-data transitions are checked against every write/flush boundary rather than isolated injected failures.
