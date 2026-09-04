@@ -11,6 +11,18 @@ use crate::journal_region::store_journal_image;
 use crate::recovery::RecoveryReport;
 use crate::transaction_image::CaptureDevice;
 
+/// Reads one existing logical data block from a durable regular file.
+///
+/// Format v5 does not persist a byte length, so this API deliberately exposes only block-granular
+/// I/O over block references already present in the inode. It rejects metadata/data ownership
+/// disagreement instead of reading through an inconsistent inode reference.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` when the inode is missing, is not a regular file, or the logical block
+/// index is outside the inode's existing block list. Returns `InvalidData` when the referenced
+/// physical block is not currently allocator-owned. Underlying decode and block-device errors are
+/// propagated.
 pub fn read_file_block(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -23,6 +35,21 @@ pub fn read_file_block(
     Ok(data)
 }
 
+/// Journals one full-block overwrite of an existing regular-file block.
+///
+/// The target physical block must already be referenced by the inode and owned by the allocator.
+/// The new 4 KiB image is committed through the existing WAL before recovery installs it at the
+/// data-block home location. After the home write is durable, the same operation checkpoints the
+/// fixed journal reservation before returning success so the reservation can be reused immediately.
+/// A crash before durable commit leaves the old block durable; a crash after durable commit remains
+/// recoverable to the complete new block image even if it happens during home replay or checkpoint.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` when the inode is missing, is not a regular file, or the logical block
+/// index is outside the inode's existing block list. Returns `InvalidData` when allocator ownership
+/// disagrees with the inode reference. Journal-capacity, journal I/O, recovery, home-write,
+/// checkpoint, and flush failures are propagated.
 pub fn write_file_block_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -31,7 +58,7 @@ pub fn write_file_block_journaled(
     data: [u8; BLOCK_SIZE],
 ) -> io::Result<RecoveryReport> {
     let block = resolve_owned_file_block(device, superblock, inode_id, file_block_index)?;
-    journal_block_image(device, superblock, block, data)
+    journal_block_image(device, superblock, block, &data)
 }
 
 /// Journals a byte-range read-modify-write within one existing regular-file block.
@@ -40,6 +67,13 @@ pub fn write_file_block_journaled(
 /// logical block. The complete resulting 4 KiB image is committed to the WAL, preserving atomic
 /// old-or-new block visibility across crashes. Empty and cross-block ranges are rejected before WAL
 /// publication; this operation does not extend files, allocate blocks, or create sparse holes.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` for an empty or cross-block range, a missing or non-file inode, or an
+/// out-of-range logical block index. Returns `InvalidData` when allocator ownership disagrees with
+/// the inode reference or recovery reports an inconsistent transaction. Journal, recovery,
+/// checkpoint, and block-device failures are propagated.
 pub fn write_file_block_range_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -58,23 +92,23 @@ pub fn write_file_block_range_journaled(
     let mut image = [0_u8; BLOCK_SIZE];
     device.read_block(block, &mut image)?;
     image[offset..offset + data.len()].copy_from_slice(data);
-    journal_block_image(device, superblock, block, image)
+    journal_block_image(device, superblock, block, &image)
 }
 
 fn journal_block_image(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
     block: u64,
-    data: [u8; BLOCK_SIZE],
+    data: &[u8; BLOCK_SIZE],
 ) -> io::Result<RecoveryReport> {
     let mut current = [0_u8; BLOCK_SIZE];
     device.read_block(block, &mut current)?;
-    if current == data {
+    if current == *data {
         return Ok(RecoveryReport::default());
     }
     let mut log = JournalLog::new();
     let txid = log.begin()?;
-    log.write(txid, block, data)?;
+    log.write(txid, block, *data)?;
     log.commit(txid)?;
     store_journal_image(device, *superblock, log.entries())?;
     let report = recover_journal_and_checkpoint(device, *superblock)?;
@@ -87,6 +121,23 @@ fn journal_block_image(
     Ok(report)
 }
 
+/// Appends one complete logical block to an existing regular file in one WAL transaction.
+///
+/// The operation allocates exactly one previously free data block, appends that physical block to
+/// the inode's block list, and installs the caller-provided 4 KiB data image. Allocation metadata,
+/// inode metadata, and the new data block are committed together before any home location changes.
+/// After replay makes all three home images durable, the fixed journal reservation is checkpointed
+/// before successful return.
+///
+/// Format v5 still has no byte-length field, so this is deliberately block-granular append rather
+/// than POSIX `write(2)` append. It does not provide partial-block writes, sparse files, or byte-size
+/// truncation semantics.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` when the inode is missing or is not a regular file, or when no free data
+/// block remains. Encoding, journal-capacity, journal I/O, recovery, home-write, checkpoint, and
+/// flush failures are propagated.
 pub fn append_file_block_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
