@@ -58,12 +58,7 @@ fn setup() -> (CrashDevice, Superblock) {
 }
 
 fn overwrite_pair(device: &mut CrashDevice, superblock: &Superblock) -> io::Result<RecoveryReport> {
-    write_file_blocks_journaled(
-        device,
-        superblock,
-        2,
-        &[(0, NEW_FIRST), (1, NEW_SECOND)],
-    )
+    write_file_blocks_journaled(device, superblock, 2, &[(0, NEW_FIRST), (1, NEW_SECOND)])
 }
 
 #[test]
