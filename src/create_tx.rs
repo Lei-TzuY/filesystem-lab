@@ -9,8 +9,9 @@ use crate::format::Superblock;
 use crate::inode_codec::PersistedInode;
 use crate::inode_table::store_inode_table;
 use crate::journal::JournalLog;
+use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::journal_region::store_journal_image;
-use crate::recovery::{recover_journal, RecoveryReport};
+use crate::recovery::RecoveryReport;
 use crate::transaction_image::CaptureDevice;
 
 /// Persists allocation, inode, and directory snapshots in one bounded WAL transaction.
@@ -18,7 +19,9 @@ use crate::transaction_image::CaptureDevice;
 /// This primitive is intended for lifecycle changes such as creating a reachable file whose inode
 /// immediately owns newly allocated data blocks. All three desired metadata images are rendered in
 /// isolation first, only changed home blocks are logged, and no home location is written until the
-/// complete transaction has crossed the journal durability boundary.
+/// complete transaction has crossed the journal durability boundary. After all committed home
+/// writes are durable, the fixed journal reservation is checkpointed before successful return so a
+/// later transaction can reuse it immediately.
 ///
 /// The transaction is never split. If the reserved journal cannot hold the complete changed-block
 /// set plus transaction framing, the operation fails before publishing a new journal image.
@@ -27,8 +30,9 @@ use crate::transaction_image::CaptureDevice;
 ///
 /// Returns `InvalidInput` when device or allocator geometry disagrees with the superblock, or when
 /// the bounded journal cannot contain the complete transaction. Encoding, journal, recovery,
-/// home-write, and flush failures are propagated. A home-write error may follow a durable commit;
-/// callers must run recovery before interpreting the home metadata as a consistent state.
+/// home-write, checkpoint, and flush failures are propagated. A failure may follow a durable
+/// commit; callers must run recovery and checkpointing before interpreting the home metadata as a
+/// consistent completed state.
 pub fn store_create_metadata_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -82,7 +86,7 @@ pub fn store_create_metadata_journaled(
     log.commit(txid)?;
 
     store_journal_image(device, *superblock, log.entries())?;
-    let report = recover_journal(device, *superblock)?;
+    let report = recover_journal_and_checkpoint(device, *superblock)?;
     if report.committed_transactions != 1 || report.home_writes != changed.len() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -102,6 +106,8 @@ mod tests {
     use crate::fsck::check_device;
     use crate::inode::InodeKind;
     use crate::inode_table::{initialize_inode_table_region, load_inode_table};
+    use crate::journal_region::load_journal_image;
+    use crate::recovery::recover_journal;
 
     #[derive(Debug)]
     struct FaultDevice {
@@ -220,7 +226,8 @@ mod tests {
 
         assert_eq!(report.committed_transactions, 1);
         assert_eq!(report.home_writes, 3);
-        assert_eq!(device.flushes, flushes_before + 2);
+        assert_eq!(device.flushes, flushes_before + 3);
+        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
         assert!(load_allocator(&mut device, &superblock)
             .unwrap()
             .is_owned(data_block)
