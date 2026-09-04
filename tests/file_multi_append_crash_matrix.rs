@@ -5,9 +5,7 @@ use std::io;
 use filesystem_lab::allocation_disk::{initialize_allocation_region, load_allocator};
 use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
-use filesystem_lab::directory_table::{
-    initialize_directory_table_region, store_directory_table,
-};
+use filesystem_lab::directory_table::{initialize_directory_table_region, store_directory_table};
 use filesystem_lab::file_append_batch::append_file_blocks_journaled;
 use filesystem_lab::file_data::read_file_block;
 use filesystem_lab::format::{Superblock, SUPERBLOCK_BLOCK};
