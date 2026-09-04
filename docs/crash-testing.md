@@ -77,4 +77,12 @@ The regression enumerates every deterministic journal publication, home replay, 
 
 This contract is format-v5 full-block overwrite only. It does not add byte length, partial-block writes, file extension, sparse holes, or other POSIX byte-stream semantics.
 
+## Partial file-block write matrix
+
+`tests/file_partial_write.rs` exercises a byte-range read-modify-write that remains inside one already allocated regular-file block. Runtime validation rejects empty ranges, offsets outside the block, cross-block ranges, missing or non-file inodes, and allocator/inode ownership disagreement before WAL publication. The resulting complete 4 KiB block image is then committed and replayed through the existing WAL lifecycle.
+
+The regression enumerates every deterministic journal publication, data home-write, home durability, journal-clear, and checkpoint boundary. After reboot the data block must be either the complete old image or the complete read-modify-write image; untouched bytes must remain unchanged. A non-durable commit leaves the old image intact, while a durable commit must recover the complete new image. Recovery must leave metadata fsck-clean, checkpoint the journal to empty, and a second recover-and-checkpoint pass must be a no-op.
+
+This contract does not change filesystem format v5. Because v5 has no persisted byte length, this is not general byte-stream `write(2)`: it cannot extend a file, create a sparse hole, or span logical blocks.
+
 Future lifecycle operations can reuse the same `CrashDevice` and enumeration pattern so later multi-block namespace and file-data transitions are checked against every write/flush boundary rather than isolated injected failures.

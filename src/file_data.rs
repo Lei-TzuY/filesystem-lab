@@ -44,17 +44,12 @@ pub fn read_file_block(
 /// A crash before durable commit leaves the old block durable; a crash after durable commit remains
 /// recoverable to the complete new block image even if it happens during home replay or checkpoint.
 ///
-/// This bounded format-v5 slice intentionally does not allocate blocks, change inode metadata, or
-/// model byte lengths. Extending a file, partial-block writes, sparse files, and append semantics are
-/// separate lifecycle contracts.
-///
 /// # Errors
 ///
 /// Returns `InvalidInput` when the inode is missing, is not a regular file, or the logical block
 /// index is outside the inode's existing block list. Returns `InvalidData` when allocator ownership
 /// disagrees with the inode reference. Journal-capacity, journal I/O, recovery, home-write,
-/// checkpoint, and flush failures are propagated. A failure may occur after commit is durable;
-/// callers must recover and checkpoint the journal before interpreting the operation as complete.
+/// checkpoint, and flush failures are propagated.
 pub fn write_file_block_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -63,19 +58,59 @@ pub fn write_file_block_journaled(
     data: [u8; BLOCK_SIZE],
 ) -> io::Result<RecoveryReport> {
     let block = resolve_owned_file_block(device, superblock, inode_id, file_block_index)?;
+    journal_block_image(device, superblock, block, &data)
+}
 
+/// Journals a byte-range read-modify-write within one existing regular-file block.
+///
+/// Format v5 has no persisted byte length, so the write must stay inside one already referenced
+/// logical block. The complete resulting 4 KiB image is committed to the WAL, preserving atomic
+/// old-or-new block visibility across crashes. Empty and cross-block ranges are rejected before WAL
+/// publication; this operation does not extend files, allocate blocks, or create sparse holes.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` for an empty or cross-block range, a missing or non-file inode, or an
+/// out-of-range logical block index. Returns `InvalidData` when allocator ownership disagrees with
+/// the inode reference or recovery reports an inconsistent transaction. Journal, recovery,
+/// checkpoint, and block-device failures are propagated.
+pub fn write_file_block_range_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    inode_id: u64,
+    file_block_index: usize,
+    offset: usize,
+    data: &[u8],
+) -> io::Result<RecoveryReport> {
+    if data.is_empty() || offset >= BLOCK_SIZE || data.len() > BLOCK_SIZE - offset {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "partial file-data write must be non-empty and stay within one block",
+        ));
+    }
+    let block = resolve_owned_file_block(device, superblock, inode_id, file_block_index)?;
+    let mut image = [0_u8; BLOCK_SIZE];
+    device.read_block(block, &mut image)?;
+    image[offset..offset + data.len()].copy_from_slice(data);
+    journal_block_image(device, superblock, block, &image)
+}
+
+fn journal_block_image(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    block: u64,
+    data: &[u8; BLOCK_SIZE],
+) -> io::Result<RecoveryReport> {
     let mut current = [0_u8; BLOCK_SIZE];
     device.read_block(block, &mut current)?;
-    if current == data {
+    if current == *data {
         return Ok(RecoveryReport::default());
     }
-
     let mut log = JournalLog::new();
     let txid = log.begin()?;
-    log.write(txid, block, data)?;
+    log.write(txid, block, *data)?;
     log.commit(txid)?;
     store_journal_image(device, *superblock, log.entries())?;
-
     let report = recover_journal_and_checkpoint(device, *superblock)?;
     if report.committed_transactions != 1 || report.home_writes != 1 {
         return Err(io::Error::new(
@@ -102,8 +137,7 @@ pub fn write_file_block_journaled(
 ///
 /// Returns `InvalidInput` when the inode is missing or is not a regular file, or when no free data
 /// block remains. Encoding, journal-capacity, journal I/O, recovery, home-write, checkpoint, and
-/// flush failures are propagated. A failure may occur after commit is durable; callers must run
-/// recovery and checkpointing before interpreting allocator, inode, or data home state.
+/// flush failures are propagated.
 pub fn append_file_block_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -127,16 +161,13 @@ pub fn append_file_block_journaled(
             "file-data target must be a regular file",
         ));
     }
-
     let block = allocator
         .allocate()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
     inode.blocks.push(block);
-
     let mut capture = CaptureDevice::new(superblock.total_blocks);
     store_allocator(&mut capture, superblock, &allocator)?;
     store_inode_table(&mut capture, superblock, &inodes)?;
-
     let mut changed = Vec::new();
     capture.collect_changed_range(
         device,
@@ -152,7 +183,6 @@ pub fn append_file_block_journaled(
     )?;
     capture.ensure_empty("file append image rendered outside allocation and inode regions")?;
     changed.push((block, data));
-
     let mut log = JournalLog::new();
     let txid = log.begin()?;
     for (home_block, image) in changed.iter().copied() {
@@ -160,7 +190,6 @@ pub fn append_file_block_journaled(
     }
     log.commit(txid)?;
     store_journal_image(device, *superblock, log.entries())?;
-
     let report = recover_journal_and_checkpoint(device, *superblock)?;
     if report.committed_transactions != 1 || report.home_writes != changed.len() {
         return Err(io::Error::new(
@@ -199,7 +228,6 @@ fn resolve_owned_file_block(
             "file-data logical block index is out of range",
         )
     })?;
-
     let allocator = load_allocator(device, superblock)?;
     let owned = allocator
         .is_owned(block)
