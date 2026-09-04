@@ -76,8 +76,7 @@ fn journaled_file_block_overwrite_round_trips_and_reuses_checkpointed_journal() 
         .is_empty());
 
     let second = [0x6b; BLOCK_SIZE];
-    let second_report =
-        write_file_block_journaled(&mut device, &superblock, 2, 0, second).unwrap();
+    let second_report = write_file_block_journaled(&mut device, &superblock, 2, 0, second).unwrap();
     assert_eq!(second_report.committed_transactions, 1);
     assert_eq!(second_report.home_writes, 1);
     assert_eq!(
