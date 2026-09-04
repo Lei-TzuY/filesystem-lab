@@ -88,8 +88,7 @@ fn append_allocates_references_and_persists_one_complete_block() {
     let (mut device, superblock, expected_block) = setup();
     let data = [0x5a; BLOCK_SIZE];
 
-    let (block, report) =
-        append_file_block_journaled(&mut device, &superblock, 2, data).unwrap();
+    let (block, report) = append_file_block_journaled(&mut device, &superblock, 2, data).unwrap();
 
     assert_eq!(block, expected_block);
     assert_eq!(report.committed_transactions, 1);
