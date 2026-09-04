@@ -17,14 +17,29 @@ use filesystem_lab::recovery::RecoveryReport;
 use filesystem_lab::truncate_tx::truncate_file_to_blocks_journaled;
 use support::CrashDevice;
 
-fn setup() -> (CrashDevice, Superblock, Vec<u64>, Vec<PersistedDirectoryEntry>) {
+fn setup() -> (
+    CrashDevice,
+    Superblock,
+    Vec<u64>,
+    Vec<PersistedDirectoryEntry>,
+) {
     let mut device = CrashDevice::new(64);
     let superblock = format_device(&mut device).unwrap();
     let mut allocator = load_allocator(&mut device, &superblock).unwrap();
-    let blocks = (0..4).map(|_| allocator.allocate().unwrap()).collect::<Vec<_>>();
+    let blocks = (0..4)
+        .map(|_| allocator.allocate().unwrap())
+        .collect::<Vec<_>>();
     let inodes = vec![
-        PersistedInode { id: 1, kind: InodeKind::Directory, blocks: Vec::new() },
-        PersistedInode { id: 2, kind: InodeKind::File, blocks: blocks.clone() },
+        PersistedInode {
+            id: 1,
+            kind: InodeKind::Directory,
+            blocks: Vec::new(),
+        },
+        PersistedInode {
+            id: 2,
+            kind: InodeKind::File,
+            blocks: blocks.clone(),
+        },
     ];
     let entries = vec![PersistedDirectoryEntry {
         parent: 1,
@@ -44,7 +59,10 @@ fn state_is_old(device: &mut CrashDevice, sb: &Superblock, blocks: &[u64]) -> bo
     let allocator = load_allocator(device, sb).unwrap();
     let inodes = load_inode_table(device, sb).unwrap();
     let file = inodes.iter().find(|inode| inode.id == 2).unwrap();
-    file.blocks == blocks && blocks.iter().all(|block| allocator.is_owned(*block).unwrap())
+    file.blocks == blocks
+        && blocks
+            .iter()
+            .all(|block| allocator.is_owned(*block).unwrap())
 }
 
 fn state_is_new(device: &mut CrashDevice, sb: &Superblock, blocks: &[u64]) -> bool {
@@ -68,8 +86,13 @@ fn truncate_to_blocks_releases_exact_tail_and_checkpoints() {
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(report.home_writes, 2);
     assert!(state_is_new(&mut device, &superblock, &blocks));
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries);
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        entries
+    );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
     check_device(&mut device).unwrap();
 }
 
@@ -120,9 +143,13 @@ fn every_multi_block_truncate_mutation_crash_point_recovers_to_old_or_new_state(
         }
 
         recover_journal_and_checkpoint(&mut device, superblock).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
-        assert!(state_is_old(&mut device, &superblock, &blocks)
-            || state_is_new(&mut device, &superblock, &blocks));
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
+        assert!(
+            state_is_old(&mut device, &superblock, &blocks)
+                || state_is_new(&mut device, &superblock, &blocks)
+        );
         check_device(&mut device).unwrap();
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
