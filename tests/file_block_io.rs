@@ -12,7 +12,9 @@ use filesystem_lab::fsck::check_device;
 use filesystem_lab::inode::InodeKind;
 use filesystem_lab::inode_codec::PersistedInode;
 use filesystem_lab::inode_table::store_inode_table;
-use filesystem_lab::recovery::{recover_journal, RecoveryReport};
+use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
+use filesystem_lab::journal_region::load_journal_image;
+use filesystem_lab::recovery::RecoveryReport;
 use support::CrashDevice;
 
 fn setup() -> (CrashDevice, Superblock, u64) {
@@ -48,24 +50,43 @@ fn setup() -> (CrashDevice, Superblock, u64) {
 }
 
 #[test]
-fn journaled_file_block_overwrite_round_trips() {
+fn journaled_file_block_overwrite_round_trips_and_reuses_checkpointed_journal() {
     let (mut device, superblock, _) = setup();
-    let desired = [0x5a; BLOCK_SIZE];
+    let first = [0x5a; BLOCK_SIZE];
 
-    let report = write_file_block_journaled(&mut device, &superblock, 2, 0, desired).unwrap();
+    let report = write_file_block_journaled(&mut device, &superblock, 2, 0, first).unwrap();
 
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(report.home_writes, 1);
     assert_eq!(
         read_file_block(&mut device, &superblock, 2, 0).unwrap(),
-        desired
+        first
     );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
     check_device(&mut device).unwrap();
 
     assert_eq!(
-        write_file_block_journaled(&mut device, &superblock, 2, 0, desired).unwrap(),
+        write_file_block_journaled(&mut device, &superblock, 2, 0, first).unwrap(),
         RecoveryReport::default()
     );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
+
+    let second = [0x6b; BLOCK_SIZE];
+    let second_report = write_file_block_journaled(&mut device, &superblock, 2, 0, second).unwrap();
+    assert_eq!(second_report.committed_transactions, 1);
+    assert_eq!(second_report.home_writes, 1);
+    assert_eq!(
+        read_file_block(&mut device, &superblock, 2, 0).unwrap(),
+        second
+    );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
+    check_device(&mut device).unwrap();
 }
 
 #[test]
@@ -91,13 +112,13 @@ fn file_block_io_rejects_invalid_targets_without_mutation() {
 }
 
 #[test]
-fn every_file_block_write_crash_point_recovers_to_old_or_new_data() {
+fn every_file_block_write_and_checkpoint_crash_point_recovers_to_old_or_new_data() {
     let (mut probe, superblock, _) = setup();
     let desired = [0xa5; BLOCK_SIZE];
     probe.arm(None);
     write_file_block_journaled(&mut probe, &superblock, 2, 0, desired).unwrap();
     let mutation_operations = probe.operations();
-    assert!(mutation_operations >= 4);
+    assert!(mutation_operations >= 6);
 
     for crash_at in 0..mutation_operations {
         let (mut device, superblock, _) = setup();
@@ -114,7 +135,7 @@ fn every_file_block_write_crash_point_recovers_to_old_or_new_data() {
         assert!(raw == [0x11; BLOCK_SIZE] || raw == desired);
         check_device(&mut device).unwrap();
 
-        let report = recover_journal(&mut device, superblock).unwrap();
+        let report = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         if report.committed_transactions == 0 {
             assert_eq!(
                 read_file_block(&mut device, &superblock, 2, 0).unwrap(),
@@ -129,8 +150,11 @@ fn every_file_block_write_crash_point_recovers_to_old_or_new_data() {
             );
         }
         check_device(&mut device).unwrap();
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
 
-        let second = recover_journal(&mut device, superblock).unwrap();
-        assert_eq!(second, report);
+        let second = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
+        assert_eq!(second, RecoveryReport::default());
     }
 }
