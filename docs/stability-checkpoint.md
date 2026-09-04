@@ -26,8 +26,11 @@ The allocation, inode, and directory home regions have independent codecs and in
 | create | allocation, inode, directory | new ownership, inode existence, and reachability become committed together |
 | unlink | allocation, inode, directory | removed namespace, inode lifecycle, and released ownership describe exactly one removal |
 | rename | directory | exactly one namespace key changes while the target inode is preserved |
+| truncate-to-zero | allocation, inode | the file inode survives with zero block references and exactly its prior blocks become free |
 
-`create`, `unlink`, and `rename` have deterministic integration tests that enumerate every block-device `write_block`/`flush` mutation point of a successful bounded operation.
+`create`, `unlink`, `rename`, and `truncate-to-zero` have deterministic integration tests that enumerate every block-device `write_block`/`flush` mutation point of a successful bounded operation.
+
+`truncate-to-zero` is intentionally narrower than general truncate. Format v5 does not persist byte length, so the only unambiguous truncate state currently represented on disk is removal of every data-block reference while preserving the file inode and namespace. Partial-block truncation, sparse files, and file-data ordering require a separately versioned or otherwise explicitly specified data model.
 
 ## Crash-state contract
 
@@ -70,7 +73,7 @@ A change belongs inside this checkpoint only if it preserves or tightens the exi
 The checkpoint deliberately does not define:
 
 - journal checkpoint/clearing or circular log metadata;
-- file-data persistence semantics, truncate, sparse files, or extents;
+- persisted byte length, general truncate, file-data persistence ordering, sparse files, or extents;
 - hard links, orphan lifecycle, recursive removal, rename overwrite/exchange;
 - permissions, ACLs, symlinks, mmap, FUSE, or broad POSIX behavior;
 - stronger hardware fault models such as torn sectors or storage reordering.
