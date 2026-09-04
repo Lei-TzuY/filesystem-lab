@@ -87,7 +87,10 @@ fn assert_new(
         .unwrap();
     assert_eq!(inode.blocks, expected);
     for (index, image) in data.iter().enumerate() {
-        assert_eq!(read_file_block(device, superblock, 2, index).unwrap(), *image);
+        assert_eq!(
+            read_file_block(device, superblock, 2, index).unwrap(),
+            *image
+        );
     }
 }
 
