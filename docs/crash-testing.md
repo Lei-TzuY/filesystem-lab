@@ -45,4 +45,12 @@ For every crash point, the regression requires:
 
 Together, the create and unlink matrices exercise opposite directions of the same cross-layer ownership invariant: namespace publication must agree with inode existence and data-block ownership at every durable boundary or be repairable from one committed WAL transaction.
 
-Future lifecycle operations can reuse the same `CrashDevice` and enumeration pattern so truncate and later multi-block namespace transitions are checked against every write/flush boundary rather than isolated injected failures.
+## Single-block truncate matrix
+
+`tests/truncate_last_block_crash_matrix.rs` exercises the shrink-side counterpart of block append. The operation removes exactly the final physical block reference from one regular-file inode and releases exactly that block from the allocator in the same WAL transaction; the inode identity and namespace remain unchanged.
+
+The test enumerates every journal publication, allocation/inode home-write, home flush, journal-clear, and checkpoint-flush boundary. After reboot, a directly fsck-valid image must be either the complete old two-block file or the complete new one-block file. Any partial allocator/inode combination must be rejected by fsck. `recover_journal_and_checkpoint` must converge a durable commit, leave the fixed journal reservation empty, and a second recovery/checkpoint pass must be a no-op.
+
+This contract remains block-granular because format v5 does not persist byte length. Partial-block truncation, sparse holes, and byte-stream POSIX truncate semantics remain separate format and lifecycle decisions.
+
+Future lifecycle operations can reuse the same `CrashDevice` and enumeration pattern so later multi-block namespace and file-data transitions are checked against every write/flush boundary rather than isolated injected failures.
