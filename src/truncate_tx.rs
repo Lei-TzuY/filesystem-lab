@@ -39,7 +39,10 @@ pub fn truncate_file_to_zero_journaled(
         .iter_mut()
         .find(|inode| inode.id == inode_id)
         .ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "truncate target inode is missing")
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "truncate target inode is missing",
+            )
         })?;
     if target.kind != InodeKind::File {
         return Err(io::Error::new(
