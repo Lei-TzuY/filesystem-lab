@@ -2,19 +2,18 @@ mod support;
 
 use std::io;
 
-use filesystem_lab::allocation_disk::{initialize_allocation_region, load_allocator};
+use filesystem_lab::allocation_disk::load_allocator;
 use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
-use filesystem_lab::directory_table::{initialize_directory_table_region, store_directory_table};
+use filesystem_lab::directory_table::store_directory_table;
 use filesystem_lab::file_append_batch::append_file_blocks_journaled;
 use filesystem_lab::file_data::read_file_block;
-use filesystem_lab::format::{Superblock, SUPERBLOCK_BLOCK};
+use filesystem_lab::format::Superblock;
+use filesystem_lab::format_geometry::format_device_with_journal_blocks;
 use filesystem_lab::fsck::check_device;
 use filesystem_lab::inode::InodeKind;
 use filesystem_lab::inode_codec::PersistedInode;
-use filesystem_lab::inode_table::{
-    initialize_inode_table_region, load_inode_table, store_inode_table,
-};
+use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
 use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::journal_region::load_journal_image;
 use filesystem_lab::recovery::RecoveryReport;
@@ -25,14 +24,7 @@ const MULTI_APPEND_JOURNAL_BLOCKS: u64 = 6;
 fn setup() -> (CrashDevice, Superblock, Vec<u64>) {
     let mut device = CrashDevice::new(64);
     let superblock =
-        Superblock::with_journal_blocks(device.block_count(), MULTI_APPEND_JOURNAL_BLOCKS).unwrap();
-    initialize_allocation_region(&mut device, &superblock).unwrap();
-    initialize_inode_table_region(&mut device, &superblock).unwrap();
-    initialize_directory_table_region(&mut device, &superblock).unwrap();
-    device
-        .write_block(SUPERBLOCK_BLOCK, &superblock.encode())
-        .unwrap();
-    device.flush().unwrap();
+        format_device_with_journal_blocks(&mut device, MULTI_APPEND_JOURNAL_BLOCKS).unwrap();
 
     store_inode_table(
         &mut device,
