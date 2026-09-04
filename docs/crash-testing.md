@@ -26,7 +26,9 @@ The matrix therefore turns the rename durability contract into an executable inv
 
 ## Create matrix
 
-`tests/create_crash_matrix.rs` applies the same enumeration to the three-table atomic create path. A crash may occur while publishing the journal or while installing allocation, inode, and directory home blocks. Before recovery, a durable image is accepted only when it is the complete old state or complete new state; any partially installed combination must be rejected by fsck. A durable commit must replay all three home writes, and replay must remain idempotent.
+`tests/create_crash_matrix.rs` applies the same enumeration to the three-table atomic create path, including the successful-path journal checkpoint. A crash may occur while publishing the journal, installing allocation/inode/directory home blocks, clearing the fixed journal reservation, or crossing the checkpoint flush.
+
+Before recovery, a durable image is accepted only when it is the complete old state or complete new state; any partially installed combination must be rejected by fsck. A durable commit must replay all three home writes. `recover_journal_and_checkpoint` then makes the repaired home state durable before clearing the journal, and the recovered reservation must be empty. A second recover-and-checkpoint pass is a no-op. The success-path regression also performs a second create immediately after the first, proving that checkpoint completion makes the same fixed journal reservation reusable without an intervening mount-style recovery pass.
 
 ## Unlink matrix
 
