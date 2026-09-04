@@ -59,4 +59,12 @@ The regression truncates a four-block file to one block and enumerates every det
 
 These truncate contracts remain block-granular because format v5 does not persist byte length. Partial-block truncation, sparse holes, and byte-stream POSIX truncate semantics remain separate format and lifecycle decisions.
 
+## Multi-block append matrix
+
+`tests/file_multi_append_crash_matrix.rs` exercises atomic growth by two complete logical blocks. Allocation ownership for both physical blocks, the inode block-list growth, and both caller-provided data images are committed through one WAL transaction and checkpointed only after home replay is durable.
+
+The regression enumerates every deterministic write/flush boundary. A reboot-visible state accepted by fsck must have either neither appended block owned/referenced or both blocks owned and referenced; any mixed allocator/inode ownership is rejected. If commit is durable, recovery must install both complete data images and converge to the full two-block append. The journal must finish empty and a second recover-and-checkpoint pass must be a no-op.
+
+This remains format-v5 block-granular append. It does not add byte lengths, partial-block writes, sparse holes, extents, or POSIX append semantics.
+
 Future lifecycle operations can reuse the same `CrashDevice` and enumeration pattern so later multi-block namespace and file-data transitions are checked against every write/flush boundary rather than isolated injected failures.
