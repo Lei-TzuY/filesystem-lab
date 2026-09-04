@@ -89,9 +89,15 @@ fn resolve_owned_file_block(
     file_block_index: usize,
 ) -> io::Result<u64> {
     let inodes = load_inode_table(device, superblock)?;
-    let inode = inodes.iter().find(|inode| inode.id == inode_id).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "file-data target inode is missing")
-    })?;
+    let inode = inodes
+        .iter()
+        .find(|inode| inode.id == inode_id)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "file-data target inode is missing",
+            )
+        })?;
     if inode.kind != InodeKind::File {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
