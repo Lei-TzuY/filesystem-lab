@@ -99,7 +99,9 @@ fn every_create_mutation_crash_point_is_old_or_recoverable_new_state() {
         "atomic create must cross journal, home-write, and checkpoint durability operations"
     );
     assert_new_state(&mut probe, &superblock, data_block, &inodes, &entries);
-    assert!(load_journal_image(&mut probe, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut probe, superblock)
+        .unwrap()
+        .is_empty());
     check_device(&mut probe).unwrap();
 
     for crash_at in 0..mutation_operations {
@@ -154,12 +156,16 @@ fn every_create_mutation_crash_point_is_old_or_recoverable_new_state() {
             assert_eq!(report.home_writes, 3);
             assert_new_state(&mut device, &superblock, data_block, &inodes, &entries);
         }
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         check_device(&mut device).unwrap();
 
         let second_replay = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         assert_eq!(second_replay, Default::default());
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         if report.committed_transactions == 0 {
             assert_old_state(&mut device, &superblock, data_block);
         } else {
@@ -173,17 +179,14 @@ fn successful_create_checkpoints_before_fixed_journal_reuse() {
     let (mut device, superblock) = setup();
     let (allocator, first_block, inodes, entries) = desired_create(&mut device, &superblock);
 
-    let first = store_create_metadata_journaled(
-        &mut device,
-        &superblock,
-        &allocator,
-        &inodes,
-        &entries,
-    )
-    .unwrap();
+    let first =
+        store_create_metadata_journaled(&mut device, &superblock, &allocator, &inodes, &entries)
+            .unwrap();
     assert_eq!(first.committed_transactions, 1);
     assert_eq!(first.home_writes, 3);
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 
     let mut allocator = load_allocator(&mut device, &superblock).unwrap();
     let second_block = allocator.allocate().unwrap();
@@ -210,7 +213,9 @@ fn successful_create_checkpoints_before_fixed_journal_reuse() {
     .unwrap();
     assert_eq!(second.committed_transactions, 1);
     assert_eq!(second.home_writes, 3);
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
     assert!(load_allocator(&mut device, &superblock)
         .unwrap()
         .is_owned(first_block)
@@ -219,7 +224,10 @@ fn successful_create_checkpoints_before_fixed_journal_reuse() {
         .unwrap()
         .is_owned(second_block)
         .unwrap());
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), second_inodes);
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        second_inodes
+    );
     assert_eq!(
         load_directory_table(&mut device, &superblock).unwrap(),
         second_entries
