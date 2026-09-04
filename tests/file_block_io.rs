@@ -56,7 +56,10 @@ fn journaled_file_block_overwrite_round_trips() {
 
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(report.home_writes, 1);
-    assert_eq!(read_file_block(&mut device, &superblock, 2, 0).unwrap(), desired);
+    assert_eq!(
+        read_file_block(&mut device, &superblock, 2, 0).unwrap(),
+        desired
+    );
     check_device(&mut device).unwrap();
 
     assert_eq!(
@@ -113,11 +116,17 @@ fn every_file_block_write_crash_point_recovers_to_old_or_new_data() {
 
         let report = recover_journal(&mut device, superblock).unwrap();
         if report.committed_transactions == 0 {
-            assert_eq!(read_file_block(&mut device, &superblock, 2, 0).unwrap(), [0x11; BLOCK_SIZE]);
+            assert_eq!(
+                read_file_block(&mut device, &superblock, 2, 0).unwrap(),
+                [0x11; BLOCK_SIZE]
+            );
         } else {
             assert_eq!(report.committed_transactions, 1);
             assert_eq!(report.home_writes, 1);
-            assert_eq!(read_file_block(&mut device, &superblock, 2, 0).unwrap(), desired);
+            assert_eq!(
+                read_file_block(&mut device, &superblock, 2, 0).unwrap(),
+                desired
+            );
         }
         check_device(&mut device).unwrap();
 
