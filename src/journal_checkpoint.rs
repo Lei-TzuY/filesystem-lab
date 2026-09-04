@@ -32,7 +32,9 @@ pub fn checkpoint_journal(
         let block = superblock
             .journal_start
             .checked_add(offset)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "journal block index overflow"))?;
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "journal block index overflow")
+            })?;
         device.write_block(block, &zero)?;
     }
     device.flush()?;
