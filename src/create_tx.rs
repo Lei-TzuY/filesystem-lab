@@ -227,7 +227,9 @@ mod tests {
         assert_eq!(report.committed_transactions, 1);
         assert_eq!(report.home_writes, 3);
         assert_eq!(device.flushes, flushes_before + 3);
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         assert!(load_allocator(&mut device, &superblock)
             .unwrap()
             .is_owned(data_block)
