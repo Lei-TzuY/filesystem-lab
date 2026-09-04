@@ -105,8 +105,7 @@ fn every_append_mutation_crash_point_is_old_or_recoverable_new_state() {
     let data = [0xa7; BLOCK_SIZE];
     let (mut probe, superblock, expected_block) = setup();
     probe.arm(None);
-    let (block, report) =
-        append_file_block_journaled(&mut probe, &superblock, 2, data).unwrap();
+    let (block, report) = append_file_block_journaled(&mut probe, &superblock, 2, data).unwrap();
     assert_eq!(block, expected_block);
     assert_eq!(report.home_writes, 3);
     let mutation_operations = probe.operations();
@@ -138,13 +137,10 @@ fn every_append_mutation_crash_point_is_old_or_recoverable_new_state() {
             .find(|inode| inode.id == 2)
             .unwrap()
             .blocks;
-        let mut raw_data = [0_u8; BLOCK_SIZE];
-        device.read_block(expected_block, &mut raw_data).unwrap();
         let raw_is_old = !raw_owned && raw_blocks.is_empty();
         let raw_metadata_is_new = raw_owned && raw_blocks == vec![expected_block];
-        let raw_is_complete_new = raw_metadata_is_new && raw_data == data;
 
-        if raw_is_old || raw_is_complete_new || raw_metadata_is_new {
+        if raw_is_old || raw_metadata_is_new {
             check_device(&mut device).unwrap();
         } else {
             assert!(
