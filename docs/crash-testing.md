@@ -69,4 +69,12 @@ The regression enumerates every deterministic write/flush boundary. A reboot-vis
 
 This remains format-v5 block-granular append. It does not add byte lengths, partial-block writes, sparse holes, extents, or POSIX append semantics.
 
+## Multi-block overwrite matrix
+
+`tests/file_multi_overwrite_crash_matrix.rs` exercises one WAL transaction that replaces two existing full data-block images without changing allocation ownership, inode references, or namespace state. Empty batches, duplicate logical indices, out-of-range indices, non-file targets, and allocator/inode disagreement are rejected before WAL publication.
+
+The regression enumerates every deterministic journal publication, home replay, home durability, journal-clear, and checkpoint boundary. Before recovery, partially replayed data images are permitted only while the committed journal remains authoritative; filesystem metadata must remain fsck-clean because ownership and namespace are unchanged. If commit is not durable, recovery leaves both old images intact. If commit is durable, recovery must install both new images, checkpoint the journal to empty, and a second recovery/checkpoint pass must be a no-op.
+
+This contract is format-v5 full-block overwrite only. It does not add byte length, partial-block writes, file extension, sparse holes, or other POSIX byte-stream semantics.
+
 Future lifecycle operations can reuse the same `CrashDevice` and enumeration pattern so later multi-block namespace and file-data transitions are checked against every write/flush boundary rather than isolated injected failures.
