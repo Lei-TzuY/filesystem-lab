@@ -13,6 +13,7 @@ use filesystem_lab::inode_codec::PersistedInode;
 use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
 use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::journal_region::load_journal_image;
+use filesystem_lab::recovery::RecoveryReport;
 use support::CrashDevice;
 
 fn root_inode() -> PersistedInode {
@@ -162,7 +163,7 @@ fn every_create_mutation_crash_point_is_old_or_recoverable_new_state() {
         check_device(&mut device).unwrap();
 
         let second_replay = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
-        assert_eq!(second_replay, Default::default());
+        assert_eq!(second_replay, RecoveryReport::default());
         assert!(load_journal_image(&mut device, superblock)
             .unwrap()
             .is_empty());
