@@ -23,7 +23,12 @@ fn root_inode() -> PersistedInode {
     }
 }
 
-fn setup() -> (CrashDevice, Superblock, Vec<u64>, Vec<PersistedDirectoryEntry>) {
+fn setup() -> (
+    CrashDevice,
+    Superblock,
+    Vec<u64>,
+    Vec<PersistedDirectoryEntry>,
+) {
     let mut device = CrashDevice::new(64);
     let superblock = format_device(&mut device).unwrap();
     let mut allocator = load_allocator(&mut device, &superblock).unwrap();
@@ -142,14 +147,18 @@ fn every_truncate_zero_mutation_crash_point_recovers_to_old_or_new_state() {
             let allocator = load_allocator(&mut device, &superblock).unwrap();
             let disk_inodes = load_inode_table(&mut device, &superblock).unwrap();
             let file = disk_inodes.iter().find(|inode| inode.id == 2).unwrap();
-            blocks.iter().all(|block| allocator.is_owned(*block).unwrap())
+            blocks
+                .iter()
+                .all(|block| allocator.is_owned(*block).unwrap())
                 && file.blocks == blocks
         };
         let raw_is_new = {
             let allocator = load_allocator(&mut device, &superblock).unwrap();
             let disk_inodes = load_inode_table(&mut device, &superblock).unwrap();
             let file = disk_inodes.iter().find(|inode| inode.id == 2).unwrap();
-            blocks.iter().all(|block| !allocator.is_owned(*block).unwrap())
+            blocks
+                .iter()
+                .all(|block| !allocator.is_owned(*block).unwrap())
                 && file.blocks.is_empty()
         };
 
