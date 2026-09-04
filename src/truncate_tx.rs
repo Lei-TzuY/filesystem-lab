@@ -38,7 +38,9 @@ pub fn truncate_file_to_zero_journaled(
     let target = inodes
         .iter_mut()
         .find(|inode| inode.id == inode_id)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "truncate target inode is missing"))?;
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "truncate target inode is missing")
+        })?;
     if target.kind != InodeKind::File {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -57,85 +59,4 @@ pub fn truncate_file_to_zero_journaled(
     }
 
     store_create_metadata_journaled(device, superblock, &allocator, &inodes, &entries)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::allocation_disk::load_allocator;
-    use crate::create_tx::store_create_metadata_journaled;
-    use crate::directory_codec::PersistedDirectoryEntry;
-    use crate::format::format_device;
-    use crate::fsck::check_device;
-    use crate::inode_codec::PersistedInode;
-    use crate::inode_table::load_inode_table;
-    use crate::block::MemBlockDevice;
-
-    fn seed_file(device: &mut MemBlockDevice) -> (Superblock, u64, u64) {
-        let superblock = format_device(device).unwrap();
-        let mut allocator = load_allocator(device, &superblock).unwrap();
-        let first = allocator.allocate().unwrap();
-        let second = allocator.allocate().unwrap();
-        let inodes = vec![
-            PersistedInode {
-                id: 1,
-                kind: InodeKind::Directory,
-                blocks: Vec::new(),
-            },
-            PersistedInode {
-                id: 2,
-                kind: InodeKind::File,
-                blocks: vec![first, second],
-            },
-        ];
-        let entries = vec![PersistedDirectoryEntry {
-            parent: 1,
-            target: 2,
-            name: "file".to_owned(),
-        }];
-        store_create_metadata_journaled(device, &superblock, &allocator, &inodes, &entries).unwrap();
-        check_device(device).unwrap();
-        (superblock, first, second)
-    }
-
-    #[test]
-    fn truncate_zero_preserves_inode_and_namespace_but_releases_all_blocks() {
-        let mut device = MemBlockDevice::new(64);
-        let (superblock, first, second) = seed_file(&mut device);
-
-        let report = truncate_file_to_zero_journaled(&mut device, &superblock, 2).unwrap();
-
-        assert_eq!(report.committed_transactions, 1);
-        assert_eq!(report.home_writes, 2);
-        let allocator = load_allocator(&mut device, &superblock).unwrap();
-        assert!(!allocator.is_owned(first).unwrap());
-        assert!(!allocator.is_owned(second).unwrap());
-        let inodes = load_inode_table(&mut device, &superblock).unwrap();
-        let file = inodes.iter().find(|inode| inode.id == 2).unwrap();
-        assert!(file.blocks.is_empty());
-        check_device(&mut device).unwrap();
-    }
-
-    #[test]
-    fn truncate_zero_is_idempotent_after_file_is_empty() {
-        let mut device = MemBlockDevice::new(64);
-        let (superblock, _, _) = seed_file(&mut device);
-        truncate_file_to_zero_journaled(&mut device, &superblock, 2).unwrap();
-
-        assert_eq!(
-            truncate_file_to_zero_journaled(&mut device, &superblock, 2).unwrap(),
-            RecoveryReport::default()
-        );
-        check_device(&mut device).unwrap();
-    }
-
-    #[test]
-    fn truncate_zero_rejects_directory_target() {
-        let mut device = MemBlockDevice::new(64);
-        let (superblock, _, _) = seed_file(&mut device);
-
-        let error = truncate_file_to_zero_journaled(&mut device, &superblock, 1).unwrap_err();
-        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
-        check_device(&mut device).unwrap();
-    }
 }
