@@ -51,7 +51,9 @@ fn checkpoint_crash_matrix_preserves_recoverability_at_every_mutation_boundary()
     assert!(mutation_count >= 4);
     probe.reboot();
     assert_eq!(read_block(&mut probe, home), expected);
-    assert!(load_journal_image(&mut probe, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut probe, superblock)
+        .unwrap()
+        .is_empty());
 
     for crash_at in 0..mutation_count {
         let mut device = prepared.clone();
@@ -60,9 +62,15 @@ fn checkpoint_crash_matrix_preserves_recoverability_at_every_mutation_boundary()
 
         device.reboot();
         recover_journal_and_checkpoint(&mut device, superblock).unwrap();
-        assert_eq!(read_block(&mut device, home), expected, "crash_at={crash_at}");
+        assert_eq!(
+            read_block(&mut device, home),
+            expected,
+            "crash_at={crash_at}"
+        );
         assert!(
-            load_journal_image(&mut device, superblock).unwrap().is_empty(),
+            load_journal_image(&mut device, superblock)
+                .unwrap()
+                .is_empty(),
             "crash_at={crash_at}"
         );
 
@@ -76,7 +84,9 @@ fn checkpointed_region_can_be_reused_for_a_new_transaction() {
     let (mut device, superblock, home, first) = prepared_committed_update();
     recover_journal_and_checkpoint(&mut device, superblock).unwrap();
     assert_eq!(read_block(&mut device, home), first);
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 
     let second = [0x99; BLOCK_SIZE];
     let mut log = JournalLog::new();
@@ -89,5 +99,7 @@ fn checkpointed_region_can_be_reused_for_a_new_transaction() {
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(report.home_writes, 1);
     assert_eq!(read_block(&mut device, home), second);
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
