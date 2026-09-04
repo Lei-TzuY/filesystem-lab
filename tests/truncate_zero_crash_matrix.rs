@@ -11,7 +11,7 @@ use filesystem_lab::fsck::check_device;
 use filesystem_lab::inode::InodeKind;
 use filesystem_lab::inode_codec::PersistedInode;
 use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
-use filesystem_lab::recovery::recover_journal;
+use filesystem_lab::recovery::{recover_journal, RecoveryReport};
 use filesystem_lab::truncate_tx::truncate_file_to_zero_journaled;
 use support::CrashDevice;
 
@@ -100,7 +100,7 @@ fn truncate_zero_releases_blocks_and_preserves_inode_and_namespace() {
 
     assert_eq!(
         truncate_file_to_zero_journaled(&mut device, &superblock, 2).unwrap(),
-        Default::default()
+        RecoveryReport::default()
     );
 }
 
