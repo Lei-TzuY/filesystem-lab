@@ -30,21 +30,36 @@ pub fn hard_link_file_journaled(
     target: u64,
 ) -> io::Result<RecoveryReport> {
     let inodes = load_inode_table(device, superblock)?;
-    let parent_inode = inodes.iter().find(|inode| inode.id == parent).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "hard-link parent inode is missing")
-    })?;
+    let parent_inode = inodes
+        .iter()
+        .find(|inode| inode.id == parent)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "hard-link parent inode is missing",
+            )
+        })?;
     if parent_inode.kind != InodeKind::Directory {
         return invalid("hard-link parent must be a directory");
     }
-    let target_inode = inodes.iter().find(|inode| inode.id == target).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "hard-link target inode is missing")
-    })?;
+    let target_inode = inodes
+        .iter()
+        .find(|inode| inode.id == target)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "hard-link target inode is missing",
+            )
+        })?;
     if target_inode.kind != InodeKind::File {
         return invalid("hard-link target must be a regular file");
     }
 
     let mut entries = load_directory_table(device, superblock)?;
-    if entries.iter().any(|entry| entry.parent == parent && entry.name == name) {
+    if entries
+        .iter()
+        .any(|entry| entry.parent == parent && entry.name == name)
+    {
         return invalid("hard-link destination already exists");
     }
     entries.push(PersistedDirectoryEntry {
