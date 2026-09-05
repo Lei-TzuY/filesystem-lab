@@ -62,10 +62,11 @@ pub fn transfer_file_block_range_journaled(
     let destination_pos = inodes
         .iter()
         .position(|inode| inode.id == destination_inode_id)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "destination inode is missing"))?;
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "destination inode is missing")
+        })?;
 
-    if inodes[source_pos].kind != InodeKind::File
-        || inodes[destination_pos].kind != InodeKind::File
+    if inodes[source_pos].kind != InodeKind::File || inodes[destination_pos].kind != InodeKind::File
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -117,10 +118,9 @@ pub fn transfer_file_block_range_journaled(
     }
 
     inodes[source_pos].blocks.drain(source_index..source_end);
-    inodes[destination_pos].blocks.splice(
-        destination_index..destination_index,
-        moved.iter().copied(),
-    );
+    inodes[destination_pos]
+        .blocks
+        .splice(destination_index..destination_index, moved.iter().copied());
 
     let mut capture = CaptureDevice::new(superblock.total_blocks);
     store_inode_table(&mut capture, superblock, &inodes)?;
