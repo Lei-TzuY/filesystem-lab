@@ -5,12 +5,48 @@ use crate::allocation_disk::load_allocator;
 use crate::block::BlockDevice;
 use crate::format::Superblock;
 use crate::inode::InodeKind;
+use crate::inode_codec::PersistedInode;
 use crate::inode_table::{load_inode_table, store_inode_table};
 use crate::journal::JournalLog;
 use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::journal_region::store_journal_image;
 use crate::recovery::RecoveryReport;
 use crate::transaction_image::CaptureDevice;
+
+fn publish_inode_table_transfer(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    inodes: &[PersistedInode],
+) -> io::Result<RecoveryReport> {
+    let mut capture = CaptureDevice::new(superblock.total_blocks);
+    store_inode_table(&mut capture, superblock, inodes)?;
+
+    let mut changed = Vec::new();
+    capture.collect_changed_range(
+        device,
+        superblock.inode_range(),
+        "block-range transfer image did not render every inode metadata block",
+        &mut changed,
+    )?;
+    capture.ensure_empty("block-range transfer image rendered outside inode region")?;
+
+    let mut log = JournalLog::new();
+    let txid = log.begin()?;
+    for (home_block, image) in changed.iter().copied() {
+        log.write(txid, home_block, image)?;
+    }
+    log.commit(txid)?;
+    store_journal_image(device, *superblock, log.entries())?;
+
+    let report = recover_journal_and_checkpoint(device, *superblock)?;
+    if report.committed_transactions != 1 || report.home_writes != changed.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "block-range transfer recovery report is inconsistent",
+        ));
+    }
+    Ok(report)
+}
 
 /// Atomically transfers a contiguous logical-block range between two regular files.
 ///
@@ -121,33 +157,6 @@ pub fn transfer_file_block_range_journaled(
         .blocks
         .splice(destination_index..destination_index, moved.iter().copied());
 
-    let mut capture = CaptureDevice::new(superblock.total_blocks);
-    store_inode_table(&mut capture, superblock, &inodes)?;
-
-    let mut changed = Vec::new();
-    capture.collect_changed_range(
-        device,
-        superblock.inode_range(),
-        "block-range transfer image did not render every inode metadata block",
-        &mut changed,
-    )?;
-    capture.ensure_empty("block-range transfer image rendered outside inode region")?;
-
-    let mut log = JournalLog::new();
-    let txid = log.begin()?;
-    for (home_block, image) in changed.iter().copied() {
-        log.write(txid, home_block, image)?;
-    }
-    log.commit(txid)?;
-    store_journal_image(device, *superblock, log.entries())?;
-
-    let report = recover_journal_and_checkpoint(device, *superblock)?;
-    if report.committed_transactions != 1 || report.home_writes != changed.len() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "block-range transfer recovery report is inconsistent",
-        ));
-    }
-
+    let report = publish_inode_table_transfer(device, superblock, &inodes)?;
     Ok((moved, report))
 }
