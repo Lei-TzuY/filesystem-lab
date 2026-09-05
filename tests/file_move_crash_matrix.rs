@@ -116,8 +116,7 @@ fn allocator_disagreement_is_rejected_before_publication() {
     allocator.free(blocks[2]).unwrap();
     store_allocator(&mut device, &superblock, &allocator).unwrap();
     device.flush().unwrap();
-    let error =
-        move_file_block_range_journaled(&mut device, &superblock, 2, 1, 2, 3).unwrap_err();
+    let error = move_file_block_range_journaled(&mut device, &superblock, 2, 1, 2, 3).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     assert_eq!(blocks_for(&mut device, &superblock), blocks);
     assert!(load_journal_image(&mut device, superblock)
@@ -129,8 +128,7 @@ fn allocator_disagreement_is_rejected_before_publication() {
 fn every_move_mutation_crash_point_is_old_or_recoverable_new_state() {
     let (mut probe, superblock, blocks) = setup();
     probe.arm(None);
-    let (_, report) =
-        move_file_block_range_journaled(&mut probe, &superblock, 2, 1, 2, 3).unwrap();
+    let (_, report) = move_file_block_range_journaled(&mut probe, &superblock, 2, 1, 2, 3).unwrap();
     let expected_home_writes = report.home_writes;
     let operations = probe.operations();
     let new_blocks = vec![blocks[0], blocks[3], blocks[4], blocks[1], blocks[2]];
