@@ -1,5 +1,3 @@
-mod support;
-
 use std::io;
 
 use filesystem_lab::allocation_disk::{load_allocator, store_allocator};
@@ -12,10 +10,48 @@ use filesystem_lab::fsck::check_device;
 use filesystem_lab::inode::InodeKind;
 use filesystem_lab::inode_codec::PersistedInode;
 use filesystem_lab::inode_table::store_inode_table;
-use support::CrashDevice;
 
-fn setup() -> (CrashDevice, Superblock, u64, u64) {
-    let mut device = CrashDevice::new(64);
+#[derive(Debug)]
+struct MemoryDevice {
+    blocks: Vec<[u8; BLOCK_SIZE]>,
+}
+
+impl MemoryDevice {
+    fn new(blocks: usize) -> Self {
+        Self {
+            blocks: vec![[0_u8; BLOCK_SIZE]; blocks],
+        }
+    }
+}
+
+impl BlockDevice for MemoryDevice {
+    fn block_count(&self) -> u64 {
+        self.blocks.len() as u64
+    }
+
+    fn read_block(&mut self, block: u64, buf: &mut [u8; BLOCK_SIZE]) -> io::Result<()> {
+        let source = self.blocks.get(block as usize).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::UnexpectedEof, "block is outside device")
+        })?;
+        *buf = *source;
+        Ok(())
+    }
+
+    fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> io::Result<()> {
+        let target = self.blocks.get_mut(block as usize).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::UnexpectedEof, "block is outside device")
+        })?;
+        *target = *buf;
+        Ok(())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+fn setup() -> (MemoryDevice, Superblock, u64, u64) {
+    let mut device = MemoryDevice::new(64);
     let superblock = format_device(&mut device).unwrap();
     let mut allocator = load_allocator(&mut device, &superblock).unwrap();
     let first = allocator.allocate().unwrap();
