@@ -33,15 +33,27 @@ fn setup() -> (CrashDevice, Superblock, [u64; 5]) {
         &mut device,
         &superblock,
         &[
-            PersistedInode { id: 1, kind: InodeKind::Directory, blocks: Vec::new() },
-            PersistedInode { id: 2, kind: InodeKind::File, blocks: blocks.to_vec() },
+            PersistedInode {
+                id: 1,
+                kind: InodeKind::Directory,
+                blocks: Vec::new(),
+            },
+            PersistedInode {
+                id: 2,
+                kind: InodeKind::File,
+                blocks: blocks.to_vec(),
+            },
         ],
     )
     .unwrap();
     store_directory_table(
         &mut device,
         &superblock,
-        &[PersistedDirectoryEntry { parent: 1, target: 2, name: "file".to_owned() }],
+        &[PersistedDirectoryEntry {
+            parent: 1,
+            target: 2,
+            name: "file".to_owned(),
+        }],
     )
     .unwrap();
     device.flush().unwrap();
@@ -71,7 +83,10 @@ fn move_reorders_references_without_changing_ownership() {
     let (moved, report) =
         move_file_block_range_journaled(&mut device, &superblock, 2, 1, 2, 3).unwrap();
     assert_eq!(moved, vec![blocks[1], blocks[2]]);
-    assert_eq!(blocks_for(&mut device, &superblock), vec![blocks[0], blocks[3], blocks[4], blocks[1], blocks[2]]);
+    assert_eq!(
+        blocks_for(&mut device, &superblock),
+        vec![blocks[0], blocks[3], blocks[4], blocks[1], blocks[2]]
+    );
     assert_eq!(report.committed_transactions, 1);
     assert_owned(&mut device, &superblock, blocks);
     check_device(&mut device).unwrap();
@@ -89,7 +104,9 @@ fn invalid_moves_are_rejected_before_publication() {
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     }
     assert_eq!(blocks_for(&mut device, &superblock), blocks);
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -99,17 +116,21 @@ fn allocator_disagreement_is_rejected_before_publication() {
     allocator.free(blocks[2]).unwrap();
     store_allocator(&mut device, &superblock, &allocator).unwrap();
     device.flush().unwrap();
-    let error = move_file_block_range_journaled(&mut device, &superblock, 2, 1, 2, 3).unwrap_err();
+    let error =
+        move_file_block_range_journaled(&mut device, &superblock, 2, 1, 2, 3).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     assert_eq!(blocks_for(&mut device, &superblock), blocks);
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
 fn every_move_mutation_crash_point_is_old_or_recoverable_new_state() {
     let (mut probe, superblock, blocks) = setup();
     probe.arm(None);
-    let (_, report) = move_file_block_range_journaled(&mut probe, &superblock, 2, 1, 2, 3).unwrap();
+    let (_, report) =
+        move_file_block_range_journaled(&mut probe, &superblock, 2, 1, 2, 3).unwrap();
     let expected_home_writes = report.home_writes;
     let operations = probe.operations();
     let new_blocks = vec![blocks[0], blocks[3], blocks[4], blocks[1], blocks[2]];
@@ -126,7 +147,10 @@ fn every_move_mutation_crash_point_is_old_or_recoverable_new_state() {
         device.reboot();
 
         let raw = blocks_for(&mut device, &superblock);
-        assert!(raw == blocks || raw == new_blocks, "crash point {crash_at} exposed partial reorder");
+        assert!(
+            raw == blocks || raw == new_blocks,
+            "crash point {crash_at} exposed partial reorder"
+        );
         check_device(&mut device).unwrap();
 
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
@@ -139,7 +163,12 @@ fn every_move_mutation_crash_point_is_old_or_recoverable_new_state() {
         }
         assert_owned(&mut device, &superblock, blocks);
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
-        assert_eq!(recover_journal_and_checkpoint(&mut device, superblock).unwrap(), RecoveryReport::default());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
+            RecoveryReport::default()
+        );
     }
 }
