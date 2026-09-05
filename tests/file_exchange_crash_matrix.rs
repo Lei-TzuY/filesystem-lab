@@ -94,8 +94,7 @@ fn assert_owned(device: &mut CrashDevice, sb: &Superblock, blocks: [u64; 6]) {
 #[test]
 fn exchange_swaps_equal_ranges_without_reallocation() {
     let (mut device, sb, blocks) = setup();
-    let report =
-        exchange_file_block_ranges_journaled(&mut device, &sb, 2, 1, 3, 0, 2).unwrap();
+    let report = exchange_file_block_ranges_journaled(&mut device, &sb, 2, 1, 3, 0, 2).unwrap();
     assert_eq!(
         mappings(&mut device, &sb),
         (

@@ -52,12 +52,12 @@ pub fn exchange_file_block_ranges_journaled(
             "block-range exchange endpoints must be regular files",
         ));
     }
-    let left_end = left_index.checked_add(block_count).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "left range overflows")
-    })?;
-    let right_end = right_index.checked_add(block_count).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "right range overflows")
-    })?;
+    let left_end = left_index
+        .checked_add(block_count)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "left range overflows"))?;
+    let right_end = right_index
+        .checked_add(block_count)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "right range overflows"))?;
     if left_end > inodes[left_pos].blocks.len() || right_end > inodes[right_pos].blocks.len() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
