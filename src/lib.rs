@@ -15,6 +15,7 @@ pub mod file_collapse;
 pub mod file_copy_range;
 pub mod file_data;
 pub mod file_insert;
+pub mod file_insert_batch;
 pub mod file_overwrite_batch;
 pub mod file_range_read;
 pub mod file_remove;
