@@ -51,7 +51,6 @@ pub fn transfer_file_block_range_journaled(
             "block-range transfer requires at least one logical block",
         ));
     }
-
     let allocator = load_allocator(device, superblock)?;
     let mut inodes = load_inode_table(device, superblock)?;
 
