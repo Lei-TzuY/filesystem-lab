@@ -49,14 +49,21 @@ pub fn clone_file_blocks_append_journaled(
     let source_index = inodes
         .iter()
         .position(|inode| inode.id == source_inode)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "clone source inode is missing"))?;
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "clone source inode is missing")
+        })?;
     let destination_index = inodes
         .iter()
         .position(|inode| inode.id == destination_inode)
         .ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "clone destination inode is missing")
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "clone destination inode is missing",
+            )
         })?;
-    if inodes[source_index].kind != InodeKind::File || inodes[destination_index].kind != InodeKind::File {
+    if inodes[source_index].kind != InodeKind::File
+        || inodes[destination_index].kind != InodeKind::File
+    {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "clone source and destination must be regular files",
@@ -64,7 +71,10 @@ pub fn clone_file_blocks_append_journaled(
     }
 
     let source_end = source_start.checked_add(block_count).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "clone source range overflows usize")
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "clone source range overflows usize",
+        )
     })?;
     if source_end > inodes[source_index].blocks.len() {
         return Err(io::Error::new(
