@@ -71,20 +71,21 @@ fn setup() -> (CrashDevice, Superblock, Vec<u64>, u64, Vec<u64>) {
 
     let (source_blocks, _) =
         append_file_blocks_journaled(&mut device, &superblock, 2, &SOURCE_DATA).unwrap();
-    let (destination_blocks, _) = append_file_blocks_journaled(
-        &mut device,
-        &superblock,
-        3,
-        &[DESTINATION_DATA],
-    )
-    .unwrap();
+    let (destination_blocks, _) =
+        append_file_blocks_journaled(&mut device, &superblock, 3, &[DESTINATION_DATA]).unwrap();
     let destination_block = destination_blocks[0];
     check_device(&mut device).unwrap();
 
     let mut allocator = load_allocator(&mut device, &superblock).unwrap();
     let first = allocator.allocate().unwrap();
     let second = allocator.allocate().unwrap();
-    (device, superblock, source_blocks, destination_block, vec![first, second])
+    (
+        device,
+        superblock,
+        source_blocks,
+        destination_block,
+        vec![first, second],
+    )
 }
 
 fn inode_blocks(device: &mut CrashDevice, superblock: &Superblock, inode_id: u64) -> Vec<u64> {
@@ -103,7 +104,10 @@ fn assert_source_unchanged(
 ) {
     assert_eq!(inode_blocks(device, superblock, 2), source_blocks);
     for (index, image) in SOURCE_DATA.iter().enumerate() {
-        assert_eq!(read_file_block(device, superblock, 2, index).unwrap(), *image);
+        assert_eq!(
+            read_file_block(device, superblock, 2, index).unwrap(),
+            *image
+        );
     }
 }
 
@@ -178,8 +182,14 @@ fn same_inode_clone_append_uses_source_snapshot() {
     let mut expected = source_blocks.clone();
     expected.extend_from_slice(&new_blocks);
     assert_eq!(inode_blocks(&mut device, &superblock, 2), expected);
-    assert_eq!(read_file_block(&mut device, &superblock, 2, 2).unwrap(), SOURCE_DATA[0]);
-    assert_eq!(read_file_block(&mut device, &superblock, 2, 3).unwrap(), SOURCE_DATA[1]);
+    assert_eq!(
+        read_file_block(&mut device, &superblock, 2, 2).unwrap(),
+        SOURCE_DATA[0]
+    );
+    assert_eq!(
+        read_file_block(&mut device, &superblock, 2, 3).unwrap(),
+        SOURCE_DATA[1]
+    );
     check_device(&mut device).unwrap();
 }
 
