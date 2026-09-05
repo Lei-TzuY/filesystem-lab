@@ -22,15 +22,25 @@ impl MemoryDevice {
             blocks: vec![[0_u8; BLOCK_SIZE]; blocks],
         }
     }
+
+    fn index(block: u64) -> io::Result<usize> {
+        usize::try_from(block).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "block index does not fit host usize",
+            )
+        })
+    }
 }
 
 impl BlockDevice for MemoryDevice {
     fn block_count(&self) -> u64 {
-        self.blocks.len() as u64
+        u64::try_from(self.blocks.len()).expect("test device length fits u64")
     }
 
     fn read_block(&mut self, block: u64, buf: &mut [u8; BLOCK_SIZE]) -> io::Result<()> {
-        let source = self.blocks.get(block as usize).ok_or_else(|| {
+        let index = Self::index(block)?;
+        let source = self.blocks.get(index).ok_or_else(|| {
             io::Error::new(io::ErrorKind::UnexpectedEof, "block is outside device")
         })?;
         *buf = *source;
@@ -38,7 +48,8 @@ impl BlockDevice for MemoryDevice {
     }
 
     fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> io::Result<()> {
-        let target = self.blocks.get_mut(block as usize).ok_or_else(|| {
+        let index = Self::index(block)?;
+        let target = self.blocks.get_mut(index).ok_or_else(|| {
             io::Error::new(io::ErrorKind::UnexpectedEof, "block is outside device")
         })?;
         *target = *buf;
