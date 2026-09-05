@@ -1,0 +1,19 @@
+[1m[92m    Checking[0m filesystem-lab v0.1.0 (/home/runner/work/filesystem-lab/filesystem-lab)
+[1m[91merror[0m[1m: casting `usize` to `u8` may truncate the value[0m
+  [1m[94m--> [0mtests/file_collapse_crash_matrix.rs:62:43
+   [1m[94m|[0m
+[1m[94m62[0m [1m[94m|[0m             .write_block(*block, &[0x10 + index as u8; BLOCK_SIZE])
+   [1m[94m|[0m                                           [1m[91m^^^^^^^^^^^[0m
+   [1m[94m|[0m
+   [1m[94m= [0m[1mhelp[0m: if this is intentional allow the lint with `#[allow(clippy::cast_possible_truncation)]` ...
+   [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#cast_possible_truncation
+   [1m[94m= [0m[1mnote[0m: `-D clippy::cast-possible-truncation` implied by `-D warnings`
+   [1m[94m= [0m[1mhelp[0m: to override `-D warnings` add `#[allow(clippy::cast_possible_truncation)]`
+[1m[96mhelp[0m: ... or use `try_from` and handle the error accordingly
+   [1m[94m|[0m
+[1m[94m62[0m [91m- [0m            .write_block(*block, &[0x10 + [91mindex as u8[0m; BLOCK_SIZE])
+[1m[94m62[0m [92m+ [0m            .write_block(*block, &[0x10 + [92mu8::try_from(index)[0m; BLOCK_SIZE])
+   [1m[94m|[0m
+
+[1m[91merror[0m: could not compile `filesystem-lab` (test "file_collapse_crash_matrix") due to 1 previous error
+[1m[33mwarning[0m: build failed, waiting for other jobs to finish...
