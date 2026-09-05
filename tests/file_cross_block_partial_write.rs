@@ -1,6 +1,5 @@
 mod support;
 
-use std::io;
 use filesystem_lab::allocation_disk::{load_allocator, store_allocator};
 use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
@@ -14,6 +13,7 @@ use filesystem_lab::inode_table::store_inode_table;
 use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::journal_region::load_journal_image;
 use filesystem_lab::recovery::RecoveryReport;
+use std::io;
 use support::CrashDevice;
 
 fn setup() -> (CrashDevice, Superblock) {
@@ -23,11 +23,33 @@ fn setup() -> (CrashDevice, Superblock) {
     let first = allocator.allocate().unwrap();
     let second = allocator.allocate().unwrap();
     store_allocator(&mut device, &superblock, &allocator).unwrap();
-    store_inode_table(&mut device, &superblock, &[
-        PersistedInode { id: 1, kind: InodeKind::Directory, blocks: vec![] },
-        PersistedInode { id: 2, kind: InodeKind::File, blocks: vec![first, second] },
-    ]).unwrap();
-    store_directory_table(&mut device, &superblock, &[PersistedDirectoryEntry { parent: 1, target: 2, name: "file".into() }]).unwrap();
+    store_inode_table(
+        &mut device,
+        &superblock,
+        &[
+            PersistedInode {
+                id: 1,
+                kind: InodeKind::Directory,
+                blocks: vec![],
+            },
+            PersistedInode {
+                id: 2,
+                kind: InodeKind::File,
+                blocks: vec![first, second],
+            },
+        ],
+    )
+    .unwrap();
+    store_directory_table(
+        &mut device,
+        &superblock,
+        &[PersistedDirectoryEntry {
+            parent: 1,
+            target: 2,
+            name: "file".into(),
+        }],
+    )
+    .unwrap();
     device.write_block(first, &[0x11; BLOCK_SIZE]).unwrap();
     device.write_block(second, &[0x22; BLOCK_SIZE]).unwrap();
     device.flush().unwrap();
@@ -51,7 +73,9 @@ fn cross_block_range_is_one_transaction() {
     assert_eq!(&first[BLOCK_SIZE - 8..], &[0xaa; 8]);
     assert_eq!(&second[..8], &[0xaa; 8]);
     assert!(second[8..].iter().all(|b| *b == 0x22));
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
     check_device(&mut device).unwrap();
 }
 
@@ -59,9 +83,19 @@ fn cross_block_range_is_one_transaction() {
 fn crossing_past_existing_blocks_is_rejected_before_publication() {
     let (mut device, superblock) = setup();
     let before = read_file_block(&mut device, &superblock, 2, 1).unwrap();
-    assert_eq!(write_file_range_journaled(&mut device, &superblock, 2, 1, BLOCK_SIZE - 4, &[1; 8]).unwrap_err().kind(), io::ErrorKind::InvalidInput);
-    assert_eq!(read_file_block(&mut device, &superblock, 2, 1).unwrap(), before);
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert_eq!(
+        write_file_range_journaled(&mut device, &superblock, 2, 1, BLOCK_SIZE - 4, &[1; 8])
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        read_file_block(&mut device, &superblock, 2, 1).unwrap(),
+        before
+    );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -73,7 +107,10 @@ fn every_cross_block_crash_point_recovers_old_or_complete_new_range() {
     for crash_at in 0..operations {
         let (mut device, superblock) = setup();
         device.arm(Some(crash_at));
-        assert_eq!(write_crossing(&mut device, &superblock).unwrap_err().kind(), io::ErrorKind::Other);
+        assert_eq!(
+            write_crossing(&mut device, &superblock).unwrap_err().kind(),
+            io::ErrorKind::Other
+        );
         device.reboot();
         check_device(&mut device).unwrap();
         let report = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
@@ -87,7 +124,12 @@ fn every_cross_block_crash_point_recovers_old_or_complete_new_range() {
             assert_eq!(&second[..8], &[0xaa; 8]);
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
-        assert_eq!(recover_journal_and_checkpoint(&mut device, superblock).unwrap(), RecoveryReport::default());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
+            RecoveryReport::default()
+        );
     }
 }
