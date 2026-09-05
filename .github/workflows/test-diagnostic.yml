@@ -1,0 +1,31 @@
+name: Test Diagnostic
+
+on:
+  push:
+    branches:
+      - bil-132-file-range-insert
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: bil-132-file-range-insert
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Capture test output once
+        run: |
+          if [ -f ci-test.log ]; then
+            exit 0
+          fi
+          set +e
+          cargo test --all > ci-test.log 2>&1
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ci-test.log
+          git commit -m "Capture failing test output"
+          git push origin HEAD:bil-132-file-range-insert
