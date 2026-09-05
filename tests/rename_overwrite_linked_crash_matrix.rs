@@ -149,13 +149,11 @@ fn linked_destination_replacement_preserves_inode_and_remaining_alias() {
     let report = replace(&mut device, &superblock).unwrap();
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(report.home_writes, 1);
-    assert_metadata_ownership_unchanged(
-        &mut device,
-        &superblock,
-        source_block,
-        destination_block,
+    assert_metadata_ownership_unchanged(&mut device, &superblock, source_block, destination_block);
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        new_entries()
     );
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), new_entries());
     check_device(&mut device).unwrap();
     assert!(load_journal_image(&mut device, superblock)
         .unwrap()
@@ -169,13 +167,11 @@ fn every_linked_destination_replacement_crash_is_old_or_recoverable_new() {
     replace(&mut probe, &superblock).unwrap();
     let mutation_operations = probe.operations();
     assert!(mutation_operations >= 5);
-    assert_metadata_ownership_unchanged(
-        &mut probe,
-        &superblock,
-        source_block,
-        destination_block,
+    assert_metadata_ownership_unchanged(&mut probe, &superblock, source_block, destination_block);
+    assert_eq!(
+        load_directory_table(&mut probe, &superblock).unwrap(),
+        new_entries()
     );
-    assert_eq!(load_directory_table(&mut probe, &superblock).unwrap(), new_entries());
 
     for crash_at in 0..mutation_operations {
         let (mut device, superblock, source_block, destination_block) = setup();
@@ -202,11 +198,17 @@ fn every_linked_destination_replacement_crash_is_old_or_recoverable_new() {
 
         let report = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         if report.committed_transactions == 0 {
-            assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), old_entries());
+            assert_eq!(
+                load_directory_table(&mut device, &superblock).unwrap(),
+                old_entries()
+            );
         } else {
             assert_eq!(report.committed_transactions, 1);
             assert_eq!(report.home_writes, 1);
-            assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), new_entries());
+            assert_eq!(
+                load_directory_table(&mut device, &superblock).unwrap(),
+                new_entries()
+            );
         }
         assert_metadata_ownership_unchanged(
             &mut device,
