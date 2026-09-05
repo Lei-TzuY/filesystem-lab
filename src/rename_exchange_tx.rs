@@ -8,6 +8,7 @@ use crate::format::Superblock;
 use crate::fsck::check_device;
 use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
+use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::recovery::RecoveryReport;
 
 /// Atomically exchanges two existing regular-file namespace entries.
@@ -78,7 +79,9 @@ pub fn rename_exchange_files_journaled(
 
     entries[first_index] = first_replacement;
     entries[second_index] = second_replacement;
-    store_directory_table_journaled(device, superblock, &entries)
+    let report = store_directory_table_journaled(device, superblock, &entries)?;
+    recover_journal_and_checkpoint(device, *superblock)?;
+    Ok(report)
 }
 
 fn validate_directory_parent(
