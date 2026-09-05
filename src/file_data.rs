@@ -37,6 +37,12 @@ pub fn read_file_block(
 }
 
 /// Journals one full-block overwrite of an existing regular-file block.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` for a missing/non-file inode or an out-of-range logical block index,
+/// `InvalidData` for allocator ownership disagreement or an inconsistent recovery report, and
+/// propagates journal, checkpoint, and block-device I/O failures.
 pub fn write_file_block_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -155,6 +161,13 @@ fn journal_block_image(
     Ok(report)
 }
 
+/// Appends one complete logical block to an existing regular file in one WAL transaction.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` for a missing/non-file inode or exhausted allocator, `InvalidData` for
+/// an inconsistent recovery report, and propagates metadata encoding, journal-capacity,
+/// checkpoint, and block-device I/O failures.
 pub fn append_file_block_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
