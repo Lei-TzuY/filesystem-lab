@@ -1,0 +1,443 @@
+[1m[92m   Compiling[0m filesystem-lab v0.1.0 (/home/runner/work/filesystem-lab/filesystem-lab)
+[1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 5.29s
+[1m[92m     Running[0m unittests src/lib.rs (target/debug/deps/filesystem_lab-2c16ff80a7857aa0)
+
+running 90 tests
+test allocation_tx::tests::crash_before_commit_does_not_mutate_allocation_home_state ... ok
+test allocation_tx::tests::journaled_allocator_update_crosses_log_then_home_durability_boundaries ... ok
+test cache::tests::failed_flush_retains_writeback_state_and_retry_does_not_rewrite ... ok
+test cache::tests::flush_makes_written_blocks_clean_and_evictable ... ok
+test cache::tests::out_of_range_operations_are_rejected ... ok
+test cache::tests::read_miss_installs_clean_entry ... ok
+test cache::tests::write_is_dirty_without_device_io ... ok
+test cache::tests::writeback_is_not_durability ... ok
+test allocation_tx::tests::committed_allocator_update_survives_home_write_failure_and_replays_idempotently ... ok
+test create_tx::tests::default_three_block_journal_rejects_three_home_block_create_atomically ... ok
+test directory_codec::tests::accepts_maximum_length_utf8_name ... ok
+test directory_codec::tests::detects_corruption ... ok
+test directory_codec::tests::detects_torn_payload ... ok
+test directory_codec::tests::rejects_invalid_component_names ... ok
+test directory_codec::tests::rejects_invalid_utf8_even_with_recomputed_crc ... ok
+test directory_codec::tests::rejects_nonzero_reserved_fields_even_with_recomputed_crc ... ok
+test directory_codec::tests::rejects_overlong_name ... ok
+test directory_codec::tests::round_trip_preserves_directory_entry ... ok
+test directory_tx::tests::committed_directory_update_survives_home_write_failure_and_replays_idempotently ... ok
+test create_tx::tests::atomic_create_commits_ownership_inode_and_namespace_together ... ok
+test directory_tx::tests::crash_before_commit_does_not_mutate_directory_home_state ... ok
+test directory_tx::tests::identical_directory_snapshot_is_a_noop ... ok
+test directory_tx::tests::journaled_directory_update_crosses_log_then_home_durability_boundaries ... ok
+test fsck::tests::audit_accepts_metadata_regions_as_journal_home ... ok
+test fsck::tests::audit_rejects_superblock_and_journal_ownership ... ok
+test fsck::tests::audit_reports_committed_and_pending_transactions ... ok
+test fsck::tests::inode_ownership_requires_allocated_unique_data_blocks ... ok
+test fsck::tests::namespace_rejects_directory_cycles ... ok
+test fsck::tests::namespace_requires_directory_root_and_full_reachability ... ok
+test fsck::tests::namespace_requires_existing_directory_parent_and_target ... ok
+test inode_codec::tests::detects_corruption ... ok
+test directory_tx::tests::multi_block_directory_change_rejects_insufficient_journal_capacity ... ok
+test inode_codec::tests::detects_torn_payload ... ok
+test inode_codec::tests::rejects_duplicate_block_references ... ok
+test inode_codec::tests::rejects_nonzero_reserved_bytes_even_with_recomputed_crc ... ok
+test inode_codec::tests::round_trip_preserves_inode ... ok
+test create_tx::tests::committed_create_recovers_after_namespace_home_write_fails ... ok
+test inode_tx::tests::crash_before_commit_does_not_mutate_inode_home_state ... ok
+test inode_tx::tests::identical_inode_snapshot_is_a_noop ... ok
+test inode_tx::tests::committed_inode_update_survives_home_write_failure_and_replays_idempotently ... ok
+test journal::tests::active_transaction_is_exclusive_and_ids_are_monotonic ... ok
+test journal::tests::commit_marker_is_atomic_replay_boundary ... ok
+test journal::tests::committed_transactions_replay_in_log_order ... ok
+test journal::tests::crash_before_commit_discards_transaction ... ok
+test journal::tests::crash_prefix_bounds_are_checked ... ok
+test journal::tests::malformed_images_are_rejected ... ok
+test journal::tests::mismatched_transaction_operations_are_rejected ... ok
+test journal_codec::tests::checksum_detects_header_corruption ... ok
+test inode_tx::tests::journaled_inode_update_crosses_log_then_home_durability_boundaries ... ok
+test journal_codec::tests::empty_stream_decodes_to_empty_log ... ok
+test inode_tx::tests::multi_block_inode_change_rejects_insufficient_journal_capacity ... ok
+test journal_codec::tests::checksum_detects_payload_corruption ... ok
+test journal_codec::tests::non_zero_flags_are_rejected ... ok
+test journal_codec::tests::record_length_smaller_than_header_is_rejected ... ok
+test journal_codec::tests::torn_write_payload_is_rejected ... ok
+test journal_codec::tests::truncated_header_is_rejected ... ok
+test journal_codec::tests::unknown_kind_is_rejected_with_valid_checksum ... ok
+test journal_region::tests::device_size_must_match_superblock ... ok
+test journal_codec::tests::round_trip_is_deterministic ... ok
+test journal_codec::tests::unsupported_version_is_rejected_before_checksum ... ok
+test journal_region::tests::image_must_fit_reserved_region ... ok
+test journal_region::tests::stale_non_zero_padding_is_rejected ... ok
+test journal_region::tests::writes_cannot_target_superblock_or_journal_metadata ... ok
+test journal_region::tests::region_checksum_detects_cross_block_corruption ... ok
+test journal_region::tests::round_trip_spans_blocks_and_flushes_with_header_block_last ... ok
+test journal_region::tests::writes_may_target_allocation_metadata_home_blocks ... ok
+test journal_region::tests::zeroed_fresh_region_is_empty ... ok
+test journal_region::tests::writes_may_target_directory_metadata_home_blocks ... ok
+test journal_region::tests::writes_may_target_inode_metadata_home_blocks ... ok
+test metadata_tx::tests::combined_update_rejects_a_journal_too_small_for_both_home_blocks ... ok
+test metadata_tx::tests::combined_metadata_update_commits_inode_and_namespace_in_one_transaction ... ok
+test metadata_tx::tests::crash_before_combined_commit_mutates_neither_home_table ... ok
+test metadata_tx::tests::identical_combined_snapshot_is_a_noop ... ok
+test recovery::tests::empty_journal_is_a_noop_without_flush ... ok
+test recovery::tests::committed_transaction_replays_and_flushes_home_blocks ... ok
+test recovery::tests::uncommitted_tail_never_reaches_home_location ... ok
+test metadata_tx::tests::committed_combined_update_recovers_after_second_home_write_fails ... ok
+test rename_tx::tests::rename_rejects_destination_overwrite_before_wal ... ok
+test rename_tx::tests::rename_rejects_directory_move_into_descendant ... ok
+test recovery::tests::replay_is_idempotent_after_partial_home_write_failure ... ok
+test transaction_image::tests::changed_range_consumes_rendered_blocks_and_skips_identical_home_blocks ... ok
+test transaction_image::tests::rejects_rendered_blocks_outside_consumed_regions ... ok
+test rename_tx::tests::rename_replaces_exactly_one_namespace_key ... ok
+test rename_tx::tests::committed_rename_recovers_after_home_write_failure ... ok
+test unlink_tx::tests::rejects_non_empty_directory_unlink ... ok
+test unlink_tx::tests::atomic_unlink_removes_namespace_inode_and_block_ownership_together ... ok
+test unlink_tx::tests::rejects_unlink_that_frees_unrelated_block ... ok
+test unlink_tx::tests::committed_unlink_recovers_after_inode_home_write_fails ... ok
+test unlink_tx::tests::rejects_unlink_that_leaves_target_referenced ... ok
+test allocation_tx::tests::whole_allocator_transaction_rejects_insufficient_journal_capacity ... ok
+
+test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.60s
+
+[1m[92m     Running[0m tests/allocation.rs (target/debug/deps/allocation-361d79dc4f80cadb)
+
+running 6 tests
+test accounting_holds_through_allocate_free_cycle ... ok
+test allocator_never_double_owns_a_live_block ... ok
+test free_releases_exactly_one_block_and_reuses_it_deterministically ... ok
+test reserved_out_of_range_and_double_free_are_rejected ... ok
+test reserved_prefix_is_never_allocated ... ok
+test invalid_reserved_layout_is_rejected ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[92m     Running[0m tests/allocation_disk.rs (target/debug/deps/allocation_disk-b4ecf130d99c61a6)
+
+running 5 tests
+test checksum_detects_allocation_bitmap_corruption ... ok
+test geometry_mismatch_is_rejected_before_io ... ok
+test fresh_format_loads_empty_allocator_with_reserved_prefix ... ok
+test sparse_allocation_round_trips_exact_ownership ... ok
+test failed_header_write_after_tail_update_is_detected_as_torn_image ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.54s
+
+[1m[92m     Running[0m tests/block_device.rs (target/debug/deps/block_device-56745a82a7b35e52)
+
+running 4 tests
+test rejects_device_size_overflow_before_creating_file ... ok
+test rejects_out_of_range_reads_and_writes ... ok
+test rejects_misaligned_backing_files ... ok
+test create_write_flush_reopen_and_read_round_trip ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[92m     Running[0m tests/create_crash_matrix.rs (target/debug/deps/create_crash_matrix-55655b5327502067)
+
+running 2 tests
+test successful_create_checkpoints_before_fixed_journal_reuse ... ok
+test every_create_mutation_crash_point_is_old_or_recoverable_new_state ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+[1m[92m     Running[0m tests/default_journal_capacity.rs (target/debug/deps/default_journal_capacity-cb133c7fa7b72070)
+
+running 1 test
+test default_format_can_commit_allocation_inode_and_directory_atomically ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+[1m[92m     Running[0m tests/directory.rs (target/debug/deps/directory-3a1c6a4f69ea28a9)
+
+running 5 tests
+test duplicate_names_are_rejected_deterministically ... ok
+test insert_lookup_and_remove_entry ... ok
+test rejects_invalid_parent_target_and_names ... ok
+test removing_missing_entry_is_reported ... ok
+test validation_detects_dangling_inode_reference ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[92m     Running[0m tests/directory_table.rs (target/debug/deps/directory_table-e086a596509e9550)
+
+running 6 tests
+test duplicate_parent_name_is_rejected_even_for_different_targets ... ok
+test corruption_and_stale_padding_are_detected ... ok
+test fresh_format_contains_empty_directory_table ... ok
+test directory_table_round_trip_and_flush ... ok
+test geometry_mismatch_is_rejected ... ok
+test torn_multi_block_rewrite_is_rejected ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[92m     Running[0m tests/file_append_crash_matrix.rs (target/debug/deps/file_append_crash_matrix-35fafdc5dbd60808)
+
+running 2 tests
+test append_allocates_references_and_persists_one_complete_block ... ok
+test every_append_mutation_crash_point_is_old_or_recoverable_new_state ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+[1m[92m     Running[0m tests/file_block_io.rs (target/debug/deps/file_block_io-8a57cae5c07c1721)
+
+running 3 tests
+test file_block_io_rejects_invalid_targets_without_mutation ... ok
+test journaled_file_block_overwrite_round_trips_and_reuses_checkpointed_journal ... ok
+test every_file_block_write_and_checkpoint_crash_point_recovers_to_old_or_new_data ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+[1m[92m     Running[0m tests/file_collapse_crash_matrix.rs (target/debug/deps/file_collapse_crash_matrix-8594dc6796f382ec)
+
+running 4 tests
+test allocator_disagreement_anywhere_in_range_is_rejected_before_publication ... ok
+test empty_or_out_of_bounds_range_is_rejected_before_publication ... ok
+test collapse_releases_range_and_shifts_suffix_atomically ... ok
+test every_collapse_mutation_crash_point_is_old_or_recoverable_new_state ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+[1m[92m     Running[0m tests/file_copy_range.rs (target/debug/deps/file_copy_range-b980de64165e067c)
+
+running 3 tests
+test rejects_source_or_destination_ranges_beyond_existing_blocks ... ok
+test same_inode_overlap_uses_source_snapshot_semantics ... ok
+test copies_cross_block_range_atomically_into_existing_destination_blocks ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+[1m[92m     Running[0m tests/file_cross_block_partial_write.rs (target/debug/deps/file_cross_block_partial_write-c17be89d4ded9957)
+
+running 3 tests
+test crossing_past_existing_blocks_is_rejected_before_publication ... ok
+test cross_block_range_is_one_transaction ... ok
+test every_cross_block_crash_point_recovers_old_or_complete_new_range ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+[1m[92m     Running[0m tests/file_insert_batch_crash_matrix.rs (target/debug/deps/file_insert_batch_crash_matrix-1f8b25110a998b54)
+
+running 3 tests
+test empty_or_out_of_range_insert_is_rejected_before_publication ... ok
+test insert_range_allocates_blocks_and_shifts_suffix ... ok
+test every_insert_range_mutation_crash_point_is_old_or_recoverable_new_state ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+[1m[92m     Running[0m tests/file_insert_crash_matrix.rs (target/debug/deps/file_insert_crash_matrix-11284798d1511a34)
+
+running 3 tests
+test insertion_beyond_end_is_rejected_before_publication ... ok
+test insert_allocates_one_block_and_shifts_logical_suffix ... ok
+test every_insert_mutation_crash_point_is_old_or_recoverable_new_state ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+[1m[92m     Running[0m tests/file_multi_append_crash_matrix.rs (target/debug/deps/file_multi_append_crash_matrix-64819c7cd9c85d73)
+
+running 2 tests
+test append_two_blocks_is_one_atomic_transaction ... ok
+test every_two_block_append_crash_point_is_old_or_recoverable_new_state ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+[1m[92m     Running[0m tests/file_multi_overwrite_crash_matrix.rs (target/debug/deps/file_multi_overwrite_crash_matrix-a5fb103878f980e7)
+
+running 3 tests
+test multi_block_overwrite_rejects_ambiguous_or_invalid_batches_before_wal_publication ... ok
+test multi_block_overwrite_is_one_transaction_and_reuses_checkpointed_journal ... ok
+test every_multi_block_overwrite_crash_point_recovers_the_complete_batch ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+[1m[92m     Running[0m tests/file_partial_write.rs (target/debug/deps/file_partial_write-ae184ebffdc6b8e1)
+
+running 3 tests
+test invalid_partial_ranges_do_not_mutate_data ... ok
+test partial_write_preserves_unmodified_bytes_and_reuses_journal ... ok
+test every_partial_write_crash_point_recovers_whole_old_or_new_block ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+[1m[92m     Running[0m tests/file_range_read.rs (target/debug/deps/file_range_read-f0de854957a848e6)
+
+running 3 tests
+test rejects_allocator_ownership_disagreement_on_any_touched_block ... ok
+test rejects_empty_out_of_range_and_non_file_reads ... ok
+test reads_single_and_cross_block_ranges_without_mutating_metadata ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[92m     Running[0m tests/file_remove_crash_matrix.rs (target/debug/deps/file_remove_crash_matrix-c26f5dda8d2ce8fe)
+
+running 4 tests
+test allocator_disagreement_is_rejected_before_publication ... ok
+test removal_outside_file_is_rejected_before_publication ... ok
+test removal_frees_selected_block_and_shifts_logical_suffix ... ok
+test every_removal_mutation_crash_point_is_old_or_recoverable_new_state ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+[1m[92m     Running[0m tests/file_zero_range.rs (target/debug/deps/file_zero_range-7e234d3325942f67)
+
+running 3 tests
+test invalid_zero_ranges_are_rejected_before_publication ... ok
+test zero_range_crosses_blocks_in_one_transaction ... ok
+test every_zero_range_crash_point_recovers_old_or_complete_zeroed_range ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+[1m[92m     Running[0m tests/fsck.rs (target/debug/deps/fsck-625797302876a7f7)
+
+running 19 tests
+test detects_allocation_corruption_before_journal_scan ... ok
+test accepts_durable_namespace_with_existing_directory_parent_and_target ... ok
+test accepts_inode_references_that_match_durable_allocation ... ok
+test detects_cross_block_journal_corruption ... ok
+test detects_inode_table_corruption_before_journal_scan ... ok
+test detects_superblock_corruption_before_journal_scan ... ok
+test detects_directory_table_corruption_before_journal_scan ... ok
+test rejects_cross_inode_double_ownership ... ok
+test fresh_device_passes_without_mutation ... ok
+test accepts_inode_table_as_journal_home ... ok
+test rejects_directory_cycle_even_when_all_inodes_are_reachable ... ok
+test rejects_directory_entry_whose_parent_is_not_a_directory ... ok
+test rejects_directory_entry_with_missing_parent ... ok
+test rejects_directory_entry_with_missing_target ... ok
+test rejects_inode_reference_to_unallocated_block ... ok
+test rejects_reserved_and_out_of_range_inode_references ... ok
+test rejects_unreachable_inode_from_root ... ok
+test rejects_nonempty_inode_table_without_directory_root ... ok
+test reports_committed_and_crash_incomplete_transactions ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[92m     Running[0m tests/hard_link_crash_matrix.rs (target/debug/deps/hard_link_crash_matrix-250a9fd81cf76874)
+
+running 2 tests
+test rejects_directory_target_and_existing_destination_before_publication ... ok
+test every_hard_link_mutation_crash_point_is_old_or_recoverable_new_namespace ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+[1m[92m     Running[0m tests/hard_unlink_crash_matrix.rs (target/debug/deps/hard_unlink_crash_matrix-8ad89cdca08be8f0)
+
+running 2 tests
+test rejects_final_link_before_publication ... ok
+test every_nonfinal_unlink_crash_point_is_old_or_recoverable_new_namespace ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+[1m[92m     Running[0m tests/inode.rs (target/debug/deps/inode-dba6976af2ae31ba)
+
+running 5 tests
+test allocated_block_has_single_inode_owner ... ok
+test inode_ids_are_monotonic_and_kinds_are_preserved ... ok
+test inode_removal_requires_detaching_blocks_first ... ok
+test validation_detects_free_block_still_referenced_by_inode ... ok
+test reserved_and_free_blocks_cannot_be_attached ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[92m     Running[0m tests/inode_table.rs (target/debug/deps/inode_table-382a1c8360b6607e)
+
+running 4 tests
+test duplicate_inode_ids_are_rejected_before_write ... ok
+test fresh_format_contains_empty_inode_table ... ok
+test corruption_and_stale_padding_are_detected ... ok
+test inode_table_round_trip_flushes_and_writes_header_block_last ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[92m     Running[0m tests/journal_checkpoint_crash_matrix.rs (target/debug/deps/journal_checkpoint_crash_matrix-804de6db7644bdb2)
+
+running 2 tests
+test checkpointed_region_can_be_reused_for_a_new_transaction ... ok
+test checkpoint_crash_matrix_preserves_recoverability_at_every_mutation_boundary ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+[1m[92m     Running[0m tests/rename_crash_matrix.rs (target/debug/deps/rename_crash_matrix-f9d065ff887e779a)
+
+running 1 test
+test every_rename_mutation_crash_point_is_old_or_recoverable_new_namespace ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+[1m[92m     Running[0m tests/rename_exchange_crash_matrix.rs (target/debug/deps/rename_exchange_crash_matrix-545358ed1fc7bcaf)
+
+running 3 tests
+test exchange_rejects_directory_target_before_wal_publication ... ok
+test exchange_swaps_only_namespace_targets ... ok
+test every_exchange_crash_is_old_or_recoverable_new ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+[1m[92m     Running[0m tests/rename_overwrite_crash_matrix.rs (target/debug/deps/rename_overwrite_crash_matrix-5bf34b607ab3db87)
+
+running 3 tests
+test rename_overwrite_rejects_multiply_linked_destination_before_publication ... ok
+test rename_overwrite_replaces_destination_and_reuses_checkpointed_journal ... ok
+test every_rename_overwrite_crash_point_is_old_or_recoverable_new_state ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+[1m[92m     Running[0m tests/rename_overwrite_linked_crash_matrix.rs (target/debug/deps/rename_overwrite_linked_crash_matrix-f11c92f8c6f8737c)
+
+running 2 tests
+test linked_destination_replacement_preserves_inode_and_remaining_alias ... ok
+test every_linked_destination_replacement_crash_is_old_or_recoverable_new ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+[1m[92m     Running[0m tests/superblock.rs (target/debug/deps/superblock-583b9cb119859bc9)
+
+running 8 tests
+test allocation_reservation_scales_with_device_size ... ok
+test device_must_fit_all_durable_metadata ... ok
+test decode_rejects_bad_magic_version_metadata_layout_and_reserved_bytes ... ok
+test explicit_journal_reservation_is_encoded ... ok
+test invalid_metadata_reservations_are_rejected ... ok
+test read_rejects_device_size_mismatch ... ok
+test superblock_round_trip_is_deterministic ... ok
+test format_persists_metadata_prefix_and_flushes ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[92m     Running[0m tests/truncate_last_block_crash_matrix.rs (target/debug/deps/truncate_last_block_crash_matrix-93ddfd5df280f4f0)
+
+running 3 tests
+test truncate_last_block_rejects_empty_and_non_file_targets_without_mutation ... ok
+test truncate_last_block_releases_exactly_one_block_and_checkpoints ... ok
+test every_truncate_last_block_mutation_crash_point_recovers_to_old_or_new_state ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+[1m[92m     Running[0m tests/truncate_to_blocks_crash_matrix.rs (target/debug/deps/truncate_to_blocks_crash_matrix-2ffe6f494d7bd435)
+
+running 3 tests
+test truncate_to_blocks_rejects_growth_and_directory_and_noops_at_current_size ... ok
+test truncate_to_blocks_releases_exact_tail_and_checkpoints ... ok
+test every_multi_block_truncate_mutation_crash_point_recovers_to_old_or_new_state ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+[1m[92m     Running[0m tests/truncate_zero_crash_matrix.rs (target/debug/deps/truncate_zero_crash_matrix-bcc8533c5cf86d40)
+
+running 3 tests
+test truncate_zero_rejects_non_file_targets_without_mutation ... ok
+test truncate_zero_releases_blocks_and_preserves_inode_and_namespace ... ok
+test every_truncate_zero_mutation_crash_point_recovers_to_old_or_new_state ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+[1m[92m     Running[0m tests/unlink_crash_matrix.rs (target/debug/deps/unlink_crash_matrix-46ffc7bf1c593f54)
+
+running 1 test
+test every_unlink_mutation_crash_point_is_old_or_recoverable_new_state ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+[1m[92m   Doc-tests[0m filesystem_lab
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
