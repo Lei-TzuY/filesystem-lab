@@ -16,6 +16,7 @@ pub mod file_data;
 pub mod file_insert;
 pub mod file_overwrite_batch;
 pub mod file_range_read;
+pub mod file_remove;
 pub mod file_zero_range;
 pub mod format;
 pub mod format_geometry;
