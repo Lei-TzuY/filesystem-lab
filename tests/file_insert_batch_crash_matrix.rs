@@ -8,7 +8,8 @@ use filesystem_lab::directory_codec::PersistedDirectoryEntry;
 use filesystem_lab::directory_table::store_directory_table;
 use filesystem_lab::file_data::read_file_block;
 use filesystem_lab::file_insert_batch::insert_file_blocks_journaled;
-use filesystem_lab::format::{format_device, Superblock};
+use filesystem_lab::format::Superblock;
+use filesystem_lab::format_geometry::format_device_with_journal_blocks;
 use filesystem_lab::fsck::check_device;
 use filesystem_lab::inode::InodeKind;
 use filesystem_lab::inode_codec::PersistedInode;
@@ -18,9 +19,12 @@ use filesystem_lab::journal_region::load_journal_image;
 use filesystem_lab::recovery::RecoveryReport;
 use support::CrashDevice;
 
+const RANGE_INSERT_JOURNAL_BLOCKS: u64 = 6;
+
 fn setup() -> (CrashDevice, Superblock, u64, u64, Vec<u64>) {
     let mut device = CrashDevice::new(64);
-    let superblock = format_device(&mut device).unwrap();
+    let superblock =
+        format_device_with_journal_blocks(&mut device, RANGE_INSERT_JOURNAL_BLOCKS).unwrap();
     let mut allocator = load_allocator(&mut device, &superblock).unwrap();
     let first = allocator.allocate().unwrap();
     let second = allocator.allocate().unwrap();
