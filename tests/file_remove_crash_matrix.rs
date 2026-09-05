@@ -119,8 +119,7 @@ fn assert_new(
 #[test]
 fn removal_frees_selected_block_and_shifts_logical_suffix() {
     let (mut device, superblock, first, middle, last) = setup();
-    let (released, report) =
-        remove_file_block_journaled(&mut device, &superblock, 2, 1).unwrap();
+    let (released, report) = remove_file_block_journaled(&mut device, &superblock, 2, 1).unwrap();
     assert_eq!(released, middle);
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(report.home_writes, 2);
