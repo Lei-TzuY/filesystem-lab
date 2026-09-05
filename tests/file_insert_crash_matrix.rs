@@ -27,23 +27,19 @@ fn setup() -> (CrashDevice, Superblock, u64, u64, u64) {
     let inserted = allocator.allocate().unwrap();
     allocator.free(inserted).unwrap();
     store_allocator(&mut device, &superblock, &allocator).unwrap();
-    store_inode_table(
-        &mut device,
-        &superblock,
-        &[
-            PersistedInode {
-                id: 1,
-                kind: InodeKind::Directory,
-                blocks: Vec::new(),
-            },
-            PersistedInode {
-                id: 2,
-                kind: InodeKind::File,
-                blocks: vec![first, second],
-            },
-        ],
-    )
-    .unwrap();
+    let inodes = vec![
+        PersistedInode {
+            id: 1,
+            kind: InodeKind::Directory,
+            blocks: Vec::new(),
+        },
+        PersistedInode {
+            id: 2,
+            kind: InodeKind::File,
+            blocks: vec![first, second],
+        },
+    ];
+    store_inode_table(&mut device, &superblock, &inodes).unwrap();
     store_directory_table(
         &mut device,
         &superblock,
@@ -78,12 +74,10 @@ fn assert_old(
     inserted: u64,
 ) {
     assert_eq!(blocks(device, superblock), vec![first, second]);
-    assert!(
-        !load_allocator(device, superblock)
-            .unwrap()
-            .is_owned(inserted)
-            .unwrap()
-    );
+    assert!(!load_allocator(device, superblock)
+        .unwrap()
+        .is_owned(inserted)
+        .unwrap());
 }
 
 fn assert_new(
@@ -94,24 +88,16 @@ fn assert_new(
     inserted: u64,
     data: &[u8; BLOCK_SIZE],
 ) {
-    assert_eq!(
-        blocks(device, superblock),
-        vec![first, inserted, second]
-    );
-    assert!(
-        load_allocator(device, superblock)
-            .unwrap()
-            .is_owned(inserted)
-            .unwrap()
-    );
+    assert_eq!(blocks(device, superblock), vec![first, inserted, second]);
+    assert!(load_allocator(device, superblock)
+        .unwrap()
+        .is_owned(inserted)
+        .unwrap());
     assert_eq!(
         read_file_block(device, superblock, 2, 0).unwrap(),
         [0x11; BLOCK_SIZE]
     );
-    assert_eq!(
-        read_file_block(device, superblock, 2, 1).unwrap(),
-        *data
-    );
+    assert_eq!(read_file_block(device, superblock, 2, 1).unwrap(), *data);
     assert_eq!(
         read_file_block(device, superblock, 2, 2).unwrap(),
         [0x22; BLOCK_SIZE]
@@ -135,11 +121,9 @@ fn insert_allocates_one_block_and_shifts_logical_suffix() {
         expected,
         &data,
     );
-    assert!(
-        load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
     check_device(&mut device).unwrap();
 }
 
@@ -151,11 +135,9 @@ fn insertion_beyond_end_is_rejected_before_publication() {
             .unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     assert_old(&mut device, &superblock, first, second, expected);
-    assert!(
-        load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -220,14 +202,11 @@ fn every_insert_mutation_crash_point_is_old_or_recoverable_new_state() {
             );
         }
         check_device(&mut device).unwrap();
-        assert!(
-            load_journal_image(&mut device, superblock)
-                .unwrap()
-                .is_empty()
-        );
-        assert_eq!(
-            recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
-            RecoveryReport::default()
-        );
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
+
+        let second = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
+        assert_eq!(second, RecoveryReport::default());
     }
 }
