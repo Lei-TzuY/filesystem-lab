@@ -160,3 +160,104 @@ pub fn transfer_file_block_range_journaled(
     let report = publish_inode_table_transfer(device, superblock, &inodes)?;
     Ok((moved, report))
 }
+
+/// Atomically moves a contiguous logical-block range within one regular file.
+///
+/// `destination_index` is interpreted against the logical-block vector after the source range has
+/// been removed. Physical block contents and allocator ownership are unchanged; only the inode's
+/// logical ordering is updated. The complete inode-table image is published through one WAL
+/// transaction, preserving namespace and allocation accounting across crashes.
+///
+/// Format v5 has no persisted byte length, so this primitive is deliberately block-granular. It does
+/// not claim byte-range move, EOF, sparse-hole, extent, reflink, or POSIX semantics.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` for a zero-length move, missing or non-file inode, source range outside the
+/// file, destination index outside the post-removal block vector, or a move that would not change the
+/// logical order. Returns `InvalidData` if any referenced block is not allocator-owned or if the inode
+/// contains duplicate physical-block references. Journal-capacity, checkpoint, encoding, and block-
+/// device I/O failures are propagated.
+pub fn move_file_block_range_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    inode_id: u64,
+    source_index: usize,
+    block_count: usize,
+    destination_index: usize,
+) -> io::Result<(Vec<u64>, RecoveryReport)> {
+    if block_count == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "block-range move requires at least one logical block",
+        ));
+    }
+
+    let allocator = load_allocator(device, superblock)?;
+    let mut inodes = load_inode_table(device, superblock)?;
+    let inode_pos = inodes
+        .iter()
+        .position(|inode| inode.id == inode_id)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "move inode is missing"))?;
+    if inodes[inode_pos].kind != InodeKind::File {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "block-range move requires a regular file",
+        ));
+    }
+
+    let source_end = source_index.checked_add(block_count).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "source logical range overflows",
+        )
+    })?;
+    let original_len = inodes[inode_pos].blocks.len();
+    if source_end > original_len {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "source logical range is beyond the end",
+        ));
+    }
+    let remaining_len = original_len - block_count;
+    if destination_index > remaining_len {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "destination logical index is beyond the post-removal end",
+        ));
+    }
+    if destination_index == source_index {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "block-range move must change logical order",
+        ));
+    }
+
+    let mut seen = HashSet::with_capacity(original_len);
+    for block in inodes[inode_pos].blocks.iter().copied() {
+        if !seen.insert(block) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "move inode contains duplicate physical-block references",
+            ));
+        }
+        if !allocator
+            .is_owned(block)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "move inode references a block that is not allocator-owned",
+            ));
+        }
+    }
+
+    let moved = inodes[inode_pos].blocks[source_index..source_end].to_vec();
+    inodes[inode_pos].blocks.drain(source_index..source_end);
+    inodes[inode_pos]
+        .blocks
+        .splice(destination_index..destination_index, moved.iter().copied());
+
+    let report = publish_inode_table_transfer(device, superblock, &inodes)?;
+    Ok((moved, report))
+}
