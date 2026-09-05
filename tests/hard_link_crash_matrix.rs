@@ -14,11 +14,19 @@ use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use support::CrashDevice;
 
 fn inode(id: u64, kind: InodeKind) -> PersistedInode {
-    PersistedInode { id, kind, blocks: Vec::new() }
+    PersistedInode {
+        id,
+        kind,
+        blocks: Vec::new(),
+    }
 }
 
 fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
-    PersistedDirectoryEntry { parent, target, name: name.to_owned() }
+    PersistedDirectoryEntry {
+        parent,
+        target,
+        name: name.to_owned(),
+    }
 }
 
 fn old_namespace() -> Vec<PersistedDirectoryEntry> {
@@ -50,7 +58,10 @@ fn every_hard_link_mutation_crash_point_is_old_or_recoverable_new_namespace() {
     hard_link_file_journaled(&mut probe, &superblock, 1, "alias", 2).unwrap();
     let operations = probe.operations();
     assert!(operations >= 3);
-    assert_eq!(load_directory_table(&mut probe, &superblock).unwrap(), new_namespace());
+    assert_eq!(
+        load_directory_table(&mut probe, &superblock).unwrap(),
+        new_namespace()
+    );
     check_device(&mut probe).unwrap();
 
     for crash_at in 0..operations {
@@ -78,7 +89,10 @@ fn every_hard_link_mutation_crash_point_is_old_or_recoverable_new_namespace() {
         check_device(&mut device).unwrap();
         let second = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         assert_eq!(second.committed_transactions, 0);
-        assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), recovered);
+        assert_eq!(
+            load_directory_table(&mut device, &superblock).unwrap(),
+            recovered
+        );
     }
 }
 
@@ -97,6 +111,9 @@ fn rejects_directory_target_and_existing_destination_before_publication() {
             .kind(),
         io::ErrorKind::InvalidInput
     );
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), old_namespace());
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        old_namespace()
+    );
     check_device(&mut device).unwrap();
 }
