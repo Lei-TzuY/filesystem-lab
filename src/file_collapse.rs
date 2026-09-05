@@ -37,12 +37,14 @@ pub fn collapse_file_block_range_journaled(
             "file collapse range must remove at least one block",
         ));
     }
-    let end_index = start_index.checked_add(block_count).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "file collapse range index overflow",
-        )
-    })?;
+    let end_index = start_index
+        .checked_add(block_count)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "file collapse range index overflow",
+            )
+        })?;
 
     let mut allocator = load_allocator(device, superblock)?;
     let mut inodes = load_inode_table(device, superblock)?;
