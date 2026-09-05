@@ -55,8 +55,12 @@ fn setup() -> (CrashDevice, Superblock, u64, u64) {
     )
     .unwrap();
     store_directory_table(&mut device, &superblock, &old_entries()).unwrap();
-    device.write_block(first_block, &[0xA5; BLOCK_SIZE]).unwrap();
-    device.write_block(second_block, &[0x5A; BLOCK_SIZE]).unwrap();
+    device
+        .write_block(first_block, &[0xA5; BLOCK_SIZE])
+        .unwrap();
+    device
+        .write_block(second_block, &[0x5A; BLOCK_SIZE])
+        .unwrap();
     device.flush().unwrap();
     check_device(&mut device).unwrap();
     (device, superblock, first_block, second_block)
@@ -134,12 +138,7 @@ fn every_exchange_crash_is_old_or_recoverable_new() {
         );
         device.reboot();
 
-        assert_ownership_and_data_unchanged(
-            &mut device,
-            &superblock,
-            first_block,
-            second_block,
-        );
+        assert_ownership_and_data_unchanged(&mut device, &superblock, first_block, second_block);
         let visible_entries = load_directory_table(&mut device, &superblock).unwrap();
         assert!(
             visible_entries == old_entries() || visible_entries == new_entries(),
@@ -161,12 +160,7 @@ fn every_exchange_crash_is_old_or_recoverable_new() {
                 new_entries()
             );
         }
-        assert_ownership_and_data_unchanged(
-            &mut device,
-            &superblock,
-            first_block,
-            second_block,
-        );
+        assert_ownership_and_data_unchanged(&mut device, &superblock, first_block, second_block);
         check_device(&mut device).unwrap();
         assert!(load_journal_image(&mut device, superblock)
             .unwrap()
