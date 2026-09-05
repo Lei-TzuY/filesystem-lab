@@ -157,7 +157,10 @@ fn rename_overwrite_rejects_multiply_linked_destination_before_publication() {
     assert!(allocator.is_owned(source).unwrap());
     assert!(allocator.is_owned(destination).unwrap());
     assert_eq!(load_inode_table(&mut device, &superblock).unwrap().len(), 3);
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries);
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        entries
+    );
     assert!(load_journal_image(&mut device, superblock)
         .unwrap()
         .is_empty());
@@ -187,7 +190,10 @@ fn every_rename_overwrite_crash_point_is_old_or_recoverable_new_state() {
             allocator.is_owned(source).unwrap()
                 && allocator.is_owned(destination).unwrap()
                 && load_inode_table(&mut device, &superblock).unwrap().len() == 3
-                && load_directory_table(&mut device, &superblock).unwrap().len() == 2
+                && load_directory_table(&mut device, &superblock)
+                    .unwrap()
+                    .len()
+                    == 2
         };
         let raw_new = {
             let allocator = load_allocator(&mut device, &superblock).unwrap();
