@@ -92,7 +92,8 @@ pub fn insert_file_blocks_journaled(
         "multi-block insert image did not render every inode metadata block",
         &mut changed,
     )?;
-    capture.ensure_empty("multi-block insert image rendered outside allocation and inode regions")?;
+    capture
+        .ensure_empty("multi-block insert image rendered outside allocation and inode regions")?;
     changed.extend(blocks.iter().copied().zip(data_blocks.iter().copied()));
 
     let mut log = JournalLog::new();
