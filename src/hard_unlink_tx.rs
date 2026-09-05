@@ -36,11 +36,21 @@ pub fn unlink_nonfinal_file_link_journaled(
     let inode = inodes
         .iter()
         .find(|inode| inode.id == target)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "hard-link target inode is missing"))?;
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "hard-link target inode is missing",
+            )
+        })?;
     if inode.kind != InodeKind::File {
         return invalid("non-final hard-link unlink requires a regular file");
     }
-    if entries.iter().filter(|entry| entry.target == target).count() < 2 {
+    if entries
+        .iter()
+        .filter(|entry| entry.target == target)
+        .count()
+        < 2
+    {
         return invalid("non-final hard-link unlink cannot remove the final reference");
     }
 
