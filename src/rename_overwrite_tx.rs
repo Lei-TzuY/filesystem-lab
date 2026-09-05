@@ -72,7 +72,9 @@ pub fn rename_overwrite_file_journaled(
         .find(|inode| inode.id == source_target)
         .ok_or_else(|| invalid_input("rename-overwrite source targets a missing inode"))?;
     if source_inode.kind != InodeKind::File {
-        return Err(invalid_input("rename-overwrite source must be a regular file"));
+        return Err(invalid_input(
+            "rename-overwrite source must be a regular file",
+        ));
     }
     let destination_inode = inodes
         .iter()
@@ -103,9 +105,9 @@ pub fn rename_overwrite_file_journaled(
 
     let destination_blocks = destination_inode.blocks.clone();
     for block in destination_blocks {
-        allocator
-            .free(block)
-            .map_err(|error| invalid_input(format!("rename-overwrite block release failed: {error}")))?;
+        allocator.free(block).map_err(|error| {
+            invalid_input(format!("rename-overwrite block release failed: {error}"))
+        })?;
     }
     inodes.retain(|inode| inode.id != destination_target);
 
@@ -121,13 +123,7 @@ pub fn rename_overwrite_file_journaled(
         }
     }
 
-    store_create_metadata_journaled(
-        device,
-        superblock,
-        &allocator,
-        &inodes,
-        &desired_entries,
-    )
+    store_create_metadata_journaled(device, superblock, &allocator, &inodes, &desired_entries)
 }
 
 fn validate_parent(
