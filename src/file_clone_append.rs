@@ -1,5 +1,6 @@
 use std::io;
 
+use crate::allocation::BlockAllocator;
 use crate::allocation_disk::{load_allocator, store_allocator};
 use crate::block::{BlockDevice, BLOCK_SIZE};
 use crate::format::Superblock;
@@ -10,6 +11,29 @@ use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::journal_region::store_journal_image;
 use crate::recovery::RecoveryReport;
 use crate::transaction_image::CaptureDevice;
+
+fn snapshot_owned_blocks(
+    device: &mut impl BlockDevice,
+    allocator: &BlockAllocator,
+    blocks: &[u64],
+) -> io::Result<Vec<[u8; BLOCK_SIZE]>> {
+    let mut snapshots = Vec::with_capacity(blocks.len());
+    for block in blocks {
+        if !allocator
+            .is_owned(*block)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "clone source block is not allocator-owned",
+            ));
+        }
+        let mut image = [0_u8; BLOCK_SIZE];
+        device.read_block(*block, &mut image)?;
+        snapshots.push(image);
+    }
+    Ok(snapshots)
+}
 
 /// Clones a non-empty range of complete logical blocks and appends the copies atomically.
 ///
@@ -83,22 +107,7 @@ pub fn clone_file_blocks_append_journaled(
         ));
     }
     let source_blocks = inodes[source_index].blocks[source_start..source_end].to_vec();
-
-    let mut snapshots = Vec::with_capacity(block_count);
-    for block in &source_blocks {
-        if !allocator
-            .is_owned(*block)
-            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "clone source block is not allocator-owned",
-            ));
-        }
-        let mut image = [0_u8; BLOCK_SIZE];
-        device.read_block(*block, &mut image)?;
-        snapshots.push(image);
-    }
+    let snapshots = snapshot_owned_blocks(device, &allocator, &source_blocks)?;
 
     let mut new_blocks = Vec::with_capacity(block_count);
     for _ in 0..block_count {
