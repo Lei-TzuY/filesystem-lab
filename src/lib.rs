@@ -13,6 +13,7 @@ pub mod directory_tx;
 pub mod file_append_batch;
 pub mod file_copy_range;
 pub mod file_data;
+pub mod file_insert;
 pub mod file_overwrite_batch;
 pub mod file_range_read;
 pub mod file_zero_range;
