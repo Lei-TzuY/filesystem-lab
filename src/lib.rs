@@ -11,6 +11,7 @@ pub mod directory_codec;
 pub mod directory_table;
 pub mod directory_tx;
 pub mod file_append_batch;
+pub mod file_collapse;
 pub mod file_copy_range;
 pub mod file_data;
 pub mod file_insert;
