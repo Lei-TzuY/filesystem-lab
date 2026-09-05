@@ -10,6 +10,7 @@ use crate::format::Superblock;
 use crate::fsck::check_device;
 use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
+use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::recovery::RecoveryReport;
 
 /// Atomically renames one regular-file entry over an existing regular file.
@@ -87,6 +88,7 @@ pub fn rename_overwrite_file_journaled(
             "rename-overwrite destination must be a regular file",
         ));
     }
+    let destination_blocks = destination_inode.blocks.clone();
     let destination_references = entries
         .iter()
         .filter(|entry| entry.target == destination_target)
@@ -112,10 +114,11 @@ pub fn rename_overwrite_file_journaled(
     }
 
     if destination_references > 1 {
-        return store_directory_table_journaled(device, superblock, &desired_entries);
+        let report = store_directory_table_journaled(device, superblock, &desired_entries)?;
+        recover_journal_and_checkpoint(device, *superblock)?;
+        return Ok(report);
     }
 
-    let destination_blocks = destination_inode.blocks.clone();
     for block in destination_blocks {
         allocator.free(block).map_err(|error| {
             invalid_input(format!("rename-overwrite block release failed: {error}"))
