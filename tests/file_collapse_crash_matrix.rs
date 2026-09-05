@@ -58,9 +58,8 @@ fn setup() -> (CrashDevice, Superblock, [u64; 5]) {
     )
     .unwrap();
     for (index, block) in blocks.iter().enumerate() {
-        device
-            .write_block(*block, &[0x10 + index as u8; BLOCK_SIZE])
-            .unwrap();
+        let byte = 0x10 + u8::try_from(index).unwrap();
+        device.write_block(*block, &[byte; BLOCK_SIZE]).unwrap();
     }
     device.flush().unwrap();
     check_device(&mut device).unwrap();
