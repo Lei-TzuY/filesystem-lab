@@ -17,6 +17,7 @@ pub mod format;
 pub mod format_geometry;
 pub mod fsck;
 pub mod hard_link_tx;
+pub mod hard_unlink_tx;
 pub mod inode;
 pub mod inode_codec;
 pub mod inode_table;
