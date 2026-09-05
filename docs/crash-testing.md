@@ -85,4 +85,12 @@ The regression enumerates every deterministic journal publication, data home-wri
 
 This contract does not change filesystem format v5. Because v5 has no persisted byte length, this is not general byte-stream `write(2)`: it cannot extend a file, create a sparse hole, or span logical blocks.
 
+## Rename-overwrite matrix
+
+`tests/rename_overwrite_crash_matrix.rs` exercises bounded replacement of one singly linked regular-file destination by a different regular-file source. One WAL transaction advances allocator ownership, the inode table, and the namespace together: the source inode and blocks survive, the destination inode disappears, exactly its data blocks become free, and the source namespace key is replaced by the destination key.
+
+The matrix enumerates every deterministic journal publication, three-region home replay, durability, journal-clear, and checkpoint boundary. A reboot-visible state accepted by fsck must be either the complete old two-file state or the complete replacement state; a mixed allocator/inode/namespace image must be rejected. A durable commit must recover the complete replacement, checkpoint the journal to empty, and a second recover-and-checkpoint pass must be a no-op. Multiply linked destinations, directory targets, and same-inode aliases are rejected before publication.
+
+This contract does not alter format v5 and intentionally does not implement directory replacement, rename exchange, or replacement of a multiply linked destination.
+
 Future lifecycle operations can reuse the same `CrashDevice` and enumeration pattern so later multi-block namespace and file-data transitions are checked against every write/flush boundary rather than isolated injected failures.
