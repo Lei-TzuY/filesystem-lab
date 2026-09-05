@@ -5,31 +5,24 @@ use crate::block::BlockDevice;
 use crate::create_tx::store_create_metadata_journaled;
 use crate::directory_codec::{encode_directory_entry, PersistedDirectoryEntry};
 use crate::directory_table::load_directory_table;
+use crate::directory_tx::store_directory_table_journaled;
 use crate::format::Superblock;
 use crate::fsck::check_device;
 use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
+use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::recovery::RecoveryReport;
 
 /// Atomically renames one regular-file entry over an existing singly linked regular file.
 ///
-/// The source inode and its data ownership survive unchanged. The destination namespace entry and
-/// destination inode disappear, and exactly the destination inode's data blocks are released in the
-/// same WAL transaction. This bounded format-v5 operation deliberately rejects directory targets,
-/// multiply linked destinations, and source/destination aliases of the same inode.
-///
-/// The current durable image must be fsck-clean before publication. The operation does not change
-/// the on-disk format and does not add persisted link counts; destination singleness is derived from
-/// durable namespace references.
+/// The destination inode and exactly its data ownership are released in the same WAL transaction as
+/// the namespace replacement. Multiply linked destinations remain a separate lifecycle operation.
 ///
 /// # Errors
 ///
-/// Returns `InvalidInput` when either parent is not a directory, either namespace entry is missing,
-/// either target is not a regular file, the destination has another namespace reference, the two
-/// entries target the same inode, the replacement name is invalid, or destination block release is
-/// inconsistent. Existing corruption is propagated from fsck, and journal/recovery/device failures
-/// are propagated. A failure may occur after commit is durable; recovery must run before callers
-/// interpret the home metadata.
+/// Returns `InvalidInput` for invalid parents, missing entries, non-file targets, same-inode aliases,
+/// multiply linked destinations, invalid replacement names, or inconsistent block release. Existing
+/// corruption and WAL/recovery/device failures are propagated.
 pub fn rename_overwrite_file_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -37,6 +30,44 @@ pub fn rename_overwrite_file_journaled(
     old_name: &str,
     new_parent: u64,
     new_name: &str,
+) -> io::Result<RecoveryReport> {
+    rename_overwrite_file_impl(
+        device, superblock, old_parent, old_name, new_parent, new_name, false,
+    )
+}
+
+/// Atomically renames one regular-file entry over one link to a multiply linked regular file.
+///
+/// Only the selected destination namespace entry is replaced. The destination inode, allocator/data
+/// ownership, and every remaining alias survive unchanged. Link count is derived from format-v5
+/// namespace references; no persisted link-count field or on-disk format change is introduced.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` for invalid parents, missing entries, non-file targets, same-inode aliases,
+/// a destination with fewer than two namespace references, or an invalid replacement name. Existing
+/// corruption and WAL/recovery/device failures are propagated.
+pub fn rename_overwrite_linked_file_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    old_parent: u64,
+    old_name: &str,
+    new_parent: u64,
+    new_name: &str,
+) -> io::Result<RecoveryReport> {
+    rename_overwrite_file_impl(
+        device, superblock, old_parent, old_name, new_parent, new_name, true,
+    )
+}
+
+fn rename_overwrite_file_impl(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    old_parent: u64,
+    old_name: &str,
+    new_parent: u64,
+    new_name: &str,
+    require_multiple_links: bool,
 ) -> io::Result<RecoveryReport> {
     check_device(device)?;
 
@@ -85,12 +116,18 @@ pub fn rename_overwrite_file_journaled(
             "rename-overwrite destination must be a regular file",
         ));
     }
-    if entries
+    let destination_blocks = destination_inode.blocks.clone();
+    let destination_references = entries
         .iter()
         .filter(|entry| entry.target == destination_target)
-        .count()
-        != 1
-    {
+        .count();
+    if require_multiple_links {
+        if destination_references < 2 {
+            return Err(invalid_input(
+                "linked rename-overwrite destination must have multiple namespace references",
+            ));
+        }
+    } else if destination_references != 1 {
         return Err(invalid_input(
             "rename-overwrite destination must have exactly one namespace reference",
         ));
@@ -103,14 +140,6 @@ pub fn rename_overwrite_file_journaled(
     };
     encode_directory_entry(&replacement)?;
 
-    let destination_blocks = destination_inode.blocks.clone();
-    for block in destination_blocks {
-        allocator.free(block).map_err(|error| {
-            invalid_input(format!("rename-overwrite block release failed: {error}"))
-        })?;
-    }
-    inodes.retain(|inode| inode.id != destination_target);
-
     let mut desired_entries = Vec::with_capacity(entries.len() - 1);
     for (index, entry) in entries.into_iter().enumerate() {
         if index == destination_index {
@@ -122,6 +151,19 @@ pub fn rename_overwrite_file_journaled(
             desired_entries.push(entry);
         }
     }
+
+    if require_multiple_links {
+        let report = store_directory_table_journaled(device, superblock, &desired_entries)?;
+        recover_journal_and_checkpoint(device, *superblock)?;
+        return Ok(report);
+    }
+
+    for block in destination_blocks {
+        allocator.free(block).map_err(|error| {
+            invalid_input(format!("rename-overwrite block release failed: {error}"))
+        })?;
+    }
+    inodes.retain(|inode| inode.id != destination_target);
 
     store_create_metadata_journaled(device, superblock, &allocator, &inodes, &desired_entries)
 }
