@@ -40,14 +40,17 @@ impl BlockDevice for MemoryDevice {
     }
 
     fn read_block(&mut self, block: u64, buf: &mut [u8; BLOCK_SIZE]) -> io::Result<()> {
-        *buf = *self.blocks.get(Self::index(block)?).ok_or_else(|| {
+        let index = Self::index(block)?;
+        let source = self.blocks.get(index).ok_or_else(|| {
             io::Error::new(io::ErrorKind::UnexpectedEof, "block is outside device")
         })?;
+        *buf = *source;
         Ok(())
     }
 
     fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> io::Result<()> {
-        let target = self.blocks.get_mut(Self::index(block)?).ok_or_else(|| {
+        let index = Self::index(block)?;
+        let target = self.blocks.get_mut(index).ok_or_else(|| {
             io::Error::new(io::ErrorKind::UnexpectedEof, "block is outside device")
         })?;
         *target = *buf;
@@ -99,18 +102,10 @@ fn setup() -> (MemoryDevice, Superblock) {
     store_allocator(&mut device, &superblock, &allocator).unwrap();
     store_inode_table(&mut device, &superblock, &inodes).unwrap();
     store_directory_table(&mut device, &superblock, &entries).unwrap();
-    device
-        .write_block(source_a, &[0x11; BLOCK_SIZE])
-        .unwrap();
-    device
-        .write_block(source_b, &[0x22; BLOCK_SIZE])
-        .unwrap();
-    device
-        .write_block(destination_a, &[0x33; BLOCK_SIZE])
-        .unwrap();
-    device
-        .write_block(destination_b, &[0x44; BLOCK_SIZE])
-        .unwrap();
+    device.write_block(source_a, &[0x11; BLOCK_SIZE]).unwrap();
+    device.write_block(source_b, &[0x22; BLOCK_SIZE]).unwrap();
+    device.write_block(destination_a, &[0x33; BLOCK_SIZE]).unwrap();
+    device.write_block(destination_b, &[0x44; BLOCK_SIZE]).unwrap();
     device.flush().unwrap();
     check_device(&mut device).unwrap();
     (device, superblock)
