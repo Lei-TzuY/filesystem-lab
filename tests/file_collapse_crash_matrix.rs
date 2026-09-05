@@ -129,8 +129,7 @@ fn collapse_releases_range_and_shifts_suffix_atomically() {
 #[test]
 fn empty_or_out_of_bounds_range_is_rejected_before_publication() {
     let (mut device, superblock, blocks) = setup();
-    let empty =
-        collapse_file_block_range_journaled(&mut device, &superblock, 2, 1, 0).unwrap_err();
+    let empty = collapse_file_block_range_journaled(&mut device, &superblock, 2, 1, 0).unwrap_err();
     assert_eq!(empty.kind(), io::ErrorKind::InvalidInput);
     let outside =
         collapse_file_block_range_journaled(&mut device, &superblock, 2, 4, 2).unwrap_err();
@@ -149,8 +148,7 @@ fn allocator_disagreement_anywhere_in_range_is_rejected_before_publication() {
     store_allocator(&mut device, &superblock, &allocator).unwrap();
     device.flush().unwrap();
 
-    let error =
-        collapse_file_block_range_journaled(&mut device, &superblock, 2, 2, 2).unwrap_err();
+    let error = collapse_file_block_range_journaled(&mut device, &superblock, 2, 2, 2).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     assert_eq!(inode_blocks(&mut device, &superblock), blocks);
     assert!(load_journal_image(&mut device, superblock)
