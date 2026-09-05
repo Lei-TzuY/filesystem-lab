@@ -6,6 +6,14 @@ use crate::file_range_read::read_file_range;
 use crate::format::Superblock;
 use crate::recovery::RecoveryReport;
 
+/// Identifies a byte-range endpoint inside an existing regular file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FileRangeEndpoint {
+    pub inode: u64,
+    pub first_block: usize,
+    pub offset: usize,
+}
+
 /// Copies a non-empty byte range between existing regular-file blocks atomically at the destination.
 ///
 /// The complete source range is read into memory before any destination write is published. This
@@ -27,28 +35,24 @@ use crate::recovery::RecoveryReport;
 pub fn copy_file_range_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
-    source_inode: u64,
-    source_first_block: usize,
-    source_offset: usize,
-    destination_inode: u64,
-    destination_first_block: usize,
-    destination_offset: usize,
+    source: FileRangeEndpoint,
+    destination: FileRangeEndpoint,
     len: usize,
 ) -> io::Result<RecoveryReport> {
     let snapshot = read_file_range(
         device,
         superblock,
-        source_inode,
-        source_first_block,
-        source_offset,
+        source.inode,
+        source.first_block,
+        source.offset,
         len,
     )?;
     write_file_range_journaled(
         device,
         superblock,
-        destination_inode,
-        destination_first_block,
-        destination_offset,
+        destination.inode,
+        destination.first_block,
+        destination.offset,
         &snapshot,
     )
 }
