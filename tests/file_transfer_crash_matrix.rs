@@ -78,7 +78,11 @@ fn setup() -> (CrashDevice, Superblock, [u64; 5]) {
     (device, superblock, blocks)
 }
 
-fn inode_blocks(device: &mut CrashDevice, superblock: &Superblock, inode_id: u64) -> Vec<u64> {
+fn inode_blocks(
+    device: &mut CrashDevice,
+    superblock: &Superblock,
+    inode_id: u64,
+) -> Vec<u64> {
     load_inode_table(device, superblock)
         .unwrap()
         .into_iter()
