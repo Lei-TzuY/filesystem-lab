@@ -14,7 +14,7 @@ use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
 use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::journal_region::load_journal_image;
 use filesystem_lab::recovery::RecoveryReport;
-use filesystem_lab::rename_overwrite_tx::rename_overwrite_file_journaled;
+use filesystem_lab::rename_overwrite_tx::rename_overwrite_linked_file_journaled;
 use support::CrashDevice;
 
 fn root() -> PersistedInode {
@@ -113,7 +113,7 @@ fn new_entries() -> Vec<PersistedDirectoryEntry> {
 }
 
 fn replace(device: &mut CrashDevice, superblock: &Superblock) -> io::Result<RecoveryReport> {
-    rename_overwrite_file_journaled(device, superblock, 1, "source", 1, "destination")
+    rename_overwrite_linked_file_journaled(device, superblock, 1, "source", 1, "destination")
 }
 
 fn assert_metadata_ownership_unchanged(
