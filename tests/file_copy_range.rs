@@ -4,7 +4,7 @@ use filesystem_lab::allocation_disk::{load_allocator, store_allocator};
 use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
 use filesystem_lab::directory_table::store_directory_table;
-use filesystem_lab::file_copy_range::copy_file_range_journaled;
+use filesystem_lab::file_copy_range::{copy_file_range_journaled, FileRangeEndpoint};
 use filesystem_lab::file_range_read::read_file_range;
 use filesystem_lab::format::{format_device, Superblock};
 use filesystem_lab::fsck::check_device;
@@ -115,18 +115,22 @@ fn setup() -> (MemoryDevice, Superblock) {
     (device, superblock)
 }
 
+fn endpoint(inode: u64, first_block: usize, offset: usize) -> FileRangeEndpoint {
+    FileRangeEndpoint {
+        inode,
+        first_block,
+        offset,
+    }
+}
+
 #[test]
 fn copies_cross_block_range_atomically_into_existing_destination_blocks() {
     let (mut device, superblock) = setup();
     copy_file_range_journaled(
         &mut device,
         &superblock,
-        2,
-        0,
-        BLOCK_SIZE - 3,
-        3,
-        0,
-        BLOCK_SIZE - 2,
+        endpoint(2, 0, BLOCK_SIZE - 3),
+        endpoint(3, 0, BLOCK_SIZE - 2),
         6,
     )
     .unwrap();
@@ -148,12 +152,8 @@ fn same_inode_overlap_uses_source_snapshot_semantics() {
     copy_file_range_journaled(
         &mut device,
         &superblock,
-        2,
-        0,
-        BLOCK_SIZE - 4,
-        2,
-        0,
-        BLOCK_SIZE - 2,
+        endpoint(2, 0, BLOCK_SIZE - 4),
+        endpoint(2, 0, BLOCK_SIZE - 2),
         8,
     )
     .unwrap();
@@ -168,15 +168,27 @@ fn same_inode_overlap_uses_source_snapshot_semantics() {
 fn rejects_source_or_destination_ranges_beyond_existing_blocks() {
     let (mut device, superblock) = setup();
     assert_eq!(
-        copy_file_range_journaled(&mut device, &superblock, 2, 1, BLOCK_SIZE - 1, 3, 0, 0, 2,)
-            .unwrap_err()
-            .kind(),
+        copy_file_range_journaled(
+            &mut device,
+            &superblock,
+            endpoint(2, 1, BLOCK_SIZE - 1),
+            endpoint(3, 0, 0),
+            2,
+        )
+        .unwrap_err()
+        .kind(),
         io::ErrorKind::InvalidInput
     );
     assert_eq!(
-        copy_file_range_journaled(&mut device, &superblock, 2, 0, 0, 3, 1, BLOCK_SIZE - 1, 2,)
-            .unwrap_err()
-            .kind(),
+        copy_file_range_journaled(
+            &mut device,
+            &superblock,
+            endpoint(2, 0, 0),
+            endpoint(3, 1, BLOCK_SIZE - 1),
+            2,
+        )
+        .unwrap_err()
+        .kind(),
         io::ErrorKind::InvalidInput
     );
     check_device(&mut device).unwrap();
