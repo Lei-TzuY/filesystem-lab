@@ -104,8 +104,12 @@ fn setup() -> (MemoryDevice, Superblock) {
     store_directory_table(&mut device, &superblock, &entries).unwrap();
     device.write_block(source_a, &[0x11; BLOCK_SIZE]).unwrap();
     device.write_block(source_b, &[0x22; BLOCK_SIZE]).unwrap();
-    device.write_block(destination_a, &[0x33; BLOCK_SIZE]).unwrap();
-    device.write_block(destination_b, &[0x44; BLOCK_SIZE]).unwrap();
+    device
+        .write_block(destination_a, &[0x33; BLOCK_SIZE])
+        .unwrap();
+    device
+        .write_block(destination_b, &[0x44; BLOCK_SIZE])
+        .unwrap();
     device.flush().unwrap();
     check_device(&mut device).unwrap();
     (device, superblock)
@@ -164,35 +168,15 @@ fn same_inode_overlap_uses_source_snapshot_semantics() {
 fn rejects_source_or_destination_ranges_beyond_existing_blocks() {
     let (mut device, superblock) = setup();
     assert_eq!(
-        copy_file_range_journaled(
-            &mut device,
-            &superblock,
-            2,
-            1,
-            BLOCK_SIZE - 1,
-            3,
-            0,
-            0,
-            2,
-        )
-        .unwrap_err()
-        .kind(),
+        copy_file_range_journaled(&mut device, &superblock, 2, 1, BLOCK_SIZE - 1, 3, 0, 0, 2,)
+            .unwrap_err()
+            .kind(),
         io::ErrorKind::InvalidInput
     );
     assert_eq!(
-        copy_file_range_journaled(
-            &mut device,
-            &superblock,
-            2,
-            0,
-            0,
-            3,
-            1,
-            BLOCK_SIZE - 1,
-            2,
-        )
-        .unwrap_err()
-        .kind(),
+        copy_file_range_journaled(&mut device, &superblock, 2, 0, 0, 3, 1, BLOCK_SIZE - 1, 2,)
+            .unwrap_err()
+            .kind(),
         io::ErrorKind::InvalidInput
     );
     check_device(&mut device).unwrap();
