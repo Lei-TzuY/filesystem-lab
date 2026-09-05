@@ -106,7 +106,9 @@ fn validate_regular_file_target(
         .find(|inode| inode.id == target)
         .ok_or_else(|| invalid_input(format!("{label} inode does not exist")))?;
     if inode.kind != InodeKind::File {
-        return Err(invalid_input(format!("{label} inode is not a regular file")));
+        return Err(invalid_input(format!(
+            "{label} inode is not a regular file"
+        )));
     }
     Ok(())
 }
