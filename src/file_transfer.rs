@@ -64,7 +64,9 @@ pub fn transfer_file_block_range_journaled(
         .position(|inode| inode.id == destination_inode_id)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "destination inode is missing"))?;
 
-    if inodes[source_pos].kind != InodeKind::File || inodes[destination_pos].kind != InodeKind::File {
+    if inodes[source_pos].kind != InodeKind::File
+        || inodes[destination_pos].kind != InodeKind::File
+    {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "block-range transfer endpoints must both be regular files",
@@ -72,7 +74,10 @@ pub fn transfer_file_block_range_journaled(
     }
 
     let source_end = source_index.checked_add(block_count).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "source logical range overflows")
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "source logical range overflows",
+        )
     })?;
     if source_end > inodes[source_pos].blocks.len() {
         return Err(io::Error::new(
@@ -112,9 +117,10 @@ pub fn transfer_file_block_range_journaled(
     }
 
     inodes[source_pos].blocks.drain(source_index..source_end);
-    inodes[destination_pos]
-        .blocks
-        .splice(destination_index..destination_index, moved.iter().copied());
+    inodes[destination_pos].blocks.splice(
+        destination_index..destination_index,
+        moved.iter().copied(),
+    );
 
     let mut capture = CaptureDevice::new(superblock.total_blocks);
     store_inode_table(&mut capture, superblock, &inodes)?;
