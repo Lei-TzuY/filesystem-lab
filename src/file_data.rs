@@ -101,15 +101,23 @@ pub fn write_file_range_journaled(
         ));
     }
     let last_byte = start_offset.checked_add(data.len()).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "file-data range length overflow")
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "file-data range length overflow",
+        )
     })?;
     let block_count = last_byte.div_ceil(BLOCK_SIZE);
     let mut writes = Vec::with_capacity(block_count);
     let mut consumed = 0;
     for relative_index in 0..block_count {
-        let logical_index = first_block_index.checked_add(relative_index).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "file-data logical index overflow")
-        })?;
+        let logical_index = first_block_index
+            .checked_add(relative_index)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "file-data logical index overflow",
+                )
+            })?;
         let mut image = read_file_block(device, superblock, inode_id, logical_index)?;
         let begin = if relative_index == 0 { start_offset } else { 0 };
         let available = BLOCK_SIZE - begin;
@@ -155,30 +163,56 @@ pub fn append_file_block_journaled(
 ) -> io::Result<(u64, RecoveryReport)> {
     let mut allocator = load_allocator(device, superblock)?;
     let mut inodes = load_inode_table(device, superblock)?;
-    let inode = inodes.iter_mut().find(|inode| inode.id == inode_id).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "file-data target inode is missing")
-    })?;
+    let inode = inodes
+        .iter_mut()
+        .find(|inode| inode.id == inode_id)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "file-data target inode is missing",
+            )
+        })?;
     if inode.kind != InodeKind::File {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "file-data target must be a regular file"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "file-data target must be a regular file",
+        ));
     }
-    let block = allocator.allocate().map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+    let block = allocator
+        .allocate()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
     inode.blocks.push(block);
     let mut capture = CaptureDevice::new(superblock.total_blocks);
     store_allocator(&mut capture, superblock, &allocator)?;
     store_inode_table(&mut capture, superblock, &inodes)?;
     let mut changed = Vec::new();
-    capture.collect_changed_range(device, superblock.allocation_range(), "file append image did not render every allocation metadata block", &mut changed)?;
-    capture.collect_changed_range(device, superblock.inode_range(), "file append image did not render every inode metadata block", &mut changed)?;
+    capture.collect_changed_range(
+        device,
+        superblock.allocation_range(),
+        "file append image did not render every allocation metadata block",
+        &mut changed,
+    )?;
+    capture.collect_changed_range(
+        device,
+        superblock.inode_range(),
+        "file append image did not render every inode metadata block",
+        &mut changed,
+    )?;
     capture.ensure_empty("file append image rendered outside allocation and inode regions")?;
     changed.push((block, data));
     let mut log = JournalLog::new();
     let txid = log.begin()?;
-    for (home_block, image) in changed.iter().copied() { log.write(txid, home_block, image)?; }
+    for (home_block, image) in changed.iter().copied() {
+        log.write(txid, home_block, image)?;
+    }
     log.commit(txid)?;
     store_journal_image(device, *superblock, log.entries())?;
     let report = recover_journal_and_checkpoint(device, *superblock)?;
     if report.committed_transactions != 1 || report.home_writes != changed.len() {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "file append recovery report is inconsistent"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "file append recovery report is inconsistent",
+        ));
     }
     Ok((block, report))
 }
@@ -190,19 +224,36 @@ fn resolve_owned_file_block(
     file_block_index: usize,
 ) -> io::Result<u64> {
     let inodes = load_inode_table(device, superblock)?;
-    let inode = inodes.iter().find(|inode| inode.id == inode_id).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "file-data target inode is missing")
-    })?;
+    let inode = inodes
+        .iter()
+        .find(|inode| inode.id == inode_id)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "file-data target inode is missing",
+            )
+        })?;
     if inode.kind != InodeKind::File {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "file-data target must be a regular file"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "file-data target must be a regular file",
+        ));
     }
     let block = *inode.blocks.get(file_block_index).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "file-data logical block index is out of range")
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "file-data logical block index is out of range",
+        )
     })?;
     let allocator = load_allocator(device, superblock)?;
-    let owned = allocator.is_owned(block).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let owned = allocator
+        .is_owned(block)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     if !owned {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "file-data inode references an unowned block"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "file-data inode references an unowned block",
+        ));
     }
     Ok(block)
 }
