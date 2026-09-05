@@ -35,12 +35,5 @@ pub fn zero_file_range_journaled(
         ));
     }
     let zeros = vec![0_u8; len];
-    write_file_range_journaled(
-        device,
-        superblock,
-        inode_id,
-        first_block,
-        offset,
-        &zeros,
-    )
+    write_file_range_journaled(device, superblock, inode_id, first_block, offset, &zeros)
 }
