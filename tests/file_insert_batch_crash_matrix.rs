@@ -110,14 +110,8 @@ fn assert_new(
         read_file_block(device, superblock, 2, 0).unwrap(),
         [0x11; BLOCK_SIZE]
     );
-    assert_eq!(
-        read_file_block(device, superblock, 2, 1).unwrap(),
-        data[0]
-    );
-    assert_eq!(
-        read_file_block(device, superblock, 2, 2).unwrap(),
-        data[1]
-    );
+    assert_eq!(read_file_block(device, superblock, 2, 1).unwrap(), data[0]);
+    assert_eq!(read_file_block(device, superblock, 2, 2).unwrap(), data[1]);
     assert_eq!(
         read_file_block(device, superblock, 2, 3).unwrap(),
         [0x22; BLOCK_SIZE]
@@ -151,15 +145,9 @@ fn empty_or_out_of_range_insert_is_rejected_before_publication() {
         io::ErrorKind::InvalidInput
     );
     assert_eq!(
-        insert_file_blocks_journaled(
-            &mut device,
-            &superblock,
-            2,
-            3,
-            &[[0x33; BLOCK_SIZE]]
-        )
-        .unwrap_err()
-        .kind(),
+        insert_file_blocks_journaled(&mut device, &superblock, 2, 3, &[[0x33; BLOCK_SIZE]])
+            .unwrap_err()
+            .kind(),
         io::ErrorKind::InvalidInput
     );
     assert_old(&mut device, &superblock, first, second, &expected);
@@ -173,8 +161,7 @@ fn every_insert_range_mutation_crash_point_is_old_or_recoverable_new_state() {
     let data = [[0xa7; BLOCK_SIZE], [0x7a; BLOCK_SIZE]];
     let (mut probe, superblock, first, second, expected) = setup();
     probe.arm(None);
-    let (_, report) =
-        insert_file_blocks_journaled(&mut probe, &superblock, 2, 1, &data).unwrap();
+    let (_, report) = insert_file_blocks_journaled(&mut probe, &superblock, 2, 1, &data).unwrap();
     assert_eq!(report.home_writes, 4);
     let mutation_operations = probe.operations();
     assert!(mutation_operations >= 8);
