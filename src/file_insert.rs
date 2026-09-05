@@ -37,7 +37,12 @@ pub fn insert_file_block_journaled(
     let inode = inodes
         .iter_mut()
         .find(|inode| inode.id == inode_id)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "file insert target inode is missing"))?;
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "file insert target inode is missing",
+            )
+        })?;
     if inode.kind != InodeKind::File {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
