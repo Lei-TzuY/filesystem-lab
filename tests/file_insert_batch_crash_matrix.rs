@@ -106,10 +106,22 @@ fn assert_new(
     for block in expected {
         assert!(allocator.is_owned(*block).unwrap());
     }
-    assert_eq!(read_file_block(device, superblock, 2, 0).unwrap(), [0x11; BLOCK_SIZE]);
-    assert_eq!(read_file_block(device, superblock, 2, 1).unwrap(), data[0]);
-    assert_eq!(read_file_block(device, superblock, 2, 2).unwrap(), data[1]);
-    assert_eq!(read_file_block(device, superblock, 2, 3).unwrap(), [0x22; BLOCK_SIZE]);
+    assert_eq!(
+        read_file_block(device, superblock, 2, 0).unwrap(),
+        [0x11; BLOCK_SIZE]
+    );
+    assert_eq!(
+        read_file_block(device, superblock, 2, 1).unwrap(),
+        data[0]
+    );
+    assert_eq!(
+        read_file_block(device, superblock, 2, 2).unwrap(),
+        data[1]
+    );
+    assert_eq!(
+        read_file_block(device, superblock, 2, 3).unwrap(),
+        [0x22; BLOCK_SIZE]
+    );
 }
 
 #[test]
@@ -122,7 +134,9 @@ fn insert_range_allocates_blocks_and_shifts_suffix() {
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(report.home_writes, 4);
     assert_new(&mut device, &superblock, first, second, &expected, &data);
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
     check_device(&mut device).unwrap();
 }
 
@@ -149,7 +163,9 @@ fn empty_or_out_of_range_insert_is_rejected_before_publication() {
         io::ErrorKind::InvalidInput
     );
     assert_old(&mut device, &superblock, first, second, &expected);
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -202,7 +218,9 @@ fn every_insert_range_mutation_crash_point_is_old_or_recoverable_new_state() {
             assert_new(&mut device, &superblock, first, second, &expected, &data);
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
 
         let second_recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         assert_eq!(second_recovery, RecoveryReport::default());
