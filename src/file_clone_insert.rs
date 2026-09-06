@@ -75,7 +75,9 @@ pub fn clone_file_blocks_insert_journaled(
     let source_index = inodes
         .iter()
         .position(|inode| inode.id == source_inode)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "clone source inode is missing"))?;
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "clone source inode is missing")
+        })?;
     let destination_index = inodes
         .iter()
         .position(|inode| inode.id == destination_inode)
@@ -123,9 +125,10 @@ pub fn clone_file_blocks_insert_journaled(
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
         new_blocks.push(block);
     }
-    inodes[destination_index]
-        .blocks
-        .splice(destination_logical_index..destination_logical_index, new_blocks.iter().copied());
+    inodes[destination_index].blocks.splice(
+        destination_logical_index..destination_logical_index,
+        new_blocks.iter().copied(),
+    );
 
     let mut capture = CaptureDevice::new(superblock.total_blocks);
     store_allocator(&mut capture, superblock, &allocator)?;
