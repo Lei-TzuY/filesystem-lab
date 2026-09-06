@@ -102,11 +102,9 @@ fn every_symlink_mutation_crash_point_is_old_or_recoverable_new_state() {
         device.reboot();
 
         let raw_is_old = load_inode_table(&mut device, &superblock)
-            .map(|inodes| inodes == vec![root_inode()])
-            .unwrap_or(false)
+            .is_ok_and(|inodes| inodes == vec![root_inode()])
             && load_directory_table(&mut device, &superblock)
-                .map(|entries| entries.is_empty())
-                .unwrap_or(false);
+                .is_ok_and(|entries| entries.is_empty());
         let raw_is_new = symlink_state(&mut device, &superblock)
             .and_then(|(id, block)| {
                 let owned = load_allocator(&mut device, &superblock)
@@ -115,8 +113,7 @@ fn every_symlink_mutation_crash_point_is_old_or_recoverable_new_state() {
                     .ok()?;
                 let entries = load_directory_table(&mut device, &superblock).ok()?;
                 let target_ok = read_symlink(&mut device, &superblock, id)
-                    .map(|target| target == TARGET)
-                    .unwrap_or(false);
+                    .is_ok_and(|target| target == TARGET);
                 Some(owned && entries.len() == 1 && entries[0].target == id && target_ok)
             })
             .unwrap_or(false);
