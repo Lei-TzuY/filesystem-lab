@@ -191,6 +191,31 @@ fn validate_exchange_ownership(
     Ok(())
 }
 
+fn validate_single_exchange_ownership(
+    allocator: &BlockAllocator,
+    inode: &PersistedInode,
+) -> io::Result<()> {
+    let mut seen = HashSet::new();
+    for block in inode.blocks.iter().copied() {
+        if !seen.insert(block) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "same-file exchange inode contains duplicate physical-block references",
+            ));
+        }
+        if !allocator
+            .is_owned(block)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "same-file exchange references a block that is not allocator-owned",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn publish_exchange_inodes(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -258,6 +283,74 @@ pub fn exchange_variable_file_block_ranges_journaled(
     inodes[right_pos]
         .blocks
         .splice(right.start..right_end, left_blocks.iter().copied());
+
+    publish_exchange_inodes(device, superblock, &inodes)
+}
+
+/// Atomically exchanges two disjoint logical-block ranges within one regular file.
+///
+/// Range coordinates refer to the original block vector. The ranges may have different lengths but
+/// must not overlap. Physical blocks are only reordered: no allocation, freeing, data writes, or
+/// namespace updates occur, so allocator accounting and inode identity remain unchanged.
+///
+/// Format v5 has no persisted byte length, so this operation is block-granular and does not define
+/// EOF, sparse-hole, extent, reflink, or POSIX range-exchange semantics.
+///
+/// # Errors
+/// Returns `InvalidInput` for different/missing/non-file inode endpoints, empty, overlapping,
+/// overflowing, or out-of-range intervals. Returns `InvalidData` for duplicate physical references
+/// or allocator ownership disagreement. WAL, checkpoint, codec, and device errors are propagated.
+pub fn exchange_same_file_block_ranges_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    first: FileBlockExchangeRange,
+    second: FileBlockExchangeRange,
+) -> io::Result<RecoveryReport> {
+    if first.inode != second.inode {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "same-file block-range exchange requires one inode",
+        ));
+    }
+    let first_end = exchange_range_end(first, "first")?;
+    let second_end = exchange_range_end(second, "second")?;
+    let (earlier, earlier_end, later, later_end) = if first.start <= second.start {
+        (first, first_end, second, second_end)
+    } else {
+        (second, second_end, first, first_end)
+    };
+    if earlier_end > later.start {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "same-file exchange ranges must be disjoint",
+        ));
+    }
+
+    let allocator = load_allocator(device, superblock)?;
+    let mut inodes = load_inode_table(device, superblock)?;
+    let inode_pos = exchange_inode_index(&inodes, first.inode, "same-file")?;
+    if inodes[inode_pos].kind != InodeKind::File {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "same-file exchange endpoint must be a regular file",
+        ));
+    }
+    if later_end > inodes[inode_pos].blocks.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "same-file exchange is beyond file end",
+        ));
+    }
+    validate_single_exchange_ownership(&allocator, &inodes[inode_pos])?;
+
+    let old = inodes[inode_pos].blocks.clone();
+    let mut reordered = Vec::with_capacity(old.len());
+    reordered.extend_from_slice(&old[..earlier.start]);
+    reordered.extend_from_slice(&old[later.start..later_end]);
+    reordered.extend_from_slice(&old[earlier_end..later.start]);
+    reordered.extend_from_slice(&old[earlier.start..earlier_end]);
+    reordered.extend_from_slice(&old[later_end..]);
+    inodes[inode_pos].blocks = reordered;
 
     publish_exchange_inodes(device, superblock, &inodes)
 }
