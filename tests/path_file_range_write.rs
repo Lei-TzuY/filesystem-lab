@@ -189,10 +189,7 @@ fn every_pathname_write_crash_point_recovers_old_or_complete_new_data() {
             assert_eq!(second, vec![0xaa; 8]);
         }
 
-        assert_eq!(
-            load_inode_table(&mut device, &superblock).unwrap(),
-            inodes_before
-        );
+        assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
         assert_eq!(
             load_directory_table(&mut device, &superblock).unwrap(),
             directory_before
