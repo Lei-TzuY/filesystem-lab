@@ -10,6 +10,7 @@ use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
 use crate::recovery::RecoveryReport;
 use crate::symlink::read_symlink;
+use crate::truncate_tx::truncate_file_to_blocks_journaled;
 
 pub const MAX_SYMLINK_EXPANSIONS: usize = 40;
 
@@ -134,6 +135,31 @@ pub fn write_file_range_at_path_journaled(
         start_offset,
         data,
     )
+}
+
+/// Atomically truncates the regular file named by an absolute pathname to an exact block count.
+///
+/// Path resolution follows intermediate and final symbolic links with the same bounded expansion
+/// rules as [`resolve_path_following_symlinks`]. The resolved inode is delegated directly to
+/// [`truncate_file_to_blocks_journaled`], so allocator ownership validation and the allocation+inode
+/// WAL transaction remain centralized in the existing truncate primitive.
+///
+/// Format v5 does not persist byte length. This operation is therefore deliberately block-granular:
+/// it may shrink only to a count of complete 4 KiB logical blocks and cannot grow, create sparse
+/// holes, or define partial-block EOF semantics.
+///
+/// # Errors
+/// Propagates pathname lookup errors and all [`truncate_file_to_blocks_journaled`] validation or
+/// durable I/O errors, including a resolved non-file inode, growth attempts, ownership disagreement,
+/// and insufficient journal capacity.
+pub fn truncate_file_at_path_to_blocks_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    path: &str,
+    target_blocks: usize,
+) -> io::Result<(Vec<u64>, RecoveryReport)> {
+    let inode_id = resolve_path_following_symlinks(device, superblock, path)?;
+    truncate_file_to_blocks_journaled(device, superblock, inode_id, target_blocks)
 }
 
 fn resolve_path(
