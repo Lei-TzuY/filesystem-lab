@@ -14,6 +14,7 @@ pub mod file_append_batch;
 pub mod file_clone_append;
 pub mod file_clone_insert;
 pub mod file_clone_replace;
+pub mod file_clone_splice;
 pub mod file_collapse;
 pub mod file_copy_range;
 pub mod file_data;
