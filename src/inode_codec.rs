@@ -3,11 +3,12 @@ use std::io;
 use crate::inode::{Inode, InodeKind};
 
 pub const INODE_RECORD_MAGIC: [u8; 4] = *b"INO1";
-pub const INODE_RECORD_VERSION: u16 = 1;
+pub const INODE_RECORD_VERSION: u16 = 2;
 pub const INODE_RECORD_HEADER_LEN: usize = 32;
 
 const KIND_FILE: u16 = 1;
 const KIND_DIRECTORY: u16 = 2;
+const KIND_SYMLINK: u16 = 3;
 const MAGIC_OFFSET: usize = 0;
 const VERSION_OFFSET: usize = 4;
 const KIND_OFFSET: usize = 6;
@@ -178,6 +179,7 @@ pub fn decode_inode(bytes: &[u8]) -> io::Result<PersistedInode> {
     let kind = match read_u16(bytes, KIND_OFFSET) {
         KIND_FILE => InodeKind::File,
         KIND_DIRECTORY => InodeKind::Directory,
+        KIND_SYMLINK => InodeKind::Symlink,
         _ => {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -207,6 +209,7 @@ const fn kind_code(kind: InodeKind) -> u16 {
     match kind {
         InodeKind::File => KIND_FILE,
         InodeKind::Directory => KIND_DIRECTORY,
+        InodeKind::Symlink => KIND_SYMLINK,
     }
 }
 
@@ -268,6 +271,17 @@ mod tests {
     #[test]
     fn round_trip_preserves_inode() {
         let inode = sample();
+        let encoded = encode_inode(&inode).unwrap();
+        assert_eq!(decode_inode(&encoded).unwrap(), inode);
+    }
+
+    #[test]
+    fn round_trip_preserves_symlink_kind() {
+        let inode = PersistedInode {
+            id: 9,
+            kind: InodeKind::Symlink,
+            blocks: vec![31],
+        };
         let encoded = encode_inode(&inode).unwrap();
         assert_eq!(decode_inode(&encoded).unwrap(), inode);
     }
