@@ -169,9 +169,8 @@ fn invalid_variable_exchange_is_rejected_before_publication() {
         ),
     ];
     for (left, right) in invalid {
-        let error =
-            exchange_variable_file_block_ranges_journaled(&mut device, &sb, left, right)
-                .unwrap_err();
+        let error = exchange_variable_file_block_ranges_journaled(&mut device, &sb, left, right)
+            .unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     }
     assert_eq!(
