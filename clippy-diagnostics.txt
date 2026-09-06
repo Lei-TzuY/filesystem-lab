@@ -1,0 +1,12 @@
+[1m[92m    Checking[0m filesystem-lab v0.1.0 (/home/runner/work/filesystem-lab/filesystem-lab)
+[1m[91merror[0m[1m: unused import: `BlockDevice`[0m
+ [1m[94m--> [0mtests/path_file_range_write.rs:5:29
+  [1m[94m|[0m
+[1m[94m5[0m [1m[94m|[0m use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
+  [1m[94m|[0m                             [1m[91m^^^^^^^^^^^[0m
+  [1m[94m|[0m
+  [1m[94m= [0m[1mnote[0m: `-D unused-imports` implied by `-D warnings`
+  [1m[94m= [0m[1mhelp[0m: to override `-D warnings` add `#[allow(unused_imports)]`
+
+[1m[91merror[0m: could not compile `filesystem-lab` (test "path_file_range_write") due to 1 previous error
+[1m[33mwarning[0m: build failed, waiting for other jobs to finish...
