@@ -12,6 +12,7 @@ use crate::inode_codec::PersistedInode;
 use crate::inode_table::load_inode_table;
 use crate::journal::{JournalEntry, TransactionId};
 use crate::journal_region::load_journal_image;
+use crate::symlink::validate_symlink_inode;
 
 pub const ROOT_INODE_ID: u64 = 1;
 
@@ -33,8 +34,9 @@ pub struct FsckReport {
 
 /// Performs a read-only consistency check over all currently durable filesystem metadata.
 ///
-/// The check validates the superblock, allocation bitmap, inode table, directory table, and bounded
-/// journal region. It enforces cross-layer ownership and namespace references: every inode block
+/// The check validates the superblock, allocation bitmap, inode table, directory table, bounded
+/// journal region, and payload invariants for inode kinds that own self-describing data such as
+/// symbolic links. It enforces cross-layer ownership and namespace references: every inode block
 /// reference must name an allocated data block, no data block may be owned by more than one inode,
 /// every directory parent/target must name an existing inode, and every directory parent must itself
 /// be a directory. Once the inode table is non-empty, inode 1 is the unique root, must be a directory,
@@ -47,9 +49,10 @@ pub struct FsckReport {
 /// # Errors
 ///
 /// Returns `InvalidData` for malformed/corrupt durable metadata, invalid allocation accounting,
-/// invalid inode references or double ownership, dangling/invalid directory references, missing or
-/// invalid root state, unreachable inodes, directory cycles, malformed journal ordering, or forbidden
-/// journal home locations. Underlying device read errors are propagated.
+/// invalid inode references or double ownership, malformed inode-kind payloads, dangling/invalid
+/// directory references, missing or invalid root state, unreachable inodes, directory cycles,
+/// malformed journal ordering, or forbidden journal home locations. Underlying device read errors
+/// are propagated.
 pub fn check_device(device: &mut impl BlockDevice) -> io::Result<FsckReport> {
     let superblock = read_superblock(device).map_err(|error| with_context("superblock", &error))?;
     let allocator =
@@ -57,6 +60,7 @@ pub fn check_device(device: &mut impl BlockDevice) -> io::Result<FsckReport> {
     let inodes = load_inode_table(device, &superblock)
         .map_err(|error| with_context("inode table", &error))?;
     let referenced_blocks = audit_inode_ownership(&superblock, &allocator, &inodes)?;
+    audit_inode_payloads(device, &inodes)?;
     let directory_entries = load_directory_table(device, &superblock)
         .map_err(|error| with_context("directory table", &error))?;
     audit_namespace(&inodes, &directory_entries)?;
@@ -71,6 +75,17 @@ pub fn check_device(device: &mut impl BlockDevice) -> io::Result<FsckReport> {
         referenced_blocks,
         directory_entries.len(),
     )
+}
+
+fn audit_inode_payloads(
+    device: &mut impl BlockDevice,
+    inodes: &[PersistedInode],
+) -> io::Result<()> {
+    for inode in inodes {
+        validate_symlink_inode(device, inode)
+            .map_err(|error| with_context("symlink payload", &error))?;
+    }
+    Ok(())
 }
 
 fn audit_inode_ownership(
