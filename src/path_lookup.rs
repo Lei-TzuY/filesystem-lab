@@ -27,6 +27,51 @@ pub fn resolve_path_following_symlinks(
     superblock: &Superblock,
     path: &str,
 ) -> io::Result<u64> {
+    resolve_path(device, superblock, path, true)
+}
+
+/// Resolves one absolute path while following intermediate symbolic links but not the final one.
+///
+/// This is the lookup primitive needed by `readlink`-style operations: if the final namespace entry
+/// names a symbolic-link inode, the inode itself is returned even when its target is dangling.
+/// Intermediate symlinks retain the same bounded expansion and validation contract as
+/// [`resolve_path_following_symlinks`].
+///
+/// # Errors
+/// Returns the same path and consistency errors as [`resolve_path_following_symlinks`], except that
+/// the final symbolic-link payload is not read merely to resolve its inode.
+pub fn resolve_path_without_following_final_symlink(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    path: &str,
+) -> io::Result<u64> {
+    resolve_path(device, superblock, path, false)
+}
+
+/// Reads the persisted target of the symbolic link named by one absolute pathname.
+///
+/// Intermediate symbolic links are followed, but the final component is resolved without following
+/// it. The final inode must itself be a symbolic link; its persisted `SYM1` payload is then validated
+/// by [`read_symlink`]. A dangling target is therefore readable, matching `readlink`-style semantics.
+///
+/// # Errors
+/// Propagates bounded pathname lookup errors and returns `InvalidInput` when the final inode is not
+/// a symbolic link. Corrupt symbolic-link payloads return `InvalidData`.
+pub fn read_symlink_at_path(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    path: &str,
+) -> io::Result<String> {
+    let inode_id = resolve_path_without_following_final_symlink(device, superblock, path)?;
+    read_symlink(device, superblock, inode_id)
+}
+
+fn resolve_path(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    path: &str,
+    follow_final_symlink: bool,
+) -> io::Result<u64> {
     if !path.starts_with('/') {
         return Err(invalid_input("path must be absolute"));
     }
@@ -54,6 +99,10 @@ pub fn resolve_path_following_symlinks(
         let target_inode = require_inode(&inodes, entry.target)?;
 
         if target_inode.kind == InodeKind::Symlink {
+            if pending.is_empty() && !follow_final_symlink {
+                return Ok(target_inode.id);
+            }
+
             symlink_expansions += 1;
             if symlink_expansions > MAX_SYMLINK_EXPANSIONS {
                 return Err(io::Error::new(
