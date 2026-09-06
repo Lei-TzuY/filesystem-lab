@@ -86,18 +86,17 @@ fn parse_components(path: &str) -> io::Result<VecDeque<String>> {
     if path.ends_with('/') {
         return Err(invalid_input("non-root path must not end with '/'"));
     }
-    parse_component_sequence(path.trim_start_matches('/'))
+    let body = path
+        .strip_prefix('/')
+        .ok_or_else(|| invalid_input("path must be absolute"))?;
+    parse_component_sequence(body)
 }
 
 fn parse_target_components(target: &str) -> io::Result<VecDeque<String>> {
     if target == "/" {
         return Ok(VecDeque::new());
     }
-    let body = if target.starts_with('/') {
-        target.trim_start_matches('/')
-    } else {
-        target
-    };
+    let body = target.strip_prefix('/').unwrap_or(target);
     if target.ends_with('/') {
         return Err(invalid_input("symlink target must not end with '/'"));
     }
