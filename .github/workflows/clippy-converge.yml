@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  clippy-fix:
+  clippy-diagnostic:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,15 +18,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy,rustfmt
-      - run: cargo clippy --fix --allow-dirty --all-targets --all-features -- -D warnings
-      - run: cargo fmt --all
-      - name: Commit canonical clippy fixes
+      - name: Capture exact CI clippy output
         run: |
-          if git diff --quiet; then
+          if test -f .clippy-output.txt; then
             exit 0
           fi
+          set +e
+          cargo clippy --all-targets --all-features -- -D warnings > .clippy-output.txt 2>&1
+          status=$?
+          set -e
           git config user.name LeiZ
           git config user.email 52287354+Lei-TzuY@users.noreply.github.com
-          git add src tests
-          git commit -m "Apply clippy fixes to path lookup"
+          git add .clippy-output.txt
+          git commit -m "Capture temporary clippy diagnostic"
           git push origin HEAD:bil-239-path-lookup
+          exit $status
