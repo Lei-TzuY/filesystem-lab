@@ -253,12 +253,18 @@ mod tests {
 
         let mut corrupt = image;
         corrupt[SYMLINK_HEADER_LEN] ^= 0x20;
-        assert_eq!(decode_target(&corrupt).unwrap_err().kind(), io::ErrorKind::InvalidData);
+        assert_eq!(
+            decode_target(&corrupt).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
     }
 
     #[test]
     fn target_codec_rejects_empty_and_oversized_targets() {
-        assert_eq!(encode_target("").unwrap_err().kind(), io::ErrorKind::InvalidInput);
+        assert_eq!(
+            encode_target("").unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
         let oversized = "x".repeat(MAX_SYMLINK_TARGET_LEN + 1);
         assert_eq!(
             encode_target(&oversized).unwrap_err().kind(),
