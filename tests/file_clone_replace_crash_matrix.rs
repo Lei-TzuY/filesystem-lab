@@ -22,11 +22,8 @@ use support::CrashDevice;
 
 const JOURNAL_BLOCKS: u64 = 6;
 const SOURCE_DATA: [[u8; BLOCK_SIZE]; 2] = [[0x31; BLOCK_SIZE], [0x72; BLOCK_SIZE]];
-const DESTINATION_DATA: [[u8; BLOCK_SIZE]; 3] = [
-    [0x19; BLOCK_SIZE],
-    [0x28; BLOCK_SIZE],
-    [0x37; BLOCK_SIZE],
-];
+const DESTINATION_DATA: [[u8; BLOCK_SIZE]; 3] =
+    [[0x19; BLOCK_SIZE], [0x28; BLOCK_SIZE], [0x37; BLOCK_SIZE]];
 
 fn setup() -> (CrashDevice, Superblock, Vec<u64>, Vec<u64>, Vec<u64>) {
     let mut device = CrashDevice::new(64);
@@ -140,11 +137,7 @@ fn assert_new(
     assert_source_unchanged(device, superblock, source_blocks);
     assert_eq!(
         inode_blocks(device, superblock, 3),
-        vec![
-            destination_blocks[0],
-            expected_new[0],
-            expected_new[1]
-        ]
+        vec![destination_blocks[0], expected_new[0], expected_new[1]]
     );
     let allocator = load_allocator(device, superblock).unwrap();
     assert!(allocator.is_owned(destination_blocks[0]).unwrap());
@@ -239,12 +232,7 @@ fn every_clone_replacement_crash_point_is_old_or_recoverable_new_state() {
             && raw_destination == destination_blocks;
         let raw_is_new = raw_new_owned == [true, true]
             && raw_old_owned == [false, false]
-            && raw_destination
-                == vec![
-                    destination_blocks[0],
-                    expected_new[0],
-                    expected_new[1],
-                ];
+            && raw_destination == vec![destination_blocks[0], expected_new[0], expected_new[1]];
 
         if raw_is_old || raw_is_new {
             check_device(&mut device).unwrap();
