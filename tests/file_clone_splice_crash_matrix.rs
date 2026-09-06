@@ -283,13 +283,9 @@ fn clone_splice_rejects_empty_ranges_and_same_inode() {
 fn every_clone_splice_crash_point_is_old_or_recoverable_new_state() {
     let (mut probe, superblock, _, _, _) = setup();
     probe.arm(None);
-    let (_, _, report) = clone_file_blocks_splice_journaled(
-        &mut probe,
-        &superblock,
-        range(2, 0, 2),
-        range(3, 1, 1),
-    )
-    .unwrap();
+    let (_, _, report) =
+        clone_file_blocks_splice_journaled(&mut probe, &superblock, range(2, 0, 2), range(3, 1, 1))
+            .unwrap();
     assert_eq!(report.home_writes, 4);
     let mutation_operations = probe.operations();
     assert!(mutation_operations >= 8);
