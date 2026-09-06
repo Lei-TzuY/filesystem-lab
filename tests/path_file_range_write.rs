@@ -80,8 +80,15 @@ fn write_crossing(device: &mut CrashDevice, superblock: &Superblock) -> io::Resu
 fn writes_regular_file_ranges_through_direct_and_symlink_paths() {
     let (mut device, superblock) = setup();
 
-    write_file_range_at_path_journaled(&mut device, &superblock, "/dir/file", 0, 100, b"direct")
-        .unwrap();
+    write_file_range_at_path_journaled(
+        &mut device,
+        &superblock,
+        "/dir/file",
+        0,
+        100,
+        b"direct",
+    )
+    .unwrap();
     assert_eq!(
         read_file_range_at_path(&mut device, &superblock, "/dir/file", 0, 100, 6).unwrap(),
         b"direct"
@@ -182,7 +189,10 @@ fn every_pathname_write_crash_point_recovers_old_or_complete_new_data() {
             assert_eq!(second, vec![0xaa; 8]);
         }
 
-        assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+        assert_eq!(
+            load_inode_table(&mut device, &superblock).unwrap(),
+            inodes_before
+        );
         assert_eq!(
             load_directory_table(&mut device, &superblock).unwrap(),
             directory_before
