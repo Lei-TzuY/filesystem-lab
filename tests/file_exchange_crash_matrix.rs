@@ -184,19 +184,12 @@ fn every_exchange_mutation_crash_point_is_old_or_recoverable_new() {
 #[test]
 fn same_file_exchange_swaps_different_lengths_without_reallocation() {
     let (mut device, sb, blocks) = setup();
-    let report = exchange_same_file_block_ranges_journaled(
-        &mut device,
-        &sb,
-        range(2, 0, 1),
-        range(2, 1, 2),
-    )
-    .unwrap();
+    let report =
+        exchange_same_file_block_ranges_journaled(&mut device, &sb, range(2, 0, 1), range(2, 1, 2))
+            .unwrap();
     assert_eq!(
         mappings(&mut device, &sb),
-        (
-            vec![blocks[1], blocks[2], blocks[0]],
-            blocks[3..].to_vec(),
-        )
+        (vec![blocks[1], blocks[2], blocks[0]], blocks[3..].to_vec(),)
     );
     assert_eq!(report.committed_transactions, 1);
     assert_owned(&mut device, &sb, blocks);
@@ -207,27 +200,12 @@ fn same_file_exchange_swaps_different_lengths_without_reallocation() {
 fn invalid_same_file_exchange_is_rejected_before_publication() {
     let (mut device, sb, blocks) = setup();
     for error in [
-        exchange_same_file_block_ranges_journaled(
-            &mut device,
-            &sb,
-            range(2, 0, 1),
-            range(3, 1, 1),
-        )
-        .unwrap_err(),
-        exchange_same_file_block_ranges_journaled(
-            &mut device,
-            &sb,
-            range(2, 0, 2),
-            range(2, 1, 1),
-        )
-        .unwrap_err(),
-        exchange_same_file_block_ranges_journaled(
-            &mut device,
-            &sb,
-            range(2, 0, 0),
-            range(2, 1, 1),
-        )
-        .unwrap_err(),
+        exchange_same_file_block_ranges_journaled(&mut device, &sb, range(2, 0, 1), range(3, 1, 1))
+            .unwrap_err(),
+        exchange_same_file_block_ranges_journaled(&mut device, &sb, range(2, 0, 2), range(2, 1, 1))
+            .unwrap_err(),
+        exchange_same_file_block_ranges_journaled(&mut device, &sb, range(2, 0, 0), range(2, 1, 1))
+            .unwrap_err(),
     ] {
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     }
@@ -242,20 +220,13 @@ fn invalid_same_file_exchange_is_rejected_before_publication() {
 fn every_same_file_exchange_crash_point_is_old_or_recoverable_new() {
     let (mut probe, sb, blocks) = setup();
     probe.arm(None);
-    let report = exchange_same_file_block_ranges_journaled(
-        &mut probe,
-        &sb,
-        range(2, 0, 1),
-        range(2, 1, 2),
-    )
-    .unwrap();
+    let report =
+        exchange_same_file_block_ranges_journaled(&mut probe, &sb, range(2, 0, 1), range(2, 1, 2))
+            .unwrap();
     let home_writes = report.home_writes;
     let operations = probe.operations();
     let old = (blocks[..3].to_vec(), blocks[3..].to_vec());
-    let new = (
-        vec![blocks[1], blocks[2], blocks[0]],
-        blocks[3..].to_vec(),
-    );
+    let new = (vec![blocks[1], blocks[2], blocks[0]], blocks[3..].to_vec());
     for crash_at in 0..operations {
         let (mut device, sb, blocks) = setup();
         device.arm(Some(crash_at));
