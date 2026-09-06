@@ -1,4 +1,4 @@
-# Bounded regular-file range reads
+# Bounded regular-file range reads and pathname writes
 
 Format v5 persists regular-file data ownership as an ordered list of complete 4 KiB block references in each file inode. It does **not** persist a byte length. `read_file_range` therefore exposes a bounded byte-range view only inside logical blocks that already exist.
 
@@ -6,6 +6,8 @@ The caller supplies a first logical block index, an offset within that block, an
 
 `read_file_range_at_path` composes this same data-path contract with bounded absolute pathname resolution. It follows intermediate and final symbolic links using the existing `MAX_SYMLINK_EXPANSIONS` limit, then delegates the resolved inode to `read_file_range`. Ordinary paths, directory symlink aliases, and final symlinks to regular files therefore share one allocator/inode validation path. Dangling links and pathname lookup failures are surfaced before data access; a resolved non-file inode is rejected by the regular-file reader.
 
-Both operations are read-only. They do not publish WAL records, allocate blocks, infer EOF, synthesize sparse holes, extend files, or change namespace/inode/allocation state. Consequently they add no new crash-consistency ordering contract and do not change the on-disk format version.
+Both read operations are read-only. They do not publish WAL records, allocate blocks, infer EOF, synthesize sparse holes, extend files, or change namespace/inode/allocation state. Consequently they add no new crash-consistency ordering contract and do not change the on-disk format version.
 
-The corresponding mutation path remains `write_file_range_journaled`, which commits complete resulting block images through one WAL transaction when the entire byte range fits inside already allocated logical file blocks.
+The corresponding mutation primitive `write_file_range_journaled` commits complete resulting block images through one WAL transaction when the entire byte range fits inside already allocated logical file blocks. `write_file_range_at_path_journaled` composes bounded absolute pathname resolution with that same inode-ID mutation primitive: intermediate and final symlinks are followed with the existing expansion limit, then the resolved inode is handed directly to `write_file_range_journaled`.
+
+The pathname wrapper does not introduce a second durability protocol or metadata mutation. Regular-file kind checks, logical range bounds, allocator ownership validation, journal capacity, WAL publication, home writes, recovery, and checkpoint clearing remain centralized in `write_file_range_journaled`. The deterministic pathname crash regression enumerates every modeled write/flush boundary and requires old-or-complete-new file data, unchanged inode and namespace images, fsck cleanliness, an empty checkpointed journal, and idempotent second recovery. Filesystem format remains v5; there is still no byte-length/EOF, extension, sparse-hole, allocation, or path-based create/truncate contract.
