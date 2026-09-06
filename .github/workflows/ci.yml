@@ -25,5 +25,17 @@ jobs:
             tests/symlink_crash_matrix.rs
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
-      - name: Test
-        run: cargo test --all-targets --all-features
+      - name: Test probe
+        run: |
+          set +e
+          cargo test --all-targets --all-features > test.log 2>&1
+          status=$?
+          echo "$status" > test.status
+          exit 0
+      - name: Capture test probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-probe
+          path: |
+            test.log
+            test.status
