@@ -13,11 +13,12 @@ impl InodeId {
     }
 }
 
-/// Minimal inode kinds needed before directory-entry semantics are introduced.
+/// Minimal inode kinds needed by the durable filesystem model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InodeKind {
     File,
     Directory,
+    Symlink,
 }
 
 /// In-memory inode state.
