@@ -163,14 +163,9 @@ fn every_pathname_truncate_crash_point_recovers_old_or_complete_new_state() {
         let namespace_before = load_directory_table(&mut device, &superblock).unwrap();
         device.arm(Some(crash_at));
         assert_eq!(
-            truncate_file_at_path_to_blocks_journaled(
-                &mut device,
-                &superblock,
-                "/file_alias",
-                1,
-            )
-            .unwrap_err()
-            .kind(),
+            truncate_file_at_path_to_blocks_journaled(&mut device, &superblock, "/file_alias", 1,)
+                .unwrap_err()
+                .kind(),
             io::ErrorKind::Other,
         );
         device.reboot();
@@ -184,8 +179,10 @@ fn every_pathname_truncate_crash_point_recovers_old_or_complete_new_state() {
         }
 
         recover_journal_and_checkpoint(&mut device, superblock).unwrap();
-        assert!(state_is_old(&mut device, &superblock, &blocks)
-            || state_is_new(&mut device, &superblock, &blocks));
+        assert!(
+            state_is_old(&mut device, &superblock, &blocks)
+                || state_is_new(&mut device, &superblock, &blocks)
+        );
         assert_eq!(
             load_directory_table(&mut device, &superblock).unwrap(),
             namespace_before,
