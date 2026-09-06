@@ -151,26 +151,29 @@ fn assert_new(
     for block in expected_new {
         assert!(allocator.is_owned(*block).unwrap());
     }
-    assert_eq!(read_file_block(device, superblock, 3, 0).unwrap(), DESTINATION_DATA[0]);
-    assert_eq!(read_file_block(device, superblock, 3, 1).unwrap(), SOURCE_DATA[0]);
-    assert_eq!(read_file_block(device, superblock, 3, 2).unwrap(), SOURCE_DATA[1]);
-    assert_eq!(read_file_block(device, superblock, 3, 3).unwrap(), DESTINATION_DATA[2]);
+    assert_eq!(
+        read_file_block(device, superblock, 3, 0).unwrap(),
+        DESTINATION_DATA[0]
+    );
+    assert_eq!(
+        read_file_block(device, superblock, 3, 1).unwrap(),
+        SOURCE_DATA[0]
+    );
+    assert_eq!(
+        read_file_block(device, superblock, 3, 2).unwrap(),
+        SOURCE_DATA[1]
+    );
+    assert_eq!(
+        read_file_block(device, superblock, 3, 3).unwrap(),
+        DESTINATION_DATA[2]
+    );
 }
 
 #[test]
 fn clone_splice_grows_destination_and_releases_exactly_displaced_blocks() {
     let (mut device, superblock, source_blocks, destination_blocks, expected_new) = setup();
-    let (new_blocks, displaced, report) = clone_file_blocks_splice_journaled(
-        &mut device,
-        &superblock,
-        2,
-        0,
-        2,
-        3,
-        1,
-        1,
-    )
-    .unwrap();
+    let (new_blocks, displaced, report) =
+        clone_file_blocks_splice_journaled(&mut device, &superblock, 2, 0, 2, 3, 1, 1).unwrap();
 
     assert_eq!(new_blocks, expected_new);
     assert_eq!(displaced, vec![destination_blocks[1]]);
@@ -183,7 +186,9 @@ fn clone_splice_grows_destination_and_releases_exactly_displaced_blocks() {
         &destination_blocks,
         &expected_new,
     );
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
     check_device(&mut device).unwrap();
 }
 
@@ -281,7 +286,9 @@ fn every_clone_splice_crash_point_is_old_or_recoverable_new_state() {
             );
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

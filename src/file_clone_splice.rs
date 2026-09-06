@@ -119,9 +119,14 @@ pub fn clone_file_blocks_splice_journaled(
         ));
     }
 
-    let source_end = source_start.checked_add(source_block_count).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "clone splice source range overflows usize")
-    })?;
+    let source_end = source_start
+        .checked_add(source_block_count)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "clone splice source range overflows usize",
+            )
+        })?;
     let destination_end = destination_start
         .checked_add(destination_block_count)
         .ok_or_else(|| {
@@ -136,12 +141,17 @@ pub fn clone_file_blocks_splice_journaled(
     let source_index = inodes
         .iter()
         .position(|inode| inode.id == source_inode)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "clone source inode is missing"))?;
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "clone source inode is missing")
+        })?;
     let destination_index = inodes
         .iter()
         .position(|inode| inode.id == destination_inode)
         .ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "clone destination inode is missing")
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "clone destination inode is missing",
+            )
         })?;
     if inodes[source_index].kind != InodeKind::File
         || inodes[destination_index].kind != InodeKind::File
@@ -192,9 +202,10 @@ pub fn clone_file_blocks_splice_journaled(
             .free(*block)
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     }
-    inodes[destination_index]
-        .blocks
-        .splice(destination_start..destination_end, new_blocks.iter().copied());
+    inodes[destination_index].blocks.splice(
+        destination_start..destination_end,
+        new_blocks.iter().copied(),
+    );
 
     let report = publish_splice(
         device,
