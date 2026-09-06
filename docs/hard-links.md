@@ -1,9 +1,9 @@
-# Regular-file hard links
+# Hard links
 
-Format v5 permits multiple directory entries to target the same regular-file inode. `hard_link_file_journaled` exposes that capability as one bounded crash-consistent namespace operation.
+Format v5 permits multiple directory entries to target the same regular-file inode or symbolic-link inode. `hard_link_file_journaled` exposes the regular-file operation; `hard_link_symlink_journaled` exposes the symbolic-link operation. Directory hard links remain rejected.
 
-The operation validates that the parent exists and is a directory, the target exists and is a regular file, and the destination `(parent, name)` is unused before publishing WAL state. It changes only the directory-table image; allocator ownership and inode block references are unchanged. Directory hard links are rejected so root reachability and directory-cycle invariants are not weakened.
+Both operations validate that the parent exists and is a directory, the target has the required inode kind, and the destination `(parent, name)` is unused before publishing WAL state. The symlink variant additionally validates the existing one-block `SYM1` payload through `read_symlink` before publication. A successful hard link changes only the directory-table image: allocator ownership, inode block references, and file/symlink data remain unchanged.
 
-Link count is not a persisted inode field in format v5. The authoritative count is therefore the number of durable directory entries targeting the regular-file inode. Existing unlink semantics still reject removal of a multiply referenced inode; removing one of several links and freeing the inode on the last link are separate lifecycle work.
+Link count is not a persisted inode field in format v5. The authoritative count is therefore the number of durable directory entries targeting an inode. Regular files have a separate non-final unlink lifecycle. This slice does not add non-final symlink unlink; the existing symlink final-unlink operation continues to require exactly one namespace reference.
 
-The deterministic crash regression enumerates every modeled write/flush mutation boundary. After reboot, fsck must accept either the old one-name namespace or the complete two-name namespace. A durable commit is replayed to the complete two-name state, checkpoint clears the fixed journal reservation, and a second recovery/checkpoint pass is a no-op.
+The deterministic crash regressions enumerate every modeled write/flush mutation boundary. After reboot, fsck must accept either the old one-name namespace or the complete two-name namespace. A durable commit is replayed to the complete two-name state, checkpoint clears the fixed journal reservation, and a second recovery/checkpoint pass is a no-op. The symlink regression also requires allocator state, inode state, and the validated target payload to remain byte-semantically unchanged across the namespace-only transaction.
