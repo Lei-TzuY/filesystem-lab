@@ -6,7 +6,8 @@ use filesystem_lab::allocation_disk::{load_allocator, store_allocator};
 use filesystem_lab::block::BlockDevice;
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
 use filesystem_lab::directory_table::{load_directory_table, store_directory_table};
-use filesystem_lab::format::{format_device, Superblock};
+use filesystem_lab::format::Superblock;
+use filesystem_lab::format_geometry::format_device_with_journal_blocks;
 use filesystem_lab::fsck::check_device;
 use filesystem_lab::inode::InodeKind;
 use filesystem_lab::inode_codec::PersistedInode;
@@ -18,9 +19,11 @@ use filesystem_lab::recovery::RecoveryReport;
 use filesystem_lab::symlink::create_symlink_journaled;
 use support::CrashDevice;
 
+const JOURNAL_BLOCKS: u64 = 6;
+
 fn setup() -> (CrashDevice, Superblock, Vec<u64>) {
     let mut device = CrashDevice::new(96);
-    let superblock = format_device(&mut device).unwrap();
+    let superblock = format_device_with_journal_blocks(&mut device, JOURNAL_BLOCKS).unwrap();
     let mut allocator = load_allocator(&mut device, &superblock).unwrap();
     let blocks = (0..4)
         .map(|_| allocator.allocate().unwrap())
