@@ -60,13 +60,7 @@ pub fn create_symlink_journaled(
         name: name.to_owned(),
     });
 
-    let mut changed = collect_metadata_changes(
-        device,
-        superblock,
-        &allocator,
-        &inodes,
-        &entries,
-    )?;
+    let mut changed = collect_metadata_changes(device, superblock, &allocator, &inodes, &entries)?;
     changed.push((block, target_image));
     let report = publish_changes(device, superblock, &changed)?;
     Ok((inode_id, report))
