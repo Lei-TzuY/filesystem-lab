@@ -105,7 +105,7 @@ fn truncates_through_direct_intermediate_and_final_symlink_paths() {
         assert!(state_is_new(&mut device, &superblock, &blocks));
         assert_eq!(
             load_directory_table(&mut device, &superblock).unwrap(),
-            namespace_before
+            namespace_before,
         );
         assert!(load_journal_image(&mut device, superblock)
             .unwrap()
@@ -123,25 +123,25 @@ fn rejects_dangling_non_file_and_growth_before_publication() {
         truncate_file_at_path_to_blocks_journaled(&mut device, &superblock, "/dangling", 0)
             .unwrap_err()
             .kind(),
-        io::ErrorKind::NotFound
+        io::ErrorKind::NotFound,
     );
     assert_eq!(
         truncate_file_at_path_to_blocks_journaled(&mut device, &superblock, "/dir", 0)
             .unwrap_err()
             .kind(),
-        io::ErrorKind::InvalidInput
+        io::ErrorKind::InvalidInput,
     );
     assert_eq!(
         truncate_file_at_path_to_blocks_journaled(&mut device, &superblock, "/dir/file", 5)
             .unwrap_err()
             .kind(),
-        io::ErrorKind::InvalidInput
+        io::ErrorKind::InvalidInput,
     );
 
     assert!(state_is_old(&mut device, &superblock, &blocks));
     assert_eq!(
         load_directory_table(&mut device, &superblock).unwrap(),
-        namespace_before
+        namespace_before,
     );
     assert!(load_journal_image(&mut device, superblock)
         .unwrap()
@@ -171,7 +171,7 @@ fn every_pathname_truncate_crash_point_recovers_old_or_complete_new_state() {
             )
             .unwrap_err()
             .kind(),
-            io::ErrorKind::Other
+            io::ErrorKind::Other,
         );
         device.reboot();
 
@@ -188,7 +188,7 @@ fn every_pathname_truncate_crash_point_recovers_old_or_complete_new_state() {
             || state_is_new(&mut device, &superblock, &blocks));
         assert_eq!(
             load_directory_table(&mut device, &superblock).unwrap(),
-            namespace_before
+            namespace_before,
         );
         assert!(load_journal_image(&mut device, superblock)
             .unwrap()
@@ -196,7 +196,7 @@ fn every_pathname_truncate_crash_point_recovers_old_or_complete_new_state() {
         check_device(&mut device).unwrap();
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
-            RecoveryReport::default()
+            RecoveryReport::default(),
         );
     }
 }
