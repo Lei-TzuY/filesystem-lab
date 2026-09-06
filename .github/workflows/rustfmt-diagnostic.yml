@@ -1,0 +1,29 @@
+name: rustfmt-diagnostic
+
+on:
+  push:
+    branches:
+      - bil-275-path-truncate
+
+permissions:
+  contents: read
+
+jobs:
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Format changed Rust files
+        run: cargo fmt --all
+      - name: Stage canonical formatted files
+        run: |
+          mkdir -p /tmp/rustfmt-canonical/src /tmp/rustfmt-canonical/tests
+          cp src/path_lookup.rs /tmp/rustfmt-canonical/src/path_lookup.rs
+          cp tests/path_truncate.rs /tmp/rustfmt-canonical/tests/path_truncate.rs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rustfmt-canonical
+          path: /tmp/rustfmt-canonical
