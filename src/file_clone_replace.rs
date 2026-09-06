@@ -172,7 +172,8 @@ pub fn clone_file_blocks_replace_journaled(
         "clone replacement image did not render every inode metadata block",
         &mut changed,
     )?;
-    capture.ensure_empty("clone replacement image rendered outside allocation and inode regions")?;
+    capture
+        .ensure_empty("clone replacement image rendered outside allocation and inode regions")?;
     changed.extend(new_blocks.iter().copied().zip(snapshots.iter().copied()));
 
     let mut log = JournalLog::new();
