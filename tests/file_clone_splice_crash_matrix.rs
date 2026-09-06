@@ -193,6 +193,36 @@ fn clone_splice_grows_destination_and_releases_exactly_displaced_blocks() {
 }
 
 #[test]
+fn clone_splice_can_shrink_destination_and_release_two_displaced_blocks() {
+    let (mut device, superblock, source_blocks, destination_blocks, _) = setup();
+    let mut allocator = load_allocator(&mut device, &superblock).unwrap();
+    let expected_new = allocator.allocate().unwrap();
+
+    let (new_blocks, displaced, report) =
+        clone_file_blocks_splice_journaled(&mut device, &superblock, 2, 1, 1, 3, 1, 2).unwrap();
+
+    assert_eq!(new_blocks, vec![expected_new]);
+    assert_eq!(displaced, destination_blocks[1..].to_vec());
+    assert_eq!(report.committed_transactions, 1);
+    assert_eq!(report.home_writes, 3);
+    assert_source_unchanged(&mut device, &superblock, &source_blocks);
+    assert_eq!(
+        inode_blocks(&mut device, &superblock, 3),
+        vec![destination_blocks[0], expected_new]
+    );
+    let allocator = load_allocator(&mut device, &superblock).unwrap();
+    assert!(allocator.is_owned(destination_blocks[0]).unwrap());
+    assert!(!allocator.is_owned(destination_blocks[1]).unwrap());
+    assert!(!allocator.is_owned(destination_blocks[2]).unwrap());
+    assert!(allocator.is_owned(expected_new).unwrap());
+    assert_eq!(
+        read_file_block(&mut device, &superblock, 3, 1).unwrap(),
+        SOURCE_DATA[1]
+    );
+    check_device(&mut device).unwrap();
+}
+
+#[test]
 fn clone_splice_rejects_empty_ranges_and_same_inode() {
     let (mut device, superblock, _, _, _) = setup();
     assert_eq!(
