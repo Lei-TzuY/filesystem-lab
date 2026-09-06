@@ -24,28 +24,29 @@ impl MemoryDevice {
             blocks: vec![[0; BLOCK_SIZE]; blocks],
         }
     }
+
+    fn block_index(&self, block: u64) -> io::Result<usize> {
+        usize::try_from(block)
+            .ok()
+            .filter(|index| *index < self.blocks.len())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "invalid block"))
+    }
 }
 
 impl BlockDevice for MemoryDevice {
     fn block_count(&self) -> u64 {
-        self.blocks.len() as u64
+        u64::try_from(self.blocks.len()).expect("test device block count fits in u64")
     }
 
     fn read_block(&mut self, block: u64, buf: &mut [u8; BLOCK_SIZE]) -> io::Result<()> {
-        let source = self
-            .blocks
-            .get(block as usize)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "invalid block"))?;
-        *buf = *source;
+        let index = self.block_index(block)?;
+        *buf = self.blocks[index];
         Ok(())
     }
 
     fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> io::Result<()> {
-        let destination = self
-            .blocks
-            .get_mut(block as usize)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "invalid block"))?;
-        *destination = *buf;
+        let index = self.block_index(block)?;
+        self.blocks[index] = *buf;
         Ok(())
     }
 
