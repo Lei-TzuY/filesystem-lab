@@ -40,6 +40,7 @@ pub mod journal_checkpoint;
 pub mod journal_codec;
 pub mod journal_region;
 pub mod metadata_tx;
+pub mod path_lookup;
 pub mod recovery;
 pub mod rename_exchange_tx;
 pub mod rename_overwrite_tx;
