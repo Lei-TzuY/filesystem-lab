@@ -1,0 +1,31 @@
+name: rustfmt-fix
+
+on:
+  push:
+    branches:
+      - conquest/bil-226-symlink-nonfinal-unlink
+
+permissions:
+  contents: write
+
+jobs:
+  rustfmt:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: conquest/bil-226-symlink-nonfinal-unlink
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Format and push
+        run: |
+          cargo fmt --all
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "Apply stable rustfmt"
+            git push origin HEAD:conquest/bil-226-symlink-nonfinal-unlink
+          fi
