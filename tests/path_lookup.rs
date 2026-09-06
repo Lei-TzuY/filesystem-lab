@@ -1,7 +1,6 @@
-mod support;
-
 use std::io;
 
+use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
 use filesystem_lab::directory_table::store_directory_table;
 use filesystem_lab::format::Superblock;
@@ -12,9 +11,48 @@ use filesystem_lab::inode_codec::PersistedInode;
 use filesystem_lab::inode_table::store_inode_table;
 use filesystem_lab::path_lookup::{resolve_path_following_symlinks, MAX_SYMLINK_EXPANSIONS};
 use filesystem_lab::symlink::create_symlink_journaled;
-use support::CrashDevice;
 
 const SYMLINK_JOURNAL_BLOCKS: u64 = 6;
+
+struct MemoryDevice {
+    blocks: Vec<[u8; BLOCK_SIZE]>,
+}
+
+impl MemoryDevice {
+    fn new(blocks: usize) -> Self {
+        Self {
+            blocks: vec![[0; BLOCK_SIZE]; blocks],
+        }
+    }
+}
+
+impl BlockDevice for MemoryDevice {
+    fn block_count(&self) -> u64 {
+        self.blocks.len() as u64
+    }
+
+    fn read_block(&mut self, block: u64, buf: &mut [u8; BLOCK_SIZE]) -> io::Result<()> {
+        let source = self
+            .blocks
+            .get(block as usize)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "invalid block"))?;
+        *buf = *source;
+        Ok(())
+    }
+
+    fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> io::Result<()> {
+        let destination = self
+            .blocks
+            .get_mut(block as usize)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "invalid block"))?;
+        *destination = *buf;
+        Ok(())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
 
 fn inode(id: u64, kind: InodeKind) -> PersistedInode {
     PersistedInode {
@@ -32,8 +70,8 @@ fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
     }
 }
 
-fn setup() -> (CrashDevice, Superblock) {
-    let mut device = CrashDevice::new(64);
+fn setup() -> (MemoryDevice, Superblock) {
+    let mut device = MemoryDevice::new(64);
     let superblock =
         format_device_with_journal_blocks(&mut device, SYMLINK_JOURNAL_BLOCKS).unwrap();
     store_inode_table(
