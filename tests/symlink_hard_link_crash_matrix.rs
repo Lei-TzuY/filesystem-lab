@@ -5,7 +5,8 @@ use std::io;
 use filesystem_lab::allocation_disk::load_allocator;
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
 use filesystem_lab::directory_table::{load_directory_table, store_directory_table};
-use filesystem_lab::format::{format_device, Superblock};
+use filesystem_lab::format::Superblock;
+use filesystem_lab::format_geometry::format_device_with_journal_blocks;
 use filesystem_lab::fsck::check_device;
 use filesystem_lab::hard_link_tx::hard_link_symlink_journaled;
 use filesystem_lab::inode::InodeKind;
@@ -14,6 +15,8 @@ use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
 use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::symlink::{create_symlink_journaled, read_symlink};
 use support::CrashDevice;
+
+const SYMLINK_JOURNAL_BLOCKS: u64 = 6;
 
 fn root() -> PersistedInode {
     PersistedInode {
@@ -33,7 +36,8 @@ fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
 
 fn setup() -> (CrashDevice, Superblock, u64) {
     let mut device = CrashDevice::new(64);
-    let superblock = format_device(&mut device).unwrap();
+    let superblock =
+        format_device_with_journal_blocks(&mut device, SYMLINK_JOURNAL_BLOCKS).unwrap();
     store_inode_table(&mut device, &superblock, &[root()]).unwrap();
     store_directory_table(&mut device, &superblock, &[]).unwrap();
     let (symlink, _) =
