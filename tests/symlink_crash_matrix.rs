@@ -4,7 +4,8 @@ use std::io;
 
 use filesystem_lab::allocation_disk::load_allocator;
 use filesystem_lab::directory_table::load_directory_table;
-use filesystem_lab::format::{format_device, Superblock};
+use filesystem_lab::format::Superblock;
+use filesystem_lab::format_geometry::format_device_with_journal_blocks;
 use filesystem_lab::fsck::check_device;
 use filesystem_lab::inode::InodeKind;
 use filesystem_lab::inode_codec::PersistedInode;
@@ -15,6 +16,7 @@ use filesystem_lab::recovery::RecoveryReport;
 use filesystem_lab::symlink::{create_symlink_journaled, read_symlink};
 use support::CrashDevice;
 
+const SYMLINK_JOURNAL_BLOCKS: u64 = 6;
 const TARGET: &str = "../target/file";
 
 fn root_inode() -> PersistedInode {
@@ -27,7 +29,8 @@ fn root_inode() -> PersistedInode {
 
 fn setup() -> (CrashDevice, Superblock) {
     let mut device = CrashDevice::new(64);
-    let superblock = format_device(&mut device).unwrap();
+    let superblock =
+        format_device_with_journal_blocks(&mut device, SYMLINK_JOURNAL_BLOCKS).unwrap();
     store_inode_table(&mut device, &superblock, &[root_inode()]).unwrap();
     check_device(&mut device).unwrap();
     (device, superblock)
@@ -112,8 +115,8 @@ fn every_symlink_mutation_crash_point_is_old_or_recoverable_new_state() {
                     .is_owned(block)
                     .ok()?;
                 let entries = load_directory_table(&mut device, &superblock).ok()?;
-                let target_ok = read_symlink(&mut device, &superblock, id)
-                    .is_ok_and(|target| target == TARGET);
+                let target_ok =
+                    read_symlink(&mut device, &superblock, id).is_ok_and(|target| target == TARGET);
                 Some(owned && entries.len() == 1 && entries[0].target == id && target_ok)
             })
             .unwrap_or(false);
