@@ -1,0 +1,32 @@
+name: Clippy diagnostic
+
+on:
+  push:
+    branches:
+      - bil-261-pathname-range-write
+
+permissions:
+  contents: write
+
+jobs:
+  clippy-diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: bil-261-pathname-range-write
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Capture clippy diagnostics
+        shell: bash
+        run: |
+          cargo clippy --all-targets --all-features -- -D warnings > clippy-diagnostics.txt 2>&1 || true
+          git config user.name "Lei-TzuY"
+          git config user.email "52287354+Lei-TzuY@users.noreply.github.com"
+          git add clippy-diagnostics.txt
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Capture pathname write clippy diagnostics"
+          git push origin HEAD:bil-261-pathname-range-write
