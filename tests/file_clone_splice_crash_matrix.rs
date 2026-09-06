@@ -7,7 +7,7 @@ use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
 use filesystem_lab::directory_table::store_directory_table;
 use filesystem_lab::file_append_batch::append_file_blocks_journaled;
-use filesystem_lab::file_clone_splice::clone_file_blocks_splice_journaled;
+use filesystem_lab::file_clone_splice::{clone_file_blocks_splice_journaled, FileBlockRange};
 use filesystem_lab::file_data::read_file_block;
 use filesystem_lab::format::Superblock;
 use filesystem_lab::format_geometry::format_device_with_journal_blocks;
@@ -24,6 +24,14 @@ const JOURNAL_BLOCKS: u64 = 6;
 const SOURCE_DATA: [[u8; BLOCK_SIZE]; 2] = [[0x41; BLOCK_SIZE], [0x82; BLOCK_SIZE]];
 const DESTINATION_DATA: [[u8; BLOCK_SIZE]; 3] =
     [[0x17; BLOCK_SIZE], [0x26; BLOCK_SIZE], [0x35; BLOCK_SIZE]];
+
+fn range(inode: u64, start: usize, block_count: usize) -> FileBlockRange {
+    FileBlockRange {
+        inode,
+        start,
+        block_count,
+    }
+}
 
 fn setup() -> (CrashDevice, Superblock, Vec<u64>, Vec<u64>, Vec<u64>) {
     let mut device = CrashDevice::new(64);
@@ -172,8 +180,13 @@ fn assert_new(
 #[test]
 fn clone_splice_grows_destination_and_releases_exactly_displaced_blocks() {
     let (mut device, superblock, source_blocks, destination_blocks, expected_new) = setup();
-    let (new_blocks, displaced, report) =
-        clone_file_blocks_splice_journaled(&mut device, &superblock, 2, 0, 2, 3, 1, 1).unwrap();
+    let (new_blocks, displaced, report) = clone_file_blocks_splice_journaled(
+        &mut device,
+        &superblock,
+        range(2, 0, 2),
+        range(3, 1, 1),
+    )
+    .unwrap();
 
     assert_eq!(new_blocks, expected_new);
     assert_eq!(displaced, vec![destination_blocks[1]]);
@@ -198,8 +211,13 @@ fn clone_splice_can_shrink_destination_and_release_two_displaced_blocks() {
     let mut allocator = load_allocator(&mut device, &superblock).unwrap();
     let expected_new = allocator.allocate().unwrap();
 
-    let (new_blocks, displaced, report) =
-        clone_file_blocks_splice_journaled(&mut device, &superblock, 2, 1, 1, 3, 1, 2).unwrap();
+    let (new_blocks, displaced, report) = clone_file_blocks_splice_journaled(
+        &mut device,
+        &superblock,
+        range(2, 1, 1),
+        range(3, 1, 2),
+    )
+    .unwrap();
 
     assert_eq!(new_blocks, vec![expected_new]);
     assert_eq!(displaced, destination_blocks[1..].to_vec());
@@ -226,21 +244,36 @@ fn clone_splice_can_shrink_destination_and_release_two_displaced_blocks() {
 fn clone_splice_rejects_empty_ranges_and_same_inode() {
     let (mut device, superblock, _, _, _) = setup();
     assert_eq!(
-        clone_file_blocks_splice_journaled(&mut device, &superblock, 2, 0, 0, 3, 1, 1)
-            .unwrap_err()
-            .kind(),
+        clone_file_blocks_splice_journaled(
+            &mut device,
+            &superblock,
+            range(2, 0, 0),
+            range(3, 1, 1),
+        )
+        .unwrap_err()
+        .kind(),
         io::ErrorKind::InvalidInput
     );
     assert_eq!(
-        clone_file_blocks_splice_journaled(&mut device, &superblock, 2, 0, 1, 3, 1, 0)
-            .unwrap_err()
-            .kind(),
+        clone_file_blocks_splice_journaled(
+            &mut device,
+            &superblock,
+            range(2, 0, 1),
+            range(3, 1, 0),
+        )
+        .unwrap_err()
+        .kind(),
         io::ErrorKind::InvalidInput
     );
     assert_eq!(
-        clone_file_blocks_splice_journaled(&mut device, &superblock, 2, 0, 1, 2, 1, 1)
-            .unwrap_err()
-            .kind(),
+        clone_file_blocks_splice_journaled(
+            &mut device,
+            &superblock,
+            range(2, 0, 1),
+            range(2, 1, 1),
+        )
+        .unwrap_err()
+        .kind(),
         io::ErrorKind::InvalidInput
     );
     check_device(&mut device).unwrap();
@@ -250,8 +283,13 @@ fn clone_splice_rejects_empty_ranges_and_same_inode() {
 fn every_clone_splice_crash_point_is_old_or_recoverable_new_state() {
     let (mut probe, superblock, _, _, _) = setup();
     probe.arm(None);
-    let (_, _, report) =
-        clone_file_blocks_splice_journaled(&mut probe, &superblock, 2, 0, 2, 3, 1, 1).unwrap();
+    let (_, _, report) = clone_file_blocks_splice_journaled(
+        &mut probe,
+        &superblock,
+        range(2, 0, 2),
+        range(3, 1, 1),
+    )
+    .unwrap();
     assert_eq!(report.home_writes, 4);
     let mutation_operations = probe.operations();
     assert!(mutation_operations >= 8);
@@ -260,9 +298,14 @@ fn every_clone_splice_crash_point_is_old_or_recoverable_new_state() {
         let (mut device, superblock, source_blocks, destination_blocks, expected_new) = setup();
         device.arm(Some(crash_at));
         assert_eq!(
-            clone_file_blocks_splice_journaled(&mut device, &superblock, 2, 0, 2, 3, 1, 1)
-                .unwrap_err()
-                .kind(),
+            clone_file_blocks_splice_journaled(
+                &mut device,
+                &superblock,
+                range(2, 0, 2),
+                range(3, 1, 1),
+            )
+            .unwrap_err()
+            .kind(),
             io::ErrorKind::Other,
             "crash point {crash_at} must interrupt clone splice"
         );
