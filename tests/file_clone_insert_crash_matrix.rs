@@ -32,9 +32,21 @@ fn setup() -> (CrashDevice, Superblock, Vec<u64>, Vec<u64>, Vec<u64>) {
         &mut device,
         &superblock,
         &[
-            PersistedInode { id: 1, kind: InodeKind::Directory, blocks: Vec::new() },
-            PersistedInode { id: 2, kind: InodeKind::File, blocks: Vec::new() },
-            PersistedInode { id: 3, kind: InodeKind::File, blocks: Vec::new() },
+            PersistedInode {
+                id: 1,
+                kind: InodeKind::Directory,
+                blocks: Vec::new(),
+            },
+            PersistedInode {
+                id: 2,
+                kind: InodeKind::File,
+                blocks: Vec::new(),
+            },
+            PersistedInode {
+                id: 3,
+                kind: InodeKind::File,
+                blocks: Vec::new(),
+            },
         ],
     )
     .unwrap();
@@ -42,8 +54,16 @@ fn setup() -> (CrashDevice, Superblock, Vec<u64>, Vec<u64>, Vec<u64>) {
         &mut device,
         &superblock,
         &[
-            PersistedDirectoryEntry { parent: 1, target: 2, name: "source".to_owned() },
-            PersistedDirectoryEntry { parent: 1, target: 3, name: "destination".to_owned() },
+            PersistedDirectoryEntry {
+                parent: 1,
+                target: 2,
+                name: "source".to_owned(),
+            },
+            PersistedDirectoryEntry {
+                parent: 1,
+                target: 3,
+                name: "destination".to_owned(),
+            },
         ],
     )
     .unwrap();
@@ -58,7 +78,13 @@ fn setup() -> (CrashDevice, Superblock, Vec<u64>, Vec<u64>, Vec<u64>) {
     let mut allocator = load_allocator(&mut device, &superblock).unwrap();
     let first = allocator.allocate().unwrap();
     let second = allocator.allocate().unwrap();
-    (device, superblock, source_blocks, destination_blocks, vec![first, second])
+    (
+        device,
+        superblock,
+        source_blocks,
+        destination_blocks,
+        vec![first, second],
+    )
 }
 
 fn inode_blocks(device: &mut CrashDevice, superblock: &Superblock, inode_id: u64) -> Vec<u64> {
@@ -70,10 +96,17 @@ fn inode_blocks(device: &mut CrashDevice, superblock: &Superblock, inode_id: u64
         .blocks
 }
 
-fn assert_source_unchanged(device: &mut CrashDevice, superblock: &Superblock, source_blocks: &[u64]) {
+fn assert_source_unchanged(
+    device: &mut CrashDevice,
+    superblock: &Superblock,
+    source_blocks: &[u64],
+) {
     assert_eq!(inode_blocks(device, superblock, 2), source_blocks);
     for (index, image) in SOURCE_DATA.iter().enumerate() {
-        assert_eq!(read_file_block(device, superblock, 2, index).unwrap(), *image);
+        assert_eq!(
+            read_file_block(device, superblock, 2, index).unwrap(),
+            *image
+        );
     }
 }
 
@@ -102,16 +135,33 @@ fn assert_new(
     assert_source_unchanged(device, superblock, source_blocks);
     assert_eq!(
         inode_blocks(device, superblock, 3),
-        vec![destination_blocks[0], expected_new[0], expected_new[1], destination_blocks[1]]
+        vec![
+            destination_blocks[0],
+            expected_new[0],
+            expected_new[1],
+            destination_blocks[1],
+        ]
     );
     let allocator = load_allocator(device, superblock).unwrap();
     for block in expected_new {
         assert!(allocator.is_owned(*block).unwrap());
     }
-    assert_eq!(read_file_block(device, superblock, 3, 0).unwrap(), DESTINATION_DATA[0]);
-    assert_eq!(read_file_block(device, superblock, 3, 1).unwrap(), SOURCE_DATA[0]);
-    assert_eq!(read_file_block(device, superblock, 3, 2).unwrap(), SOURCE_DATA[1]);
-    assert_eq!(read_file_block(device, superblock, 3, 3).unwrap(), DESTINATION_DATA[1]);
+    assert_eq!(
+        read_file_block(device, superblock, 3, 0).unwrap(),
+        DESTINATION_DATA[0]
+    );
+    assert_eq!(
+        read_file_block(device, superblock, 3, 1).unwrap(),
+        SOURCE_DATA[0]
+    );
+    assert_eq!(
+        read_file_block(device, superblock, 3, 2).unwrap(),
+        SOURCE_DATA[1]
+    );
+    assert_eq!(
+        read_file_block(device, superblock, 3, 3).unwrap(),
+        DESTINATION_DATA[1]
+    );
 }
 
 #[test]
@@ -123,8 +173,16 @@ fn clone_two_blocks_inserts_fresh_copies_at_logical_boundary() {
     assert_eq!(new_blocks, expected_new);
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(report.home_writes, 4);
-    assert_new(&mut device, &superblock, &source_blocks, &destination_blocks, &expected_new);
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert_new(
+        &mut device,
+        &superblock,
+        &source_blocks,
+        &destination_blocks,
+        &expected_new,
+    );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
     check_device(&mut device).unwrap();
 }
 
@@ -136,10 +194,21 @@ fn same_inode_clone_insert_uses_source_snapshot() {
 
     assert_eq!(
         inode_blocks(&mut device, &superblock, 2),
-        vec![source_blocks[0], new_blocks[0], new_blocks[1], source_blocks[1]]
+        vec![
+            source_blocks[0],
+            new_blocks[0],
+            new_blocks[1],
+            source_blocks[1],
+        ]
     );
-    assert_eq!(read_file_block(&mut device, &superblock, 2, 1).unwrap(), SOURCE_DATA[0]);
-    assert_eq!(read_file_block(&mut device, &superblock, 2, 2).unwrap(), SOURCE_DATA[1]);
+    assert_eq!(
+        read_file_block(&mut device, &superblock, 2, 1).unwrap(),
+        SOURCE_DATA[0]
+    );
+    assert_eq!(
+        read_file_block(&mut device, &superblock, 2, 2).unwrap(),
+        SOURCE_DATA[1]
+    );
     check_device(&mut device).unwrap();
 }
 
@@ -174,7 +243,12 @@ fn every_clone_insert_crash_point_is_old_or_recoverable_new_state() {
         let raw_is_old = raw_owned == [false, false] && raw_destination == destination_blocks;
         let raw_is_new = raw_owned == [true, true]
             && raw_destination
-                == vec![destination_blocks[0], expected_new[0], expected_new[1], destination_blocks[1]];
+                == vec![
+                    destination_blocks[0],
+                    expected_new[0],
+                    expected_new[1],
+                    destination_blocks[1],
+                ];
 
         if raw_is_old || raw_is_new {
             check_device(&mut device).unwrap();
@@ -184,14 +258,28 @@ fn every_clone_insert_crash_point_is_old_or_recoverable_new_state() {
 
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         if recovery.committed_transactions == 0 {
-            assert_old(&mut device, &superblock, &source_blocks, &destination_blocks, &expected_new);
+            assert_old(
+                &mut device,
+                &superblock,
+                &source_blocks,
+                &destination_blocks,
+                &expected_new,
+            );
         } else {
             assert_eq!(recovery.committed_transactions, 1);
             assert_eq!(recovery.home_writes, 4);
-            assert_new(&mut device, &superblock, &source_blocks, &destination_blocks, &expected_new);
+            assert_new(
+                &mut device,
+                &superblock,
+                &source_blocks,
+                &destination_blocks,
+                &expected_new,
+            );
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
