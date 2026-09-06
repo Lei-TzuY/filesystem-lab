@@ -78,7 +78,10 @@ fn every_symlink_mutation_crash_point_is_old_or_recoverable_new_state() {
 
     assert!(mutation_operations >= 8);
     assert_eq!(report.committed_transactions, 1);
-    assert_eq!(read_symlink(&mut probe, &superblock, inode_id).unwrap(), TARGET);
+    assert_eq!(
+        read_symlink(&mut probe, &superblock, inode_id).unwrap(),
+        TARGET
+    );
     assert_new_state(&mut probe, &superblock);
     assert!(load_journal_image(&mut probe, superblock)
         .unwrap()

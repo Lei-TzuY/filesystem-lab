@@ -163,7 +163,10 @@ pub(crate) fn validate_symlink_inode(
     if inode.blocks.len() != 1 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("symlink inode {} must reference exactly one block", inode.id),
+            format!(
+                "symlink inode {} must reference exactly one block",
+                inode.id
+            ),
         ));
     }
     let mut image = [0_u8; BLOCK_SIZE];
@@ -210,7 +213,9 @@ fn decode_target(image: &[u8; BLOCK_SIZE]) -> io::Result<String> {
         .iter()
         .any(|byte| *byte != 0)
     {
-        return Err(invalid_data("symlink target block has non-zero trailing bytes"));
+        return Err(invalid_data(
+            "symlink target block has non-zero trailing bytes",
+        ));
     }
     let target = std::str::from_utf8(&image[SYMLINK_HEADER_LEN..SYMLINK_HEADER_LEN + len])
         .map_err(|_| invalid_data("symlink target is not valid UTF-8"))?;
