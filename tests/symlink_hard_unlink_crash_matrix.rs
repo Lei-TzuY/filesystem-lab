@@ -65,10 +65,22 @@ fn every_nonfinal_symlink_unlink_crash_point_is_old_or_recoverable_new_namespace
     unlink_nonfinal_symlink_link_journaled(&mut probe, &superblock, 1, "alias").unwrap();
     let operations = probe.operations();
     assert!(operations >= 3);
-    assert_eq!(load_directory_table(&mut probe, &superblock).unwrap(), new_namespace);
-    assert_eq!(load_allocator(&mut probe, &superblock).unwrap(), old_allocator);
-    assert_eq!(load_inode_table(&mut probe, &superblock).unwrap(), old_inodes);
-    assert_eq!(read_symlink(&mut probe, &superblock, symlink).unwrap(), "../opaque/target");
+    assert_eq!(
+        load_directory_table(&mut probe, &superblock).unwrap(),
+        new_namespace
+    );
+    assert_eq!(
+        load_allocator(&mut probe, &superblock).unwrap(),
+        old_allocator
+    );
+    assert_eq!(
+        load_inode_table(&mut probe, &superblock).unwrap(),
+        old_inodes
+    );
+    assert_eq!(
+        read_symlink(&mut probe, &superblock, symlink).unwrap(),
+        "../opaque/target"
+    );
     check_device(&mut probe).unwrap();
 
     for crash_at in 0..operations {
@@ -86,9 +98,15 @@ fn every_nonfinal_symlink_unlink_crash_point_is_old_or_recoverable_new_namespace
 
         let before = load_directory_table(&mut device, &superblock).unwrap();
         assert!(before == old_namespace || before == new_namespace);
-        assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator);
+        assert_eq!(
+            load_allocator(&mut device, &superblock).unwrap(),
+            allocator
+        );
         assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes);
-        assert_eq!(read_symlink(&mut device, &superblock, symlink).unwrap(), "../opaque/target");
+        assert_eq!(
+            read_symlink(&mut device, &superblock, symlink).unwrap(),
+            "../opaque/target"
+        );
         check_device(&mut device).unwrap();
 
         let report = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
@@ -98,13 +116,19 @@ fn every_nonfinal_symlink_unlink_crash_point_is_old_or_recoverable_new_namespace
         } else {
             assert_eq!(recovered, new_namespace);
         }
-        assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator);
+        assert_eq!(
+            load_allocator(&mut device, &superblock).unwrap(),
+            allocator
+        );
         assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes);
         check_device(&mut device).unwrap();
 
         let second = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         assert_eq!(second.committed_transactions, 0);
-        assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), recovered);
+        assert_eq!(
+            load_directory_table(&mut device, &superblock).unwrap(),
+            recovered
+        );
     }
 }
 
@@ -124,6 +148,9 @@ fn nonfinal_symlink_unlink_rejects_final_reference_and_wrong_kind() {
             .kind(),
         io::ErrorKind::InvalidInput
     );
-    assert_eq!(read_symlink(&mut device, &superblock, symlink).unwrap(), "../opaque/target");
+    assert_eq!(
+        read_symlink(&mut device, &superblock, symlink).unwrap(),
+        "../opaque/target"
+    );
     check_device(&mut device).unwrap();
 }
