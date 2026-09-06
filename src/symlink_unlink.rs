@@ -45,7 +45,12 @@ pub fn unlink_symlink_journaled(
     if inode.kind != InodeKind::Symlink {
         return Err(invalid_input("unlink requires a symbolic-link inode"));
     }
-    if entries.iter().filter(|entry| entry.target == target).count() != 1 {
+    if entries
+        .iter()
+        .filter(|entry| entry.target == target)
+        .count()
+        != 1
+    {
         return Err(invalid_input(
             "symlink unlink requires exactly one namespace reference",
         ));

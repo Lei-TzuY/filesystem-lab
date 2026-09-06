@@ -47,12 +47,7 @@ fn setup_link() -> (CrashDevice, Superblock, u64, u64) {
     (device, superblock, inode_id, block)
 }
 
-fn assert_old_state(
-    device: &mut CrashDevice,
-    superblock: &Superblock,
-    inode_id: u64,
-    block: u64,
-) {
+fn assert_old_state(device: &mut CrashDevice, superblock: &Superblock, inode_id: u64, block: u64) {
     assert!(load_allocator(device, superblock)
         .unwrap()
         .is_owned(block)
@@ -71,7 +66,10 @@ fn assert_new_state(device: &mut CrashDevice, superblock: &Superblock, block: u6
         .unwrap()
         .is_owned(block)
         .unwrap());
-    assert_eq!(load_inode_table(device, superblock).unwrap(), vec![root_inode()]);
+    assert_eq!(
+        load_inode_table(device, superblock).unwrap(),
+        vec![root_inode()]
+    );
     assert!(load_directory_table(device, superblock).unwrap().is_empty());
     check_device(device).unwrap();
 }
@@ -107,7 +105,8 @@ fn every_symlink_unlink_mutation_crash_point_is_old_or_recoverable_new_state() {
             .ok()
             .and_then(|allocator| allocator.is_owned(block).ok())
             == Some(true)
-            && read_symlink(&mut device, &superblock, inode_id).is_ok_and(|target| target == TARGET)
+            && read_symlink(&mut device, &superblock, inode_id)
+                .is_ok_and(|target| target == TARGET)
             && load_directory_table(&mut device, &superblock).is_ok_and(|entries| {
                 entries.len() == 1
                     && entries[0].parent == 1
