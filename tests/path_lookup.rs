@@ -9,7 +9,10 @@ use filesystem_lab::fsck::check_device;
 use filesystem_lab::inode::InodeKind;
 use filesystem_lab::inode_codec::PersistedInode;
 use filesystem_lab::inode_table::store_inode_table;
-use filesystem_lab::path_lookup::{resolve_path_following_symlinks, MAX_SYMLINK_EXPANSIONS};
+use filesystem_lab::path_lookup::{
+    read_symlink_at_path, resolve_path_following_symlinks,
+    resolve_path_without_following_final_symlink, MAX_SYMLINK_EXPANSIONS,
+};
 use filesystem_lab::symlink::create_symlink_journaled;
 
 const SYMLINK_JOURNAL_BLOCKS: u64 = 6;
@@ -132,6 +135,62 @@ fn follows_relative_and_absolute_symlink_targets_with_suffixes() {
 }
 
 #[test]
+fn resolves_final_symlink_without_following_and_reads_opaque_target() {
+    let (mut device, superblock) = setup();
+    let (link_inode, _) =
+        create_symlink_journaled(&mut device, &superblock, 1, "dangling", "missing/target")
+            .unwrap();
+
+    assert_eq!(
+        resolve_path_without_following_final_symlink(&mut device, &superblock, "/dangling")
+            .unwrap(),
+        link_inode
+    );
+    assert_eq!(
+        read_symlink_at_path(&mut device, &superblock, "/dangling").unwrap(),
+        "missing/target"
+    );
+    assert_eq!(
+        resolve_path_following_symlinks(&mut device, &superblock, "/dangling")
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::NotFound
+    );
+    check_device(&mut device).unwrap();
+}
+
+#[test]
+fn pathname_readlink_follows_intermediate_symlinks_but_not_the_final_one() {
+    let (mut device, superblock) = setup();
+    create_symlink_journaled(&mut device, &superblock, 1, "dir_alias", "/dir").unwrap();
+    let (local_link, _) =
+        create_symlink_journaled(&mut device, &superblock, 2, "target_link", "file").unwrap();
+
+    assert_eq!(
+        resolve_path_without_following_final_symlink(
+            &mut device,
+            &superblock,
+            "/dir_alias/target_link"
+        )
+        .unwrap(),
+        local_link
+    );
+    assert_eq!(
+        read_symlink_at_path(&mut device, &superblock, "/dir_alias/target_link").unwrap(),
+        "file"
+    );
+}
+
+#[test]
+fn pathname_readlink_rejects_non_symlink_final_inode() {
+    let (mut device, superblock) = setup();
+
+    let error = read_symlink_at_path(&mut device, &superblock, "/dir/file").unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+    assert!(error.to_string().contains("not a symbolic link"));
+}
+
+#[test]
 fn rejects_dangling_links_and_symlink_loops() {
     let (mut device, superblock) = setup();
     create_symlink_journaled(&mut device, &superblock, 1, "dangling", "missing").unwrap();
@@ -151,6 +210,17 @@ fn rejects_dangling_links_and_symlink_loops() {
 }
 
 #[test]
+fn pathname_readlink_rejects_intermediate_symlink_loops() {
+    let (mut device, superblock) = setup();
+    create_symlink_journaled(&mut device, &superblock, 1, "a", "/b").unwrap();
+    create_symlink_journaled(&mut device, &superblock, 1, "b", "/a").unwrap();
+
+    let error = read_symlink_at_path(&mut device, &superblock, "/a/child").unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("expansion limit"));
+}
+
+#[test]
 fn rejects_ambiguous_or_non_absolute_paths() {
     let (mut device, superblock) = setup();
 
@@ -167,6 +237,13 @@ fn rejects_ambiguous_or_non_absolute_paths() {
                 .kind(),
             io::ErrorKind::InvalidInput,
             "path {path:?} must be rejected"
+        );
+        assert_eq!(
+            resolve_path_without_following_final_symlink(&mut device, &superblock, path)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput,
+            "no-follow path {path:?} must be rejected"
         );
     }
 }

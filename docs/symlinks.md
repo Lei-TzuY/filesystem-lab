@@ -14,7 +14,9 @@ Allocator ownership, the new symlink inode, the new namespace entry, and the com
 
 `resolve_path_following_symlinks` adds a bounded read-only lookup surface. It accepts absolute paths rooted at inode 1, traverses directory entries component by component, and follows persisted `Symlink` inodes through `read_symlink`. Absolute symlink targets restart lookup from root; relative targets restart from the directory containing the symlink; any remaining suffix is preserved after expansion. Lookup follows at most `MAX_SYMLINK_EXPANSIONS` (40) links and rejects longer chains or loops. Missing components report `NotFound`; corrupted namespace/inode/symlink data continues to surface as consistency errors.
 
-The lookup contract deliberately rejects empty components, trailing slashes on non-root paths, `.` and `..` rather than implementing normalization semantics. It is read-only and changes neither the WAL nor filesystem format v5.
+`resolve_path_without_following_final_symlink` uses the same traversal contract for intermediate components but returns the final namespace inode without expanding it when that inode is a symlink. This makes the symlink inode itself addressable even when its opaque target is dangling. `read_symlink_at_path` builds on that no-follow-final lookup and then validates the final `SYM1` payload through `read_symlink`, providing bounded pathname-level `readlink` semantics. Intermediate symlinks are still expanded and count toward the same 40-link limit; the final symlink is not expanded merely to identify or read it.
+
+The lookup contract deliberately rejects empty components, trailing slashes on non-root paths, `.` and `..` rather than implementing normalization semantics. Both pathname lookup modes and pathname `readlink` are read-only and change neither the WAL nor filesystem format v5; no durability-ordering crash matrix is applicable to these reads.
 
 The final-unlink operation does not erase the freed block's old bytes. Once allocator ownership is released the block is no longer reachable filesystem data and may be reused by later allocation.
 
