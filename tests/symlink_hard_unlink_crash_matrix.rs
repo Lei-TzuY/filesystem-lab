@@ -40,14 +40,9 @@ fn setup() -> (CrashDevice, Superblock, u64) {
     let superblock = format_device_with_journal_blocks(&mut device, JOURNAL_BLOCKS).unwrap();
     store_inode_table(&mut device, &superblock, &[root()]).unwrap();
     store_directory_table(&mut device, &superblock, &[]).unwrap();
-    let (symlink, _) = create_symlink_journaled(
-        &mut device,
-        &superblock,
-        1,
-        "original",
-        "../opaque/target",
-    )
-    .unwrap();
+    let (symlink, _) =
+        create_symlink_journaled(&mut device, &superblock, 1, "original", "../opaque/target")
+            .unwrap();
     hard_link_symlink_journaled(&mut device, &superblock, 1, "alias", symlink).unwrap();
     check_device(&mut device).unwrap();
     (device, superblock, symlink)
@@ -98,10 +93,7 @@ fn every_nonfinal_symlink_unlink_crash_point_is_old_or_recoverable_new_namespace
 
         let before = load_directory_table(&mut device, &superblock).unwrap();
         assert!(before == old_namespace || before == new_namespace);
-        assert_eq!(
-            load_allocator(&mut device, &superblock).unwrap(),
-            allocator
-        );
+        assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator);
         assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes);
         assert_eq!(
             read_symlink(&mut device, &superblock, symlink).unwrap(),
@@ -116,10 +108,7 @@ fn every_nonfinal_symlink_unlink_crash_point_is_old_or_recoverable_new_namespace
         } else {
             assert_eq!(recovered, new_namespace);
         }
-        assert_eq!(
-            load_allocator(&mut device, &superblock).unwrap(),
-            allocator
-        );
+        assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator);
         assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes);
         check_device(&mut device).unwrap();
 
