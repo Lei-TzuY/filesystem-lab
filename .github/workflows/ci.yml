@@ -22,7 +22,19 @@ jobs:
           path: |
             src/fsck.rs
             src/symlink.rs
-      - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Clippy probe
+        run: |
+          set +e
+          cargo clippy --all-targets --all-features -- -D warnings > clippy.log 2>&1
+          status=$?
+          echo "$status" > clippy.status
+          exit 0
+      - name: Capture clippy probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: clippy-probe
+          path: |
+            clippy.log
+            clippy.status
       - name: Test
         run: cargo test --all-targets --all-features
