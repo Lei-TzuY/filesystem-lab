@@ -3,6 +3,7 @@ use std::io;
 
 use crate::block::BlockDevice;
 use crate::directory_table::load_directory_table;
+use crate::file_range_read::read_file_range;
 use crate::format::Superblock;
 use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
@@ -64,6 +65,39 @@ pub fn read_symlink_at_path(
 ) -> io::Result<String> {
     let inode_id = resolve_path_without_following_final_symlink(device, superblock, path)?;
     read_symlink(device, superblock, inode_id)
+}
+
+/// Reads one bounded byte range from the regular file named by an absolute pathname.
+///
+/// Path resolution follows symbolic links, including the final component, using the same bounded
+/// expansion rules as [`resolve_path_following_symlinks`]. The resolved inode is then passed to the
+/// existing inode-ID-based [`read_file_range`] implementation, so allocator ownership checks and
+/// format-v5 block-range bounds stay centralized in one data-path primitive.
+///
+/// Format v5 has no persisted byte length. This operation therefore exposes only byte ranges inside
+/// logical blocks already referenced by the resolved regular-file inode; it does not define EOF,
+/// sparse-hole, allocation, or extension semantics.
+///
+/// # Errors
+/// Propagates pathname lookup errors and all [`read_file_range`] validation errors, including a
+/// resolved non-file inode, invalid offsets/ranges, and allocator ownership disagreement.
+pub fn read_file_range_at_path(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    path: &str,
+    first_block_index: usize,
+    start_offset: usize,
+    len: usize,
+) -> io::Result<Vec<u8>> {
+    let inode_id = resolve_path_following_symlinks(device, superblock, path)?;
+    read_file_range(
+        device,
+        superblock,
+        inode_id,
+        first_block_index,
+        start_offset,
+        len,
+    )
 }
 
 fn resolve_path(
