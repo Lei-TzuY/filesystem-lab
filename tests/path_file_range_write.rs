@@ -144,9 +144,7 @@ fn propagates_path_and_existing_range_write_validation_before_publication() {
         read_file_range_at_path(&mut device, &superblock, "/dir/file", 0, 0, 8).unwrap(),
         before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
 }
 
 #[test]
@@ -195,9 +193,7 @@ fn every_pathname_write_crash_point_recovers_old_or_complete_new_data() {
             directory_before
         );
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
