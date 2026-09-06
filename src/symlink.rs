@@ -1,5 +1,6 @@
 use std::io;
 
+use crate::allocation::BlockAllocator;
 use crate::allocation_disk::{load_allocator, store_allocator};
 use crate::block::{BlockDevice, BLOCK_SIZE};
 use crate::directory_codec::PersistedDirectoryEntry;
@@ -42,27 +43,8 @@ pub fn create_symlink_journaled(
     let mut inodes = load_inode_table(device, superblock)?;
     let mut entries = load_directory_table(device, superblock)?;
 
-    let parent_inode = inodes
-        .iter()
-        .find(|inode| inode.id == parent)
-        .ok_or_else(|| invalid_input("symlink parent inode is missing"))?;
-    if parent_inode.kind != InodeKind::Directory {
-        return Err(invalid_input("symlink parent must be a directory"));
-    }
-    if entries
-        .iter()
-        .any(|entry| entry.parent == parent && entry.name == name)
-    {
-        return Err(invalid_input("symlink destination already exists"));
-    }
-
-    let inode_id = inodes
-        .iter()
-        .map(|inode| inode.id)
-        .max()
-        .unwrap_or(0)
-        .checked_add(1)
-        .ok_or_else(|| invalid_input("symlink inode identifier space exhausted"))?;
+    validate_destination(&inodes, &entries, parent, name)?;
+    let inode_id = next_inode_id(&inodes)?;
     let block = allocator
         .allocate()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
@@ -78,10 +60,61 @@ pub fn create_symlink_journaled(
         name: name.to_owned(),
     });
 
+    let mut changed = collect_metadata_changes(
+        device,
+        superblock,
+        &allocator,
+        &inodes,
+        &entries,
+    )?;
+    changed.push((block, target_image));
+    let report = publish_changes(device, superblock, &changed)?;
+    Ok((inode_id, report))
+}
+
+fn validate_destination(
+    inodes: &[PersistedInode],
+    entries: &[PersistedDirectoryEntry],
+    parent: u64,
+    name: &str,
+) -> io::Result<()> {
+    let parent_inode = inodes
+        .iter()
+        .find(|inode| inode.id == parent)
+        .ok_or_else(|| invalid_input("symlink parent inode is missing"))?;
+    if parent_inode.kind != InodeKind::Directory {
+        return Err(invalid_input("symlink parent must be a directory"));
+    }
+    if entries
+        .iter()
+        .any(|entry| entry.parent == parent && entry.name == name)
+    {
+        return Err(invalid_input("symlink destination already exists"));
+    }
+    Ok(())
+}
+
+fn next_inode_id(inodes: &[PersistedInode]) -> io::Result<u64> {
+    inodes
+        .iter()
+        .map(|inode| inode.id)
+        .max()
+        .unwrap_or(0)
+        .checked_add(1)
+        .ok_or_else(|| invalid_input("symlink inode identifier space exhausted"))
+}
+
+fn collect_metadata_changes(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    allocator: &BlockAllocator,
+    inodes: &[PersistedInode],
+    entries: &[PersistedDirectoryEntry],
+) -> io::Result<Vec<(u64, [u8; BLOCK_SIZE])>> {
     let mut capture = CaptureDevice::new(superblock.total_blocks);
-    store_allocator(&mut capture, superblock, &allocator)?;
-    store_inode_table(&mut capture, superblock, &inodes)?;
-    store_directory_table(&mut capture, superblock, &entries)?;
+    store_allocator(&mut capture, superblock, allocator)?;
+    store_inode_table(&mut capture, superblock, inodes)?;
+    store_directory_table(&mut capture, superblock, entries)?;
 
     let mut changed = Vec::new();
     capture.collect_changed_range(
@@ -105,8 +138,14 @@ pub fn create_symlink_journaled(
     capture.ensure_empty(
         "symlink image rendered outside allocation, inode, and directory metadata regions",
     )?;
-    changed.push((block, target_image));
+    Ok(changed)
+}
 
+fn publish_changes(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    changed: &[(u64, [u8; BLOCK_SIZE])],
+) -> io::Result<RecoveryReport> {
     let mut log = JournalLog::new();
     let txid = log.begin()?;
     for (home_block, image) in changed.iter().copied() {
@@ -121,7 +160,7 @@ pub fn create_symlink_journaled(
             "symlink recovery report is inconsistent",
         ));
     }
-    Ok((inode_id, report))
+    Ok(report)
 }
 
 /// Reads and validates the opaque target string of one persisted symbolic-link inode.
