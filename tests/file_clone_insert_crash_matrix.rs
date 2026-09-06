@@ -214,7 +214,7 @@ fn same_inode_clone_insert_uses_source_snapshot() {
 
 #[test]
 fn every_clone_insert_crash_point_is_old_or_recoverable_new_state() {
-    let (mut probe, superblock, source_blocks, destination_blocks, expected_new) = setup();
+    let (mut probe, superblock, _, _, _) = setup();
     probe.arm(None);
     let (_, report) =
         clone_file_blocks_insert_journaled(&mut probe, &superblock, 2, 0, 2, 3, 1).unwrap();
