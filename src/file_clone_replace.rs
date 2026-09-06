@@ -5,6 +5,7 @@ use crate::allocation_disk::{load_allocator, store_allocator};
 use crate::block::{BlockDevice, BLOCK_SIZE};
 use crate::format::Superblock;
 use crate::inode::InodeKind;
+use crate::inode_codec::PersistedInode;
 use crate::inode_table::{load_inode_table, store_inode_table};
 use crate::journal::JournalLog;
 use crate::journal_checkpoint::recover_journal_and_checkpoint;
@@ -31,6 +32,53 @@ fn snapshot_owned_blocks(
         snapshots.push(image);
     }
     Ok(snapshots)
+}
+
+fn publish_replacement(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    allocator: &BlockAllocator,
+    inodes: &[PersistedInode],
+    new_blocks: &[u64],
+    snapshots: &[[u8; BLOCK_SIZE]],
+) -> io::Result<RecoveryReport> {
+    let mut capture = CaptureDevice::new(superblock.total_blocks);
+    store_allocator(&mut capture, superblock, allocator)?;
+    store_inode_table(&mut capture, superblock, inodes)?;
+
+    let mut changed = Vec::new();
+    capture.collect_changed_range(
+        device,
+        superblock.allocation_range(),
+        "clone replacement image did not render every allocation metadata block",
+        &mut changed,
+    )?;
+    capture.collect_changed_range(
+        device,
+        superblock.inode_range(),
+        "clone replacement image did not render every inode metadata block",
+        &mut changed,
+    )?;
+    capture
+        .ensure_empty("clone replacement image rendered outside allocation and inode regions")?;
+    changed.extend(new_blocks.iter().copied().zip(snapshots.iter().copied()));
+
+    let mut log = JournalLog::new();
+    let txid = log.begin()?;
+    for (home_block, image) in changed.iter().copied() {
+        log.write(txid, home_block, image)?;
+    }
+    log.commit(txid)?;
+    store_journal_image(device, *superblock, log.entries())?;
+
+    let report = recover_journal_and_checkpoint(device, *superblock)?;
+    if report.committed_transactions != 1 || report.home_writes != changed.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "clone replacement recovery report is inconsistent",
+        ));
+    }
+    Ok(report)
 }
 
 /// Replaces an existing destination logical-block range with freshly allocated source clones.
@@ -155,42 +203,13 @@ pub fn clone_file_blocks_replace_journaled(
     inodes[destination_index].blocks[destination_start..destination_end]
         .copy_from_slice(&new_blocks);
 
-    let mut capture = CaptureDevice::new(superblock.total_blocks);
-    store_allocator(&mut capture, superblock, &allocator)?;
-    store_inode_table(&mut capture, superblock, &inodes)?;
-
-    let mut changed = Vec::new();
-    capture.collect_changed_range(
+    let report = publish_replacement(
         device,
-        superblock.allocation_range(),
-        "clone replacement image did not render every allocation metadata block",
-        &mut changed,
+        superblock,
+        &allocator,
+        &inodes,
+        &new_blocks,
+        &snapshots,
     )?;
-    capture.collect_changed_range(
-        device,
-        superblock.inode_range(),
-        "clone replacement image did not render every inode metadata block",
-        &mut changed,
-    )?;
-    capture
-        .ensure_empty("clone replacement image rendered outside allocation and inode regions")?;
-    changed.extend(new_blocks.iter().copied().zip(snapshots.iter().copied()));
-
-    let mut log = JournalLog::new();
-    let txid = log.begin()?;
-    for (home_block, image) in changed.iter().copied() {
-        log.write(txid, home_block, image)?;
-    }
-    log.commit(txid)?;
-    store_journal_image(device, *superblock, log.entries())?;
-
-    let report = recover_journal_and_checkpoint(device, *superblock)?;
-    if report.committed_transactions != 1 || report.home_writes != changed.len() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "clone replacement recovery report is inconsistent",
-        ));
-    }
-
     Ok((new_blocks, displaced_blocks, report))
 }
