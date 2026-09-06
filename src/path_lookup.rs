@@ -122,12 +122,15 @@ fn require_inode(
     inodes: &[crate::inode_codec::PersistedInode],
     inode_id: u64,
 ) -> io::Result<&crate::inode_codec::PersistedInode> {
-    inodes.iter().find(|inode| inode.id == inode_id).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            "namespace references a missing inode",
-        )
-    })
+    inodes
+        .iter()
+        .find(|inode| inode.id == inode_id)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "namespace references a missing inode",
+            )
+        })
 }
 
 fn invalid_input(message: &'static str) -> io::Error {

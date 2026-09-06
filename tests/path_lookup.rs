@@ -115,7 +115,13 @@ fn rejects_dangling_links_and_symlink_loops() {
 fn rejects_ambiguous_or_non_absolute_paths() {
     let (mut device, superblock) = setup();
 
-    for path in ["dir/file", "/dir/./file", "/dir/../file", "/dir//file", "/dir/"] {
+    for path in [
+        "dir/file",
+        "/dir/./file",
+        "/dir/../file",
+        "/dir//file",
+        "/dir/",
+    ] {
         assert_eq!(
             resolve_path_following_symlinks(&mut device, &superblock, path)
                 .unwrap_err()
