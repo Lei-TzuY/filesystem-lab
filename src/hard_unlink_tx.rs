@@ -27,7 +27,14 @@ pub fn unlink_nonfinal_file_link_journaled(
     parent: u64,
     name: &str,
 ) -> io::Result<RecoveryReport> {
-    unlink_nonfinal_link_journaled(device, superblock, parent, name, InodeKind::File, false)
+    unlink_nonfinal_link_journaled(
+        device,
+        superblock,
+        parent,
+        name,
+        InodeKind::File,
+        false,
+    )
 }
 
 /// Removes exactly one non-final namespace reference to a symbolic-link inode.
@@ -47,7 +54,14 @@ pub fn unlink_nonfinal_symlink_link_journaled(
     parent: u64,
     name: &str,
 ) -> io::Result<RecoveryReport> {
-    unlink_nonfinal_link_journaled(device, superblock, parent, name, InodeKind::Symlink, true)
+    unlink_nonfinal_link_journaled(
+        device,
+        superblock,
+        parent,
+        name,
+        InodeKind::Symlink,
+        true,
+    )
 }
 
 fn unlink_nonfinal_link_journaled(
