@@ -13,6 +13,40 @@ use crate::journal_region::store_journal_image;
 use crate::recovery::RecoveryReport;
 use crate::transaction_image::CaptureDevice;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FileBlockRange {
+    pub inode: u64,
+    pub start: usize,
+    pub block_count: usize,
+}
+
+fn range_end(range: FileBlockRange, label: &'static str) -> io::Result<usize> {
+    if range.block_count == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "clone splice requires non-empty source and destination ranges",
+        ));
+    }
+    range.start.checked_add(range.block_count).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("clone splice {label} range overflows usize"),
+        )
+    })
+}
+
+fn inode_index(inodes: &[PersistedInode], inode_id: u64, label: &'static str) -> io::Result<usize> {
+    inodes
+        .iter()
+        .position(|inode| inode.id == inode_id)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("clone {label} inode is missing"),
+            )
+        })
+}
+
 fn snapshot_owned_blocks(
     device: &mut impl BlockDevice,
     allocator: &BlockAllocator,
@@ -80,79 +114,21 @@ fn publish_splice(
     Ok(report)
 }
 
-/// Replaces an existing destination logical-block range with a differently sized fresh clone range.
-///
-/// Source images are snapshotted before metadata mutation. Fresh physical blocks are allocated while
-/// every displaced destination block remains owned, then exactly the displaced homes are released.
-/// Allocation metadata, the resized destination block vector, and all cloned data homes are published
-/// through one WAL transaction. Source and destination must be distinct regular-file inodes.
-///
-/// Format v5 has no persisted byte length, so this is deliberately block-granular. It does not define
-/// EOF, partial-block replacement, sparse holes, extents, reflinks, or POSIX splice semantics.
-///
-/// # Errors
-///
-/// Returns `InvalidInput` for empty source/destination ranges, identical endpoints, missing/non-file
-/// inodes, ranges outside existing logical blocks, range overflow, or insufficient free blocks.
-/// Returns `InvalidData` when allocator ownership disagrees with selected references. Journal-capacity,
-/// encoding, recovery, checkpoint, and block-device I/O failures are propagated.
-pub fn clone_file_blocks_splice_journaled(
-    device: &mut impl BlockDevice,
-    superblock: &Superblock,
-    source_inode: u64,
-    source_start: usize,
-    source_block_count: usize,
-    destination_inode: u64,
-    destination_start: usize,
-    destination_block_count: usize,
-) -> io::Result<(Vec<u64>, Vec<u64>, RecoveryReport)> {
-    if source_block_count == 0 || destination_block_count == 0 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "clone splice requires non-empty source and destination ranges",
-        ));
-    }
-    if source_inode == destination_inode {
+fn validate_ranges(
+    inodes: &[PersistedInode],
+    source: FileBlockRange,
+    destination: FileBlockRange,
+) -> io::Result<(usize, usize, usize, usize)> {
+    if source.inode == destination.inode {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "clone splice requires distinct source and destination inodes",
         ));
     }
-
-    let source_end = source_start
-        .checked_add(source_block_count)
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "clone splice source range overflows usize",
-            )
-        })?;
-    let destination_end = destination_start
-        .checked_add(destination_block_count)
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "clone splice destination range overflows usize",
-            )
-        })?;
-
-    let mut allocator = load_allocator(device, superblock)?;
-    let mut inodes = load_inode_table(device, superblock)?;
-    let source_index = inodes
-        .iter()
-        .position(|inode| inode.id == source_inode)
-        .ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "clone source inode is missing")
-        })?;
-    let destination_index = inodes
-        .iter()
-        .position(|inode| inode.id == destination_inode)
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "clone destination inode is missing",
-            )
-        })?;
+    let source_end = range_end(source, "source")?;
+    let destination_end = range_end(destination, "destination")?;
+    let source_index = inode_index(inodes, source.inode, "source")?;
+    let destination_index = inode_index(inodes, destination.inode, "destination")?;
     if inodes[source_index].kind != InodeKind::File
         || inodes[destination_index].kind != InodeKind::File
     {
@@ -173,10 +149,39 @@ pub fn clone_file_blocks_splice_journaled(
             "clone destination range exceeds existing logical blocks",
         ));
     }
+    Ok((source_index, source_end, destination_index, destination_end))
+}
 
-    let source_blocks = inodes[source_index].blocks[source_start..source_end].to_vec();
+/// Replaces an existing destination logical-block range with a differently sized fresh clone range.
+///
+/// Source images are snapshotted before metadata mutation. Fresh physical blocks are allocated while
+/// every displaced destination block remains owned, then exactly the displaced homes are released.
+/// Allocation metadata, the resized destination block vector, and all cloned data homes are published
+/// through one WAL transaction. Source and destination must be distinct regular-file inodes.
+///
+/// Format v5 has no persisted byte length, so this is deliberately block-granular. It does not define
+/// EOF, partial-block replacement, sparse holes, extents, reflinks, or POSIX splice semantics.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` for empty source/destination ranges, identical endpoints, missing/non-file
+/// inodes, ranges outside existing logical blocks, range overflow, or insufficient free blocks.
+/// Returns `InvalidData` when allocator ownership disagrees with selected references. Journal-capacity,
+/// encoding, recovery, checkpoint, and block-device I/O failures are propagated.
+pub fn clone_file_blocks_splice_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    source: FileBlockRange,
+    destination: FileBlockRange,
+) -> io::Result<(Vec<u64>, Vec<u64>, RecoveryReport)> {
+    let mut allocator = load_allocator(device, superblock)?;
+    let mut inodes = load_inode_table(device, superblock)?;
+    let (source_index, source_end, destination_index, destination_end) =
+        validate_ranges(&inodes, source, destination)?;
+
+    let source_blocks = inodes[source_index].blocks[source.start..source_end].to_vec();
     let displaced_blocks =
-        inodes[destination_index].blocks[destination_start..destination_end].to_vec();
+        inodes[destination_index].blocks[destination.start..destination_end].to_vec();
     let snapshots = snapshot_owned_blocks(
         device,
         &allocator,
@@ -190,8 +195,8 @@ pub fn clone_file_blocks_splice_journaled(
         "clone destination block is not allocator-owned",
     )?;
 
-    let mut new_blocks = Vec::with_capacity(source_block_count);
-    for _ in 0..source_block_count {
+    let mut new_blocks = Vec::with_capacity(source.block_count);
+    for _ in 0..source.block_count {
         let block = allocator
             .allocate()
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
@@ -203,7 +208,7 @@ pub fn clone_file_blocks_splice_journaled(
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     }
     inodes[destination_index].blocks.splice(
-        destination_start..destination_end,
+        destination.start..destination_end,
         new_blocks.iter().copied(),
     );
 
