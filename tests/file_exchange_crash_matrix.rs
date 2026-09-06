@@ -6,7 +6,10 @@ use filesystem_lab::allocation_disk::{load_allocator, store_allocator};
 use filesystem_lab::block::BlockDevice;
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
 use filesystem_lab::directory_table::store_directory_table;
-use filesystem_lab::file_exchange::exchange_file_block_ranges_journaled;
+use filesystem_lab::file_exchange::{
+    exchange_file_block_ranges_journaled, exchange_same_file_block_ranges_journaled,
+    FileBlockExchangeRange,
+};
 use filesystem_lab::format::{format_device, Superblock};
 use filesystem_lab::fsck::check_device;
 use filesystem_lab::inode::InodeKind;
@@ -91,6 +94,14 @@ fn assert_owned(device: &mut CrashDevice, sb: &Superblock, blocks: [u64; 6]) {
     }
 }
 
+fn range(inode: u64, start: usize, block_count: usize) -> FileBlockExchangeRange {
+    FileBlockExchangeRange {
+        inode,
+        start,
+        block_count,
+    }
+}
+
 #[test]
 fn exchange_swaps_equal_ranges_without_reallocation() {
     let (mut device, sb, blocks) = setup();
@@ -150,6 +161,120 @@ fn every_exchange_mutation_crash_point_is_old_or_recoverable_new() {
         assert!(
             raw == old || raw == new,
             "crash point {crash_at} exposed partial exchange"
+        );
+        check_device(&mut device).unwrap();
+        let recovery = recover_journal_and_checkpoint(&mut device, sb).unwrap();
+        if recovery.committed_transactions == 0 {
+            assert_eq!(mappings(&mut device, &sb), old);
+        } else {
+            assert_eq!(recovery.committed_transactions, 1);
+            assert_eq!(recovery.home_writes, home_writes);
+            assert_eq!(mappings(&mut device, &sb), new);
+        }
+        assert_owned(&mut device, &sb, blocks);
+        check_device(&mut device).unwrap();
+        assert!(load_journal_image(&mut device, sb).unwrap().is_empty());
+        assert_eq!(
+            recover_journal_and_checkpoint(&mut device, sb).unwrap(),
+            RecoveryReport::default()
+        );
+    }
+}
+
+#[test]
+fn same_file_exchange_swaps_different_lengths_without_reallocation() {
+    let (mut device, sb, blocks) = setup();
+    let report = exchange_same_file_block_ranges_journaled(
+        &mut device,
+        &sb,
+        range(2, 0, 1),
+        range(2, 1, 2),
+    )
+    .unwrap();
+    assert_eq!(
+        mappings(&mut device, &sb),
+        (
+            vec![blocks[1], blocks[2], blocks[0]],
+            blocks[3..].to_vec(),
+        )
+    );
+    assert_eq!(report.committed_transactions, 1);
+    assert_owned(&mut device, &sb, blocks);
+    check_device(&mut device).unwrap();
+}
+
+#[test]
+fn invalid_same_file_exchange_is_rejected_before_publication() {
+    let (mut device, sb, blocks) = setup();
+    for error in [
+        exchange_same_file_block_ranges_journaled(
+            &mut device,
+            &sb,
+            range(2, 0, 1),
+            range(3, 1, 1),
+        )
+        .unwrap_err(),
+        exchange_same_file_block_ranges_journaled(
+            &mut device,
+            &sb,
+            range(2, 0, 2),
+            range(2, 1, 1),
+        )
+        .unwrap_err(),
+        exchange_same_file_block_ranges_journaled(
+            &mut device,
+            &sb,
+            range(2, 0, 0),
+            range(2, 1, 1),
+        )
+        .unwrap_err(),
+    ] {
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+    }
+    assert_eq!(
+        mappings(&mut device, &sb),
+        (blocks[..3].to_vec(), blocks[3..].to_vec())
+    );
+    assert!(load_journal_image(&mut device, sb).unwrap().is_empty());
+}
+
+#[test]
+fn every_same_file_exchange_crash_point_is_old_or_recoverable_new() {
+    let (mut probe, sb, blocks) = setup();
+    probe.arm(None);
+    let report = exchange_same_file_block_ranges_journaled(
+        &mut probe,
+        &sb,
+        range(2, 0, 1),
+        range(2, 1, 2),
+    )
+    .unwrap();
+    let home_writes = report.home_writes;
+    let operations = probe.operations();
+    let old = (blocks[..3].to_vec(), blocks[3..].to_vec());
+    let new = (
+        vec![blocks[1], blocks[2], blocks[0]],
+        blocks[3..].to_vec(),
+    );
+    for crash_at in 0..operations {
+        let (mut device, sb, blocks) = setup();
+        device.arm(Some(crash_at));
+        assert_eq!(
+            exchange_same_file_block_ranges_journaled(
+                &mut device,
+                &sb,
+                range(2, 0, 1),
+                range(2, 1, 2),
+            )
+            .unwrap_err()
+            .kind(),
+            io::ErrorKind::Other
+        );
+        device.reboot();
+        let raw = mappings(&mut device, &sb);
+        assert!(
+            raw == old || raw == new,
+            "crash point {crash_at} exposed partial same-file exchange"
         );
         check_device(&mut device).unwrap();
         let recovery = recover_journal_and_checkpoint(&mut device, sb).unwrap();
