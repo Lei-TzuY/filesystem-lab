@@ -45,6 +45,7 @@ pub mod rename_exchange_tx;
 pub mod rename_overwrite_tx;
 pub mod rename_tx;
 pub mod symlink;
+pub mod symlink_unlink;
 mod transaction_image;
 pub mod truncate_tx;
 pub mod unlink_tx;
