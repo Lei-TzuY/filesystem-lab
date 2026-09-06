@@ -49,10 +49,7 @@ fn every_symlink_hard_link_crash_point_is_old_or_recoverable_new_namespace() {
     let old_allocator = load_allocator(&mut probe, &superblock).unwrap();
     let old_inodes = load_inode_table(&mut probe, &superblock).unwrap();
     let old_namespace = vec![entry(1, symlink, "original")];
-    let new_namespace = vec![
-        entry(1, symlink, "original"),
-        entry(1, symlink, "alias"),
-    ];
+    let new_namespace = vec![entry(1, symlink, "original"), entry(1, symlink, "alias")];
 
     probe.arm(None);
     hard_link_symlink_journaled(&mut probe, &superblock, 1, "alias", symlink).unwrap();
@@ -62,9 +59,18 @@ fn every_symlink_hard_link_crash_point_is_old_or_recoverable_new_namespace() {
         load_directory_table(&mut probe, &superblock).unwrap(),
         new_namespace
     );
-    assert_eq!(load_allocator(&mut probe, &superblock).unwrap(), old_allocator);
-    assert_eq!(load_inode_table(&mut probe, &superblock).unwrap(), old_inodes);
-    assert_eq!(read_symlink(&mut probe, &superblock, symlink).unwrap(), "../opaque/target");
+    assert_eq!(
+        load_allocator(&mut probe, &superblock).unwrap(),
+        old_allocator
+    );
+    assert_eq!(
+        load_inode_table(&mut probe, &superblock).unwrap(),
+        old_inodes
+    );
+    assert_eq!(
+        read_symlink(&mut probe, &superblock, symlink).unwrap(),
+        "../opaque/target"
+    );
     check_device(&mut probe).unwrap();
 
     for crash_at in 0..operations {
@@ -84,7 +90,10 @@ fn every_symlink_hard_link_crash_point_is_old_or_recoverable_new_namespace() {
         assert!(before == old_namespace || before == new_namespace);
         assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator);
         assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes);
-        assert_eq!(read_symlink(&mut device, &superblock, symlink).unwrap(), "../opaque/target");
+        assert_eq!(
+            read_symlink(&mut device, &superblock, symlink).unwrap(),
+            "../opaque/target"
+        );
         check_device(&mut device).unwrap();
 
         let report = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
@@ -122,6 +131,9 @@ fn symlink_hard_link_rejects_wrong_kind_and_existing_destination() {
             .kind(),
         io::ErrorKind::InvalidInput
     );
-    assert_eq!(read_symlink(&mut device, &superblock, symlink).unwrap(), "../opaque/target");
+    assert_eq!(
+        read_symlink(&mut device, &superblock, symlink).unwrap(),
+        "../opaque/target"
+    );
     check_device(&mut device).unwrap();
 }
