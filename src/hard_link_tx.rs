@@ -9,6 +9,7 @@ use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
 use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::recovery::RecoveryReport;
+use crate::symlink::read_symlink;
 
 /// Adds one additional namespace reference to an existing regular-file inode.
 ///
@@ -29,6 +30,41 @@ pub fn hard_link_file_journaled(
     name: &str,
     target: u64,
 ) -> io::Result<RecoveryReport> {
+    validate_link_endpoints(device, superblock, parent, name, target, InodeKind::File)?;
+    publish_link(device, superblock, parent, name, target)
+}
+
+/// Adds one additional namespace reference to an existing symbolic-link inode.
+///
+/// The symbolic-link target remains opaque and unchanged. Before publishing the directory-only WAL
+/// transaction, this operation validates the persisted one-block symlink payload through
+/// `read_symlink`. Allocation ownership, inode state, and target data are therefore preserved.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` when the parent is missing or not a directory, the target is missing or
+/// not a symbolic link, or the destination name already exists. Corrupt symlink payloads return
+/// `InvalidData`. Directory encoding, WAL, checkpoint, recovery, and device errors are propagated.
+pub fn hard_link_symlink_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    parent: u64,
+    name: &str,
+    target: u64,
+) -> io::Result<RecoveryReport> {
+    validate_link_endpoints(device, superblock, parent, name, target, InodeKind::Symlink)?;
+    read_symlink(device, superblock, target)?;
+    publish_link(device, superblock, parent, name, target)
+}
+
+fn validate_link_endpoints(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    parent: u64,
+    name: &str,
+    target: u64,
+    required_kind: InodeKind,
+) -> io::Result<()> {
     let inodes = load_inode_table(device, superblock)?;
     let parent_inode = inodes
         .iter()
@@ -51,17 +87,28 @@ pub fn hard_link_file_journaled(
                 "hard-link target inode is missing",
             )
         })?;
-    if target_inode.kind != InodeKind::File {
-        return invalid("hard-link target must be a regular file");
+    if target_inode.kind != required_kind {
+        return invalid("hard-link target has the wrong inode kind");
     }
 
-    let mut entries = load_directory_table(device, superblock)?;
+    let entries = load_directory_table(device, superblock)?;
     if entries
         .iter()
         .any(|entry| entry.parent == parent && entry.name == name)
     {
         return invalid("hard-link destination already exists");
     }
+    Ok(())
+}
+
+fn publish_link(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    parent: u64,
+    name: &str,
+    target: u64,
+) -> io::Result<RecoveryReport> {
+    let mut entries = load_directory_table(device, superblock)?;
     entries.push(PersistedDirectoryEntry {
         parent,
         target,
