@@ -28,15 +28,27 @@ const SOURCE_DATA: [[u8; BLOCK_SIZE]; 2] = [[0x31; BLOCK_SIZE], [0x72; BLOCK_SIZ
 const DESTINATION_DATA: [[u8; BLOCK_SIZE]; 2] = [[0x19; BLOCK_SIZE], [0x28; BLOCK_SIZE]];
 
 fn inode(id: u64, kind: InodeKind) -> PersistedInode {
-    PersistedInode { id, kind, blocks: Vec::new() }
+    PersistedInode {
+        id,
+        kind,
+        blocks: Vec::new(),
+    }
 }
 
 fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
-    PersistedDirectoryEntry { parent, target, name: name.to_owned() }
+    PersistedDirectoryEntry {
+        parent,
+        target,
+        name: name.to_owned(),
+    }
 }
 
 fn range(path: &str, start: usize, block_count: usize) -> PathCloneSpliceRange<'_> {
-    PathCloneSpliceRange { path, start, block_count }
+    PathCloneSpliceRange {
+        path,
+        start,
+        block_count,
+    }
 }
 
 fn setup() -> (CrashDevice, Superblock) {
@@ -115,7 +127,9 @@ fn splices_differently_sized_clone_through_symlink_paths() {
         vec![0x72]
     );
     check_device(&mut device).unwrap();
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -157,13 +171,21 @@ fn rejects_invalid_path_clone_splice_without_publication() {
         ));
     }
 
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
     assert_eq!(
         load_directory_table(&mut device, &superblock).unwrap(),
         directory_before
     );
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -183,14 +205,20 @@ fn every_path_clone_splice_crash_point_recovers_old_or_complete_new_state() {
     for crash_at in 0..operations {
         let (mut device, superblock) = setup();
         device.arm(Some(crash_at));
-        assert_eq!(run(&mut device, &superblock).unwrap_err().kind(), io::ErrorKind::Other);
+        assert_eq!(
+            run(&mut device, &superblock).unwrap_err().kind(),
+            io::ErrorKind::Other
+        );
         device.reboot();
         recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         let allocator = load_allocator(&mut device, &superblock).unwrap();
         let inodes = load_inode_table(&mut device, &superblock).unwrap();
         let old = allocator == allocator_before && inodes == inodes_before;
         let new = allocator == allocator_after && inodes == inodes_after;
-        assert!(old || new, "crash point {crash_at} recovered a mixed clone-splice state");
+        assert!(
+            old || new,
+            "crash point {crash_at} recovered a mixed clone-splice state"
+        );
         assert_eq!(
             load_directory_table(&mut device, &superblock).unwrap(),
             directory_before
@@ -200,7 +228,9 @@ fn every_path_clone_splice_crash_point_recovers_old_or_complete_new_state() {
             source_before
         );
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
