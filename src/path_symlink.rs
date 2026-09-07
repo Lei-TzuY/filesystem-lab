@@ -66,7 +66,10 @@ mod tests {
     #[test]
     fn destination_split_rejects_non_absolute_root_and_trailing_slash() {
         for path in ["link", "/", "/dir/"] {
-            assert_eq!(split_destination(path).unwrap_err().kind(), io::ErrorKind::InvalidInput);
+            assert_eq!(
+                split_destination(path).unwrap_err().kind(),
+                io::ErrorKind::InvalidInput
+            );
         }
     }
 }
