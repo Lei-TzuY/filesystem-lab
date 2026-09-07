@@ -30,7 +30,9 @@ pub fn create_symlink_at_path_journaled(
 
 fn split_destination(path: &str) -> io::Result<(&str, &str)> {
     if !path.starts_with('/') {
-        return Err(invalid_input("symlink destination must be an absolute path"));
+        return Err(invalid_input(
+            "symlink destination must be an absolute path",
+        ));
     }
     if path == "/" {
         return Err(invalid_input("symlink destination cannot be the root path"));
@@ -40,7 +42,9 @@ fn split_destination(path: &str) -> io::Result<(&str, &str)> {
         .rsplit_once('/')
         .ok_or_else(|| invalid_input("symlink destination must contain a final component"))?;
     if name.is_empty() {
-        return Err(invalid_input("symlink destination final component is empty"));
+        return Err(invalid_input(
+            "symlink destination final component is empty",
+        ));
     }
 
     Ok((if parent.is_empty() { "/" } else { parent }, name))
