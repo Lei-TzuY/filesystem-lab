@@ -41,6 +41,7 @@ pub mod journal_codec;
 pub mod journal_region;
 pub mod metadata_tx;
 pub mod path_append;
+pub mod path_clone_append;
 pub mod path_copy_range;
 pub mod path_exchange;
 pub mod path_hard_link;
