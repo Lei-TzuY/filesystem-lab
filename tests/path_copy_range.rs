@@ -15,7 +15,7 @@ use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
 use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::journal_region::load_journal_image;
 use filesystem_lab::path_append::append_file_blocks_at_path_journaled;
-use filesystem_lab::path_copy_range::copy_file_range_at_path_journaled;
+use filesystem_lab::path_copy_range::{copy_file_range_at_path_journaled, PathFileRangeEndpoint};
 use filesystem_lab::path_lookup::read_file_range_at_path;
 use filesystem_lab::recovery::RecoveryReport;
 use filesystem_lab::symlink::create_symlink_journaled;
@@ -36,6 +36,14 @@ fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
         parent,
         target,
         name: name.to_owned(),
+    }
+}
+
+fn path_range(path: &str, first_block: usize, offset: usize) -> PathFileRangeEndpoint<'_> {
+    PathFileRangeEndpoint {
+        path,
+        first_block,
+        offset,
     }
 }
 
@@ -88,12 +96,8 @@ fn copy_cross_block(
     copy_file_range_at_path_journaled(
         device,
         superblock,
-        "/src_alias",
-        0,
-        BLOCK_SIZE - 2,
-        "/dst_alias",
-        0,
-        BLOCK_SIZE - 2,
+        path_range("/src_alias", 0, BLOCK_SIZE - 2),
+        path_range("/dst_alias", 0, BLOCK_SIZE - 2),
         4,
     )
 }
@@ -104,12 +108,8 @@ fn copies_existing_ranges_through_direct_and_symlink_paths() {
     copy_file_range_at_path_journaled(
         &mut device,
         &superblock,
-        "/dir_alias/src",
-        0,
-        1,
-        "/dir/dst",
-        0,
-        1,
+        path_range("/dir_alias/src", 0, 1),
+        path_range("/dir/dst", 0, 1),
         2,
     )
     .unwrap();
@@ -133,12 +133,8 @@ fn rejects_invalid_path_copy_ranges_without_metadata_publication() {
         copy_file_range_at_path_journaled(
             &mut device,
             &superblock,
-            "/dir",
-            0,
-            0,
-            "/dir/dst",
-            0,
-            0,
+            path_range("/dir", 0, 0),
+            path_range("/dir/dst", 0, 0),
             1,
         )
         .unwrap_err()
@@ -149,12 +145,8 @@ fn rejects_invalid_path_copy_ranges_without_metadata_publication() {
         copy_file_range_at_path_journaled(
             &mut device,
             &superblock,
-            "/dangling",
-            0,
-            0,
-            "/dir/dst",
-            0,
-            0,
+            path_range("/dangling", 0, 0),
+            path_range("/dir/dst", 0, 0),
             1,
         )
         .unwrap_err()
@@ -165,12 +157,8 @@ fn rejects_invalid_path_copy_ranges_without_metadata_publication() {
         copy_file_range_at_path_journaled(
             &mut device,
             &superblock,
-            "/dir/src",
-            0,
-            0,
-            "/dir/dst",
-            0,
-            0,
+            path_range("/dir/src", 0, 0),
+            path_range("/dir/dst", 0, 0),
             0,
         )
         .unwrap_err()
@@ -181,12 +169,8 @@ fn rejects_invalid_path_copy_ranges_without_metadata_publication() {
         copy_file_range_at_path_journaled(
             &mut device,
             &superblock,
-            "/dir/src",
-            2,
-            0,
-            "/dir/dst",
-            0,
-            0,
+            path_range("/dir/src", 2, 0),
+            path_range("/dir/dst", 0, 0),
             1,
         )
         .unwrap_err()
