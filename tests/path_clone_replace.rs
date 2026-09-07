@@ -229,8 +229,8 @@ fn every_path_clone_replace_crash_point_recovers_old_or_complete_new_state() {
     let allocator_before = load_allocator(&mut probe, &superblock).unwrap();
     let inodes_before = load_inode_table(&mut probe, &superblock).unwrap();
     let directory_before = load_directory_table(&mut probe, &superblock).unwrap();
-    let source_before = read_file_range_at_path(&mut probe, &superblock, "/dir/source", 0, 0, 1)
-        .unwrap();
+    let source_before =
+        read_file_range_at_path(&mut probe, &superblock, "/dir/source", 0, 0, 1).unwrap();
     probe.arm(None);
     run(&mut probe, &superblock).unwrap();
     let operations = probe.operations();
