@@ -42,6 +42,7 @@ pub mod journal_region;
 pub mod metadata_tx;
 pub mod path_append;
 pub mod path_lookup;
+pub mod path_symlink;
 pub mod recovery;
 pub mod rename_exchange_tx;
 pub mod rename_overwrite_tx;
