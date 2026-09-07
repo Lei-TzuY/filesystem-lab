@@ -76,14 +76,7 @@ fn zero_cross_block(
     device: &mut CrashDevice,
     superblock: &Superblock,
 ) -> io::Result<RecoveryReport> {
-    zero_file_range_at_path_journaled(
-        device,
-        superblock,
-        "/file_alias",
-        0,
-        BLOCK_SIZE - 2,
-        4,
-    )
+    zero_file_range_at_path_journaled(device, superblock, "/file_alias", 0, BLOCK_SIZE - 2, 4)
 }
 
 #[test]
@@ -149,11 +142,9 @@ fn rejects_invalid_zero_ranges_without_metadata_publication() {
         load_directory_table(&mut device, &superblock).unwrap(),
         directory_before
     );
-    assert!(
-        load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -179,15 +170,9 @@ fn every_pathname_zero_range_crash_point_recovers_old_or_complete_new_state() {
         device.reboot();
         recover_journal_and_checkpoint(&mut device, superblock).unwrap();
 
-        let bytes = read_file_range_at_path(
-            &mut device,
-            &superblock,
-            "/dir/file",
-            0,
-            BLOCK_SIZE - 2,
-            4,
-        )
-        .unwrap();
+        let bytes =
+            read_file_range_at_path(&mut device, &superblock, "/dir/file", 0, BLOCK_SIZE - 2, 4)
+                .unwrap();
         assert!(bytes == vec![0x11, 0x11, 0x22, 0x22] || bytes == vec![0, 0, 0, 0]);
         assert_eq!(
             load_allocator(&mut device, &superblock).unwrap(),
@@ -202,11 +187,9 @@ fn every_pathname_zero_range_crash_point_recovers_old_or_complete_new_state() {
             directory_before
         );
         check_device(&mut device).unwrap();
-        assert!(
-            load_journal_image(&mut device, superblock)
-                .unwrap()
-                .is_empty()
-        );
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
