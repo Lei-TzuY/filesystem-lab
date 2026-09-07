@@ -134,8 +134,18 @@ fn exchanges_differently_sized_ranges_through_symlink_paths() {
         read_file_range_at_path(&mut device, &superblock, "/dir/right", 0, 0, 1).unwrap(),
         vec![0x22]
     );
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap()[2].blocks.len(), 4);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap()[3].blocks.len(), 1);
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap()[2]
+            .blocks
+            .len(),
+        4
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap()[3]
+            .blocks
+            .len(),
+        1
+    );
     check_device(&mut device).unwrap();
 }
 
