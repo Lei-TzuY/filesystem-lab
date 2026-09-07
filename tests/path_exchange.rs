@@ -62,7 +62,11 @@ fn setup() -> (CrashDevice, Superblock) {
     store_directory_table(
         &mut device,
         &superblock,
-        &[entry(1, 2, "dir"), entry(2, 3, "left"), entry(2, 4, "right")],
+        &[
+            entry(1, 2, "dir"),
+            entry(2, 3, "left"),
+            entry(2, 4, "right"),
+        ],
     )
     .unwrap();
     create_symlink_journaled(&mut device, &superblock, 1, "dir_alias", "/dir").unwrap();
@@ -173,8 +177,14 @@ fn rejects_invalid_path_exchange_without_publication() {
         ));
     }
 
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
     assert_eq!(
         load_directory_table(&mut device, &superblock).unwrap(),
         directory_before
@@ -209,7 +219,10 @@ fn every_pathname_exchange_crash_point_recovers_old_or_complete_new_state() {
 
         let recovered_inodes = load_inode_table(&mut device, &superblock).unwrap();
         assert!(recovered_inodes == inodes_before || recovered_inodes == inodes_after);
-        assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
+        assert_eq!(
+            load_allocator(&mut device, &superblock).unwrap(),
+            allocator_before
+        );
         assert_eq!(
             load_directory_table(&mut device, &superblock).unwrap(),
             directory_before
