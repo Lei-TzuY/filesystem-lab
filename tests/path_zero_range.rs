@@ -93,7 +93,7 @@ fn zeroes_existing_ranges_through_direct_and_symlink_paths() {
     );
     assert_eq!(
         read_file_range_at_path(&mut device, &superblock, "/dir/file", 1, 0, 4).unwrap(),
-        vec![0x22, 0, 0, 0x22]
+        vec![0, 0, 0, 0x22]
     );
     check_device(&mut device).unwrap();
 }
