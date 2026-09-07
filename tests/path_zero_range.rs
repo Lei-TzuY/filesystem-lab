@@ -24,11 +24,19 @@ use support::CrashDevice;
 const JOURNAL_BLOCKS: u64 = 10;
 
 fn inode(id: u64, kind: InodeKind) -> PersistedInode {
-    PersistedInode { id, kind, blocks: Vec::new() }
+    PersistedInode {
+        id,
+        kind,
+        blocks: Vec::new(),
+    }
 }
 
 fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
-    PersistedDirectoryEntry { parent, target, name: name.to_owned() }
+    PersistedDirectoryEntry {
+        parent,
+        target,
+        name: name.to_owned(),
+    }
 }
 
 fn setup() -> (CrashDevice, Superblock) {
@@ -64,7 +72,10 @@ fn setup() -> (CrashDevice, Superblock) {
     (device, superblock)
 }
 
-fn zero_cross_block(device: &mut CrashDevice, superblock: &Superblock) -> io::Result<RecoveryReport> {
+fn zero_cross_block(
+    device: &mut CrashDevice,
+    superblock: &Superblock,
+) -> io::Result<RecoveryReport> {
     zero_file_range_at_path_journaled(
         device,
         superblock,
@@ -79,7 +90,8 @@ fn zero_cross_block(device: &mut CrashDevice, superblock: &Superblock) -> io::Re
 fn zeroes_existing_ranges_through_direct_and_symlink_paths() {
     let (mut device, superblock) = setup();
     zero_file_range_at_path_journaled(&mut device, &superblock, "/dir/file", 0, 1, 2).unwrap();
-    zero_file_range_at_path_journaled(&mut device, &superblock, "/dir_alias/file", 1, 1, 2).unwrap();
+    zero_file_range_at_path_journaled(&mut device, &superblock, "/dir_alias/file", 1, 1, 2)
+        .unwrap();
     zero_cross_block(&mut device, &superblock).unwrap();
 
     assert_eq!(
@@ -125,10 +137,23 @@ fn rejects_invalid_zero_ranges_without_metadata_publication() {
         io::ErrorKind::InvalidInput
     );
 
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), directory_before);
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        directory_before
+    );
+    assert!(
+        load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -146,7 +171,9 @@ fn every_pathname_zero_range_crash_point_recovers_old_or_complete_new_state() {
 
         device.arm(Some(crash_at));
         assert_eq!(
-            zero_cross_block(&mut device, &superblock).unwrap_err().kind(),
+            zero_cross_block(&mut device, &superblock)
+                .unwrap_err()
+                .kind(),
             io::ErrorKind::Other
         );
         device.reboot();
@@ -162,11 +189,24 @@ fn every_pathname_zero_range_crash_point_recovers_old_or_complete_new_state() {
         )
         .unwrap();
         assert!(bytes == vec![0x11, 0x11, 0x22, 0x22] || bytes == vec![0, 0, 0, 0]);
-        assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-        assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
-        assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), directory_before);
+        assert_eq!(
+            load_allocator(&mut device, &superblock).unwrap(),
+            allocator_before
+        );
+        assert_eq!(
+            load_inode_table(&mut device, &superblock).unwrap(),
+            inodes_before
+        );
+        assert_eq!(
+            load_directory_table(&mut device, &superblock).unwrap(),
+            directory_before
+        );
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(
+            load_journal_image(&mut device, superblock)
+                .unwrap()
+                .is_empty()
+        );
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
