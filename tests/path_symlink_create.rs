@@ -72,8 +72,7 @@ fn creates_symlinks_at_direct_and_symlinked_parent_paths() {
     let (mut device, superblock) = setup();
 
     create_symlink_at_path_journaled(&mut device, &superblock, "/direct", "/dir").unwrap();
-    create_symlink_at_path_journaled(&mut device, &superblock, "/dir/nested", "../direct")
-        .unwrap();
+    create_symlink_at_path_journaled(&mut device, &superblock, "/dir/nested", "../direct").unwrap();
     create_symlink_at_path_journaled(&mut device, &superblock, "/dir_alias/via_alias", TARGET)
         .unwrap();
 
