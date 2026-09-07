@@ -76,14 +76,7 @@ fn setup() -> (CrashDevice, Superblock, Vec<u64>) {
     )
     .unwrap();
     create_symlink_journaled(&mut device, &superblock, 1, "dir_alias", "/dir").unwrap();
-    create_symlink_journaled(
-        &mut device,
-        &superblock,
-        1,
-        "source_alias",
-        "/dir/source",
-    )
-    .unwrap();
+    create_symlink_journaled(&mut device, &superblock, 1, "source_alias", "/dir/source").unwrap();
     create_symlink_journaled(
         &mut device,
         &superblock,
@@ -93,13 +86,8 @@ fn setup() -> (CrashDevice, Superblock, Vec<u64>) {
     )
     .unwrap();
     create_symlink_journaled(&mut device, &superblock, 1, "dangling", "/missing").unwrap();
-    append_file_blocks_at_path_journaled(
-        &mut device,
-        &superblock,
-        "/dir/source",
-        &SOURCE_DATA,
-    )
-    .unwrap();
+    append_file_blocks_at_path_journaled(&mut device, &superblock, "/dir/source", &SOURCE_DATA)
+        .unwrap();
     append_file_blocks_at_path_journaled(
         &mut device,
         &superblock,
@@ -260,7 +248,10 @@ fn every_path_clone_append_crash_point_recovers_old_or_complete_new_state() {
         let inodes = load_inode_table(&mut device, &superblock).unwrap();
         let old = allocator == allocator_before && inodes == inodes_before;
         let new = allocator == allocator_after && inodes == inodes_after;
-        assert!(old || new, "crash point {crash_at} recovered a mixed clone-append state");
+        assert!(
+            old || new,
+            "crash point {crash_at} recovered a mixed clone-append state"
+        );
         assert_eq!(
             load_directory_table(&mut device, &superblock).unwrap(),
             directory_before
@@ -268,27 +259,13 @@ fn every_path_clone_append_crash_point_recovers_old_or_complete_new_state() {
         assert_source_unchanged(&mut device, &superblock);
         if new {
             assert_eq!(
-                read_file_range_at_path(
-                    &mut device,
-                    &superblock,
-                    "/dir/destination",
-                    1,
-                    0,
-                    1,
-                )
-                .unwrap(),
+                read_file_range_at_path(&mut device, &superblock, "/dir/destination", 1, 0, 1,)
+                    .unwrap(),
                 vec![0x31]
             );
             assert_eq!(
-                read_file_range_at_path(
-                    &mut device,
-                    &superblock,
-                    "/dir/destination",
-                    2,
-                    0,
-                    1,
-                )
-                .unwrap(),
+                read_file_range_at_path(&mut device, &superblock, "/dir/destination", 2, 0, 1,)
+                    .unwrap(),
                 vec![0x72]
             );
         }
