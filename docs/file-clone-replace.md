@@ -10,6 +10,8 @@ The source and destination must be distinct regular-file inodes. Source images a
 
 The source mapping and data remain unchanged. Destination block count and the relative ordering of all unaffected destination blocks are preserved. The operation does not provide shared-block or reflink semantics.
 
+`clone_file_blocks_replace_at_path_journaled` exposes the same primitive through absolute pathname resolution. Both source and destination follow intermediate and final symbolic links under the existing bounded expansion rules before the resolved inode IDs are passed to the inode-level operation. The pathname layer does not introduce a second durability mechanism or any new on-disk state.
+
 ## Crash contract
 
 Deterministic crash enumeration covers WAL publication, allocation/inode/data home replay, journal clearing, and checkpoint durability boundaries. Before a durable commit, recovery preserves the old destination references and ownership. After a durable commit, recovery converges to the complete replacement state.
@@ -25,6 +27,8 @@ After successful recovery:
 - namespace invariants remain unchanged and fsck is clean;
 - the journal is empty; and
 - a second recovery/checkpoint is a no-op.
+
+The pathname crash matrix additionally verifies that symlink traversal never changes namespace state and that every interrupted operation recovers either the complete pre-operation allocator/inode image or the complete post-operation image, never a mixed state.
 
 ## Format scope
 
