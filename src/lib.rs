@@ -43,6 +43,7 @@ pub mod metadata_tx;
 pub mod path_append;
 pub mod path_hard_link;
 pub mod path_lookup;
+pub mod path_rename;
 pub mod path_symlink;
 pub mod recovery;
 pub mod rename_exchange_tx;
