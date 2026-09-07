@@ -135,10 +135,7 @@ mod tests {
     #[test]
     fn split_preserves_root_and_nested_parent_paths() {
         assert_eq!(split_path("/file").unwrap(), ("/", "file"));
-        assert_eq!(
-            split_path("/dir/sub/file").unwrap(),
-            ("/dir/sub", "file")
-        );
+        assert_eq!(split_path("/dir/sub/file").unwrap(), ("/dir/sub", "file"));
     }
 
     #[test]
