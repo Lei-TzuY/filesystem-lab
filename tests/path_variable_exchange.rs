@@ -81,11 +81,7 @@ fn setup() -> (CrashDevice, Superblock) {
         &mut device,
         &superblock,
         "/dir/left",
-        &[
-            [0x11; BLOCK_SIZE],
-            [0x22; BLOCK_SIZE],
-            [0x33; BLOCK_SIZE],
-        ],
+        &[[0x11; BLOCK_SIZE], [0x22; BLOCK_SIZE], [0x33; BLOCK_SIZE]],
     )
     .unwrap();
     append_file_blocks_at_path_journaled(
