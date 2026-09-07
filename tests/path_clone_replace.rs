@@ -25,11 +25,8 @@ use support::CrashDevice;
 
 const JOURNAL_BLOCKS: u64 = 8;
 const SOURCE_DATA: [[u8; BLOCK_SIZE]; 2] = [[0x31; BLOCK_SIZE], [0x72; BLOCK_SIZE]];
-const DESTINATION_DATA: [[u8; BLOCK_SIZE]; 3] = [
-    [0x19; BLOCK_SIZE],
-    [0x28; BLOCK_SIZE],
-    [0x47; BLOCK_SIZE],
-];
+const DESTINATION_DATA: [[u8; BLOCK_SIZE]; 3] =
+    [[0x19; BLOCK_SIZE], [0x28; BLOCK_SIZE], [0x47; BLOCK_SIZE]];
 
 fn inode(id: u64, kind: InodeKind) -> PersistedInode {
     PersistedInode {
