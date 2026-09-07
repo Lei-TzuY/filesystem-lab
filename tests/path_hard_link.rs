@@ -68,20 +68,21 @@ fn creates_regular_file_hard_link_through_source_and_parent_symlinks() {
     let allocator_before = load_allocator(&mut device, &superblock).unwrap();
     let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
 
-    hard_link_file_at_path_journaled(
-        &mut device,
-        &superblock,
-        "/file_alias",
-        "/dir_alias/linked",
-    )
-    .unwrap();
+    hard_link_file_at_path_journaled(&mut device, &superblock, "/file_alias", "/dir_alias/linked")
+        .unwrap();
 
     assert_eq!(
         resolve_path_following_symlinks(&mut device, &superblock, "/dir/linked").unwrap(),
         3
     );
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
     check_device(&mut device).unwrap();
 }
 
@@ -107,23 +108,29 @@ fn rejects_invalid_paths_and_destination_collisions_before_publication() {
         );
     }
 
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        entries_before
+    );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
 fn every_pathname_hard_link_crash_point_recovers_old_or_complete_new_state() {
     let (mut probe, superblock) = setup();
     probe.arm(None);
-    hard_link_file_at_path_journaled(
-        &mut probe,
-        &superblock,
-        "/file_alias",
-        "/dir_alias/linked",
-    )
-    .unwrap();
+    hard_link_file_at_path_journaled(&mut probe, &superblock, "/file_alias", "/dir_alias/linked")
+        .unwrap();
     let operations = probe.operations();
 
     for crash_at in 0..operations {
@@ -148,8 +155,14 @@ fn every_pathname_hard_link_crash_point_recovers_old_or_complete_new_state() {
         device.reboot();
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
 
-        assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-        assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+        assert_eq!(
+            load_allocator(&mut device, &superblock).unwrap(),
+            allocator_before
+        );
+        assert_eq!(
+            load_inode_table(&mut device, &superblock).unwrap(),
+            inodes_before
+        );
         let entries_after = load_directory_table(&mut device, &superblock).unwrap();
         if recovery.committed_transactions == 0 {
             assert_eq!(entries_after, entries_before);
@@ -163,7 +176,9 @@ fn every_pathname_hard_link_crash_point_recovers_old_or_complete_new_state() {
         }
 
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
