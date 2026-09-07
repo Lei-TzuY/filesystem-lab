@@ -15,24 +15,7 @@ jobs:
           components: rustfmt, clippy
       - name: Format
         run: cargo fmt --all -- --check
-      - name: Capture diagnostics
-        run: |
-          set +e
-          cargo clippy --all-targets --all-features -- -D warnings > clippy.txt 2>&1
-          echo $? > clippy.status
-          cargo test --all-targets --all-features > test.txt 2>&1
-          echo $? > test.status
-          exit 0
-      - name: Upload diagnostics
-        uses: actions/upload-artifact@v4
-        with:
-          name: diagnostics
-          path: |
-            clippy.txt
-            clippy.status
-            test.txt
-            test.status
-      - name: Verify diagnostics
-        run: |
-          test "$(cat clippy.status)" = "0"
-          test "$(cat test.status)" = "0"
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Test
+        run: cargo test --all-targets --all-features
