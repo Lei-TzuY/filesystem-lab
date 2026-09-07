@@ -46,6 +46,7 @@ pub mod path_lookup;
 pub mod path_rename;
 pub mod path_symlink;
 pub mod path_unlink;
+pub mod path_zero_range;
 pub mod recovery;
 pub mod rename_exchange_tx;
 pub mod rename_overwrite_tx;
