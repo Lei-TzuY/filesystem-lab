@@ -46,7 +46,10 @@ fn setup() -> (CrashDevice, Superblock) {
     store_inode_table(
         &mut device,
         &superblock,
-        &[inode(1, InodeKind::Directory), inode(2, InodeKind::Directory)],
+        &[
+            inode(1, InodeKind::Directory),
+            inode(2, InodeKind::Directory),
+        ],
     )
     .unwrap();
     store_directory_table(&mut device, &superblock, &[entry(1, 2, "dir")]).unwrap();
@@ -101,10 +104,21 @@ fn rejects_invalid_path_forms_without_publishing() {
             .kind(),
         io::ErrorKind::NotFound
     );
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        entries_before
+    );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -131,9 +145,18 @@ fn every_pathname_symlink_unlink_crash_point_recovers_old_or_complete_new_state(
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
 
         if recovery.committed_transactions == 0 {
-            assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-            assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
-            assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
+            assert_eq!(
+                load_allocator(&mut device, &superblock).unwrap(),
+                allocator_before
+            );
+            assert_eq!(
+                load_inode_table(&mut device, &superblock).unwrap(),
+                inodes_before
+            );
+            assert_eq!(
+                load_directory_table(&mut device, &superblock).unwrap(),
+                entries_before
+            );
             assert_eq!(
                 read_symlink_at_path(&mut device, &superblock, "/dir/link").unwrap(),
                 TARGET
@@ -155,7 +178,9 @@ fn every_pathname_symlink_unlink_crash_point_recovers_old_or_complete_new_state(
         }
 
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
