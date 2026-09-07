@@ -6,6 +6,13 @@ use crate::format::Superblock;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PathFileRangeEndpoint<'a> {
+    pub path: &'a str,
+    pub first_block: usize,
+    pub offset: usize,
+}
+
 /// Atomically copies a byte range between existing regular-file blocks addressed by absolute paths.
 ///
 /// Source and destination path resolution follow intermediate and final symbolic links with the
@@ -23,28 +30,24 @@ use crate::recovery::RecoveryReport;
 pub fn copy_file_range_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
-    source_path: &str,
-    source_first_block: usize,
-    source_offset: usize,
-    destination_path: &str,
-    destination_first_block: usize,
-    destination_offset: usize,
+    source: PathFileRangeEndpoint<'_>,
+    destination: PathFileRangeEndpoint<'_>,
     len: usize,
 ) -> io::Result<RecoveryReport> {
-    let source_inode = resolve_path_following_symlinks(device, superblock, source_path)?;
-    let destination_inode = resolve_path_following_symlinks(device, superblock, destination_path)?;
+    let source_inode = resolve_path_following_symlinks(device, superblock, source.path)?;
+    let destination_inode = resolve_path_following_symlinks(device, superblock, destination.path)?;
     copy_file_range_journaled(
         device,
         superblock,
         FileRangeEndpoint {
             inode: source_inode,
-            first_block: source_first_block,
-            offset: source_offset,
+            first_block: source.first_block,
+            offset: source.offset,
         },
         FileRangeEndpoint {
             inode: destination_inode,
-            first_block: destination_first_block,
-            offset: destination_offset,
+            first_block: destination.first_block,
+            offset: destination.offset,
         },
         len,
     )
