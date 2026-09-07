@@ -51,6 +51,7 @@ pub mod path_hard_link;
 pub mod path_lookup;
 pub mod path_rename;
 pub mod path_symlink;
+pub mod path_transfer;
 pub mod path_unlink;
 pub mod path_zero_range;
 pub mod recovery;
