@@ -54,11 +54,7 @@ fn setup() -> (CrashDevice, Superblock) {
     store_directory_table(
         &mut device,
         &superblock,
-        &[
-            entry(1, 2, "src"),
-            entry(1, 3, "dst"),
-            entry(2, 4, "file"),
-        ],
+        &[entry(1, 2, "src"), entry(1, 3, "dst"), entry(2, 4, "file")],
     )
     .unwrap();
     create_symlink_journaled(&mut device, &superblock, 1, "src_alias", "/src").unwrap();
@@ -186,7 +182,9 @@ fn every_pathname_rename_crash_point_recovers_old_or_complete_new_state() {
             assert_eq!(entries_after, entries_before);
         } else {
             assert_eq!(recovery.committed_transactions, 1);
-            assert!(resolve_path_following_symlinks(&mut device, &superblock, "/src/file").is_err());
+            assert!(
+                resolve_path_following_symlinks(&mut device, &superblock, "/src/file").is_err()
+            );
             assert_eq!(
                 resolve_path_following_symlinks(&mut device, &superblock, "/dst/moved").unwrap(),
                 4
