@@ -56,11 +56,7 @@ fn setup() -> (CrashDevice, Superblock) {
     store_directory_table(
         &mut device,
         &superblock,
-        &[
-            entry(1, 2, "dir"),
-            entry(2, 3, "src"),
-            entry(2, 4, "dst"),
-        ],
+        &[entry(1, 2, "dir"), entry(2, 3, "src"), entry(2, 4, "dst")],
     )
     .unwrap();
     create_symlink_journaled(&mut device, &superblock, 1, "dir_alias", "/dir").unwrap();
@@ -119,15 +115,8 @@ fn copies_existing_ranges_through_direct_and_symlink_paths() {
     .unwrap();
     copy_cross_block(&mut device, &superblock).unwrap();
     assert_eq!(
-        read_file_range_at_path(
-            &mut device,
-            &superblock,
-            "/dir/dst",
-            0,
-            BLOCK_SIZE - 2,
-            4,
-        )
-        .unwrap(),
+        read_file_range_at_path(&mut device, &superblock, "/dir/dst", 0, BLOCK_SIZE - 2, 4,)
+            .unwrap(),
         vec![0x11, 0x11, 0x22, 0x22]
     );
     check_device(&mut device).unwrap();
@@ -217,11 +206,9 @@ fn rejects_invalid_path_copy_ranges_without_metadata_publication() {
         load_directory_table(&mut device, &superblock).unwrap(),
         directory_before
     );
-    assert!(
-        load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -247,19 +234,10 @@ fn every_pathname_copy_range_crash_point_recovers_old_or_complete_new_state() {
         device.reboot();
         recover_journal_and_checkpoint(&mut device, superblock).unwrap();
 
-        let bytes = read_file_range_at_path(
-            &mut device,
-            &superblock,
-            "/dir/dst",
-            0,
-            BLOCK_SIZE - 2,
-            4,
-        )
-        .unwrap();
-        assert!(
-            bytes == vec![0x33, 0x33, 0x44, 0x44]
-                || bytes == vec![0x11, 0x11, 0x22, 0x22]
-        );
+        let bytes =
+            read_file_range_at_path(&mut device, &superblock, "/dir/dst", 0, BLOCK_SIZE - 2, 4)
+                .unwrap();
+        assert!(bytes == vec![0x33, 0x33, 0x44, 0x44] || bytes == vec![0x11, 0x11, 0x22, 0x22]);
         assert_eq!(
             load_allocator(&mut device, &superblock).unwrap(),
             allocator_before
@@ -273,11 +251,9 @@ fn every_pathname_copy_range_crash_point_recovers_old_or_complete_new_state() {
             directory_before
         );
         check_device(&mut device).unwrap();
-        assert!(
-            load_journal_image(&mut device, superblock)
-                .unwrap()
-                .is_empty()
-        );
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
