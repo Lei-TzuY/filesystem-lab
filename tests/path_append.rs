@@ -80,7 +80,10 @@ fn assert_unique_file_ownership(device: &mut CrashDevice, superblock: &Superbloc
     let mut seen = HashSet::new();
     for inode in inodes.iter().filter(|inode| inode.kind == InodeKind::File) {
         for block in &inode.blocks {
-            assert!(seen.insert(*block), "duplicate physical block reference {block}");
+            assert!(
+                seen.insert(*block),
+                "duplicate physical block reference {block}"
+            );
             assert!(allocator.is_owned(*block).unwrap());
         }
     }
@@ -165,8 +168,14 @@ fn propagates_path_and_append_validation_before_publication() {
             .kind(),
         io::ErrorKind::InvalidInput
     );
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
     assert!(load_journal_image(&mut device, superblock)
         .unwrap()
         .is_empty());
@@ -184,7 +193,11 @@ fn every_pathname_append_crash_point_recovers_old_or_complete_new_state() {
         let allocator_before = load_allocator(&mut device, &superblock).unwrap();
         let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
         let directory_before = load_directory_table(&mut device, &superblock).unwrap();
-        let file_before = inodes_before.iter().find(|inode| inode.id == 3).unwrap().clone();
+        let file_before = inodes_before
+            .iter()
+            .find(|inode| inode.id == 3)
+            .unwrap()
+            .clone();
 
         device.arm(Some(crash_at));
         assert_eq!(
