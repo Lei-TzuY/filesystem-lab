@@ -41,7 +41,9 @@ fn split_destination(path: &str) -> io::Result<(&str, &str)> {
         ));
     }
     if path == "/" {
-        return Err(invalid_input("hard-link destination cannot be the root path"));
+        return Err(invalid_input(
+            "hard-link destination cannot be the root path",
+        ));
     }
 
     let (parent, name) = path
