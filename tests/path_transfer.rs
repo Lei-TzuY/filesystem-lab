@@ -17,7 +17,7 @@ use filesystem_lab::journal_region::load_journal_image;
 use filesystem_lab::path_append::append_file_blocks_at_path_journaled;
 use filesystem_lab::path_lookup::read_file_range_at_path;
 use filesystem_lab::path_transfer::{
-    PathFileBlockTransfer, transfer_file_block_range_at_path_journaled,
+    transfer_file_block_range_at_path_journaled, PathFileBlockTransfer,
 };
 use filesystem_lab::recovery::RecoveryReport;
 use filesystem_lab::symlink::create_symlink_journaled;
@@ -70,14 +70,7 @@ fn setup() -> (CrashDevice, Superblock) {
     )
     .unwrap();
     create_symlink_journaled(&mut device, &superblock, 1, "dir_alias", "/dir").unwrap();
-    create_symlink_journaled(
-        &mut device,
-        &superblock,
-        1,
-        "source_alias",
-        "/dir/source",
-    )
-    .unwrap();
+    create_symlink_journaled(&mut device, &superblock, 1, "source_alias", "/dir/source").unwrap();
     create_symlink_journaled(
         &mut device,
         &superblock,
@@ -91,11 +84,7 @@ fn setup() -> (CrashDevice, Superblock) {
         &mut device,
         &superblock,
         "/dir/source",
-        &[
-            [0x11; BLOCK_SIZE],
-            [0x22; BLOCK_SIZE],
-            [0x33; BLOCK_SIZE],
-        ],
+        &[[0x11; BLOCK_SIZE], [0x22; BLOCK_SIZE], [0x33; BLOCK_SIZE]],
     )
     .unwrap();
     append_file_blocks_at_path_journaled(
@@ -206,11 +195,9 @@ fn rejects_invalid_path_transfer_without_publication() {
         load_directory_table(&mut device, &superblock).unwrap(),
         directory_before
     );
-    assert!(
-        load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -246,11 +233,9 @@ fn every_pathname_transfer_crash_point_recovers_old_or_complete_new_state() {
             directory_before
         );
         check_device(&mut device).unwrap();
-        assert!(
-            load_journal_image(&mut device, superblock)
-                .unwrap()
-                .is_empty()
-        );
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
