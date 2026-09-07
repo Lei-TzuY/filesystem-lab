@@ -31,12 +31,7 @@ pub fn rename_at_path_journaled(
     let new_parent = resolve_path_following_symlinks(device, superblock, new_parent_path)?;
 
     rename_entry_journaled(
-        device,
-        superblock,
-        old_parent,
-        old_name,
-        new_parent,
-        new_name,
+        device, superblock, old_parent, old_name, new_parent, new_name,
     )
 }
 
@@ -52,9 +47,7 @@ fn split_path<'a>(path: &'a str, label: &str) -> io::Result<(&'a str, &'a str)> 
         .rsplit_once('/')
         .ok_or_else(|| invalid_input(format!("{label} must contain a final component")))?;
     if name.is_empty() {
-        return Err(invalid_input(format!(
-            "{label} final component is empty"
-        )));
+        return Err(invalid_input(format!("{label} final component is empty")));
     }
 
     Ok((if parent.is_empty() { "/" } else { parent }, name))
