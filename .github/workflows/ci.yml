@@ -17,11 +17,5 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
-      - name: Test diagnostic
-        run: |
-          cargo test --all-targets --all-features > test-output.txt 2>&1 || true
-      - name: Upload test output
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-output
-          path: test-output.txt
+      - name: Test
+        run: cargo test --all-targets --all-features
