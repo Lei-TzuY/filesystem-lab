@@ -45,7 +45,10 @@ fn setup() -> (CrashDevice, Superblock) {
     store_inode_table(
         &mut device,
         &superblock,
-        &[inode(1, InodeKind::Directory), inode(2, InodeKind::Directory)],
+        &[
+            inode(1, InodeKind::Directory),
+            inode(2, InodeKind::Directory),
+        ],
     )
     .unwrap();
     store_directory_table(&mut device, &superblock, &[entry(1, 2, "dir")]).unwrap();
@@ -61,7 +64,10 @@ fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
     let mut seen = HashSet::new();
     for inode in &inodes {
         for block in &inode.blocks {
-            assert!(seen.insert(*block), "duplicate physical block reference {block}");
+            assert!(
+                seen.insert(*block),
+                "duplicate physical block reference {block}"
+            );
             assert!(allocator.is_owned(*block).unwrap());
         }
     }
@@ -120,10 +126,21 @@ fn rejects_invalid_destination_forms_and_collisions_before_publication() {
         io::ErrorKind::InvalidInput
     );
 
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        entries_before
+    );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -152,8 +169,14 @@ fn every_pathname_symlink_create_crash_point_recovers_old_or_complete_new_state(
 
         let entries_after = load_directory_table(&mut device, &superblock).unwrap();
         if recovery.committed_transactions == 0 {
-            assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-            assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+            assert_eq!(
+                load_allocator(&mut device, &superblock).unwrap(),
+                allocator_before
+            );
+            assert_eq!(
+                load_inode_table(&mut device, &superblock).unwrap(),
+                inodes_before
+            );
             assert_eq!(entries_after, entries_before);
         } else {
             assert_eq!(recovery.committed_transactions, 1);
@@ -172,7 +195,9 @@ fn every_pathname_symlink_create_crash_point_recovers_old_or_complete_new_state(
 
         assert_unique_ownership(&mut device, &superblock);
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
