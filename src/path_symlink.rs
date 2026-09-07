@@ -5,6 +5,7 @@ use crate::format::Superblock;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 use crate::symlink::create_symlink_journaled;
+use crate::symlink_unlink::unlink_symlink_journaled;
 
 /// Creates one durable symbolic link at an absolute destination pathname.
 ///
@@ -26,6 +27,27 @@ pub fn create_symlink_at_path_journaled(
     let (parent_path, name) = split_destination(destination)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
     create_symlink_journaled(device, superblock, parent, name, target)
+}
+
+/// Removes one final symbolic-link namespace entry addressed by an absolute pathname.
+///
+/// Intermediate components, including the parent itself, use the repository-wide bounded symlink
+/// expansion rules. The final component is intentionally not resolved so unlink removes the link
+/// inode named by the pathname rather than its target. Publication is delegated to
+/// [`unlink_symlink_journaled`], preserving its allocator/inode/directory WAL transaction.
+///
+/// # Errors
+/// Returns `InvalidInput` when the pathname is not absolute, names the root, or has an empty final
+/// component. Parent-resolution errors and all [`unlink_symlink_journaled`] validation/durable I/O
+/// errors are propagated.
+pub fn unlink_symlink_at_path_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    path: &str,
+) -> io::Result<RecoveryReport> {
+    let (parent_path, name) = split_destination(path)?;
+    let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
+    unlink_symlink_journaled(device, superblock, parent, name)
 }
 
 fn split_destination(path: &str) -> io::Result<(&str, &str)> {
