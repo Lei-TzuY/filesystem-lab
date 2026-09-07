@@ -12,6 +12,12 @@ The destination index is defined against the destination block vector before ins
 
 The operation preserves the source mapping and data, namespace, inode identities, and all pre-existing physical block ownership. Newly allocated physical blocks are owned exactly once and referenced exactly once after recovery. It does not provide reflink/shared-block semantics.
 
+## Pathname surface
+
+`clone_file_blocks_insert_at_path_journaled` exposes the same transaction through bounded absolute-path resolution. Source and destination both follow intermediate and final symbolic links, then the resolved inode IDs are delegated to the inode-ID primitive together with the destination insertion boundary. The wrapper adds no independent allocation, WAL, recovery, or data-publication logic.
+
+Missing or dangling paths, non-file endpoints, empty or out-of-range source intervals, an insertion boundary outside `0..=destination.blocks.len()`, allocator exhaustion, ownership disagreement, and journal-capacity failures are rejected before a successful publication can be reported.
+
 ## Crash contract
 
 Deterministic crash enumeration covers WAL publication, replay of allocation/inode/data home images, journal clearing, and checkpoint durability boundaries. Before a durable commit, recovery preserves the old filesystem state. After a durable commit, recovery converges to the complete inserted state. Raw mixed allocator/inode prefixes must not be accepted as clean filesystem states by fsck.
