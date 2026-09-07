@@ -36,8 +36,7 @@ pub fn clone_file_blocks_append_at_path_journaled(
     destination_path: &str,
 ) -> io::Result<(Vec<u64>, RecoveryReport)> {
     let source_inode = resolve_path_following_symlinks(device, superblock, source.path)?;
-    let destination_inode =
-        resolve_path_following_symlinks(device, superblock, destination_path)?;
+    let destination_inode = resolve_path_following_symlinks(device, superblock, destination_path)?;
     clone_file_blocks_append_journaled(
         device,
         superblock,
