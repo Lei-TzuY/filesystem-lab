@@ -28,15 +28,27 @@ const SOURCE_DATA: [[u8; BLOCK_SIZE]; 2] = [[0x31; BLOCK_SIZE], [0x72; BLOCK_SIZ
 const DESTINATION_DATA: [[u8; BLOCK_SIZE]; 2] = [[0x19; BLOCK_SIZE], [0x28; BLOCK_SIZE]];
 
 fn inode(id: u64, kind: InodeKind) -> PersistedInode {
-    PersistedInode { id, kind, blocks: Vec::new() }
+    PersistedInode {
+        id,
+        kind,
+        blocks: Vec::new(),
+    }
 }
 
 fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
-    PersistedDirectoryEntry { parent, target, name: name.to_owned() }
+    PersistedDirectoryEntry {
+        parent,
+        target,
+        name: name.to_owned(),
+    }
 }
 
 fn source(path: &str, start: usize, block_count: usize) -> PathCloneInsertRange<'_> {
-    PathCloneInsertRange { path, start, block_count }
+    PathCloneInsertRange {
+        path,
+        start,
+        block_count,
+    }
 }
 
 fn setup() -> (CrashDevice, Superblock) {
@@ -65,14 +77,31 @@ fn setup() -> (CrashDevice, Superblock) {
     .unwrap();
     create_symlink_journaled(&mut device, &superblock, 1, "dir_alias", "/dir").unwrap();
     create_symlink_journaled(&mut device, &superblock, 1, "source_alias", "/dir/source").unwrap();
-    create_symlink_journaled(&mut device, &superblock, 1, "destination_alias", "/dir/destination").unwrap();
-    append_file_blocks_at_path_journaled(&mut device, &superblock, "/dir/source", &SOURCE_DATA).unwrap();
-    append_file_blocks_at_path_journaled(&mut device, &superblock, "/dir/destination", &DESTINATION_DATA).unwrap();
+    create_symlink_journaled(
+        &mut device,
+        &superblock,
+        1,
+        "destination_alias",
+        "/dir/destination",
+    )
+    .unwrap();
+    append_file_blocks_at_path_journaled(&mut device, &superblock, "/dir/source", &SOURCE_DATA)
+        .unwrap();
+    append_file_blocks_at_path_journaled(
+        &mut device,
+        &superblock,
+        "/dir/destination",
+        &DESTINATION_DATA,
+    )
+    .unwrap();
     check_device(&mut device).unwrap();
     (device, superblock)
 }
 
-fn run(device: &mut CrashDevice, superblock: &Superblock) -> io::Result<(Vec<u64>, RecoveryReport)> {
+fn run(
+    device: &mut CrashDevice,
+    superblock: &Superblock,
+) -> io::Result<(Vec<u64>, RecoveryReport)> {
     clone_file_blocks_insert_at_path_journaled(
         device,
         superblock,
@@ -94,12 +123,26 @@ fn inserts_cloned_blocks_through_intermediate_and_final_symlink_paths() {
     )
     .unwrap();
 
-    assert_eq!(read_file_range_at_path(&mut device, &superblock, "/dir/destination", 0, 0, 1).unwrap(), vec![0x19]);
-    assert_eq!(read_file_range_at_path(&mut device, &superblock, "/dir/destination", 1, 0, 1).unwrap(), vec![0x31]);
-    assert_eq!(read_file_range_at_path(&mut device, &superblock, "/dir/destination", 2, 0, 1).unwrap(), vec![0x72]);
-    assert_eq!(read_file_range_at_path(&mut device, &superblock, "/dir/destination", 3, 0, 1).unwrap(), vec![0x28]);
+    assert_eq!(
+        read_file_range_at_path(&mut device, &superblock, "/dir/destination", 0, 0, 1).unwrap(),
+        vec![0x19]
+    );
+    assert_eq!(
+        read_file_range_at_path(&mut device, &superblock, "/dir/destination", 1, 0, 1).unwrap(),
+        vec![0x31]
+    );
+    assert_eq!(
+        read_file_range_at_path(&mut device, &superblock, "/dir/destination", 2, 0, 1).unwrap(),
+        vec![0x72]
+    );
+    assert_eq!(
+        read_file_range_at_path(&mut device, &superblock, "/dir/destination", 3, 0, 1).unwrap(),
+        vec![0x28]
+    );
     check_device(&mut device).unwrap();
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -110,19 +153,63 @@ fn rejects_invalid_path_clone_insert_without_publication() {
     let directory_before = load_directory_table(&mut device, &superblock).unwrap();
 
     for result in [
-        clone_file_blocks_insert_at_path_journaled(&mut device, &superblock, source("/dir", 0, 1), "/dir/destination", 0),
-        clone_file_blocks_insert_at_path_journaled(&mut device, &superblock, source("/dir/source", 0, 0), "/dir/destination", 0),
-        clone_file_blocks_insert_at_path_journaled(&mut device, &superblock, source("/dir/source", 2, 1), "/dir/destination", 0),
-        clone_file_blocks_insert_at_path_journaled(&mut device, &superblock, source("/dir/source", 0, 1), "/dir/destination", 3),
-        clone_file_blocks_insert_at_path_journaled(&mut device, &superblock, source("/missing", 0, 1), "/dir/destination", 0),
+        clone_file_blocks_insert_at_path_journaled(
+            &mut device,
+            &superblock,
+            source("/dir", 0, 1),
+            "/dir/destination",
+            0,
+        ),
+        clone_file_blocks_insert_at_path_journaled(
+            &mut device,
+            &superblock,
+            source("/dir/source", 0, 0),
+            "/dir/destination",
+            0,
+        ),
+        clone_file_blocks_insert_at_path_journaled(
+            &mut device,
+            &superblock,
+            source("/dir/source", 2, 1),
+            "/dir/destination",
+            0,
+        ),
+        clone_file_blocks_insert_at_path_journaled(
+            &mut device,
+            &superblock,
+            source("/dir/source", 0, 1),
+            "/dir/destination",
+            3,
+        ),
+        clone_file_blocks_insert_at_path_journaled(
+            &mut device,
+            &superblock,
+            source("/missing", 0, 1),
+            "/dir/destination",
+            0,
+        ),
     ] {
-        assert!(matches!(result.unwrap_err().kind(), io::ErrorKind::InvalidInput | io::ErrorKind::NotFound));
+        assert!(matches!(
+            result.unwrap_err().kind(),
+            io::ErrorKind::InvalidInput | io::ErrorKind::NotFound
+        ));
     }
 
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), directory_before);
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        directory_before
+    );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -140,7 +227,10 @@ fn every_path_clone_insert_crash_point_recovers_old_or_complete_new_state() {
     for crash_at in 0..operations {
         let (mut device, superblock) = setup();
         device.arm(Some(crash_at));
-        assert_eq!(run(&mut device, &superblock).unwrap_err().kind(), io::ErrorKind::Other);
+        assert_eq!(
+            run(&mut device, &superblock).unwrap_err().kind(),
+            io::ErrorKind::Other
+        );
         device.reboot();
         recover_journal_and_checkpoint(&mut device, superblock).unwrap();
 
@@ -148,10 +238,21 @@ fn every_path_clone_insert_crash_point_recovers_old_or_complete_new_state() {
         let inodes = load_inode_table(&mut device, &superblock).unwrap();
         let old = allocator == allocator_before && inodes == inodes_before;
         let new = allocator == allocator_after && inodes == inodes_after;
-        assert!(old || new, "crash point {crash_at} recovered a mixed clone-insert state");
-        assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), directory_before);
+        assert!(
+            old || new,
+            "crash point {crash_at} recovered a mixed clone-insert state"
+        );
+        assert_eq!(
+            load_directory_table(&mut device, &superblock).unwrap(),
+            directory_before
+        );
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
-        assert_eq!(recover_journal_and_checkpoint(&mut device, superblock).unwrap(), RecoveryReport::default());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
+            RecoveryReport::default()
+        );
     }
 }
