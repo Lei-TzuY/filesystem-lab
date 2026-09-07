@@ -14,15 +14,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Format
-        run: cargo fmt --all
-      - name: Upload formatted candidate
-        uses: actions/upload-artifact@v4
-        with:
-          name: formatted-candidate
-          path: |
-            src/path_unlink.rs
-            tests/path_file_unlink.rs
-            src/lib.rs
+        run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
