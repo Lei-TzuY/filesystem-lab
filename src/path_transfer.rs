@@ -35,8 +35,7 @@ pub fn transfer_file_block_range_at_path_journaled(
     destination: PathFileBlockTransfer<'_>,
 ) -> io::Result<(Vec<u64>, RecoveryReport)> {
     let source_inode = resolve_path_following_symlinks(device, superblock, source.path)?;
-    let destination_inode =
-        resolve_path_following_symlinks(device, superblock, destination.path)?;
+    let destination_inode = resolve_path_following_symlinks(device, superblock, destination.path)?;
     transfer_file_block_range_journaled(
         device,
         superblock,
