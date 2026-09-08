@@ -2,8 +2,10 @@ use std::io;
 
 use crate::block::BlockDevice;
 use crate::format::Superblock;
-use crate::hard_link_tx::hard_link_file_journaled;
-use crate::path_lookup::resolve_path_following_symlinks;
+use crate::hard_link_tx::{hard_link_file_journaled, hard_link_symlink_journaled};
+use crate::path_lookup::{
+    resolve_path_following_symlinks, resolve_path_without_following_final_symlink,
+};
 use crate::recovery::RecoveryReport;
 
 /// Creates one additional durable namespace reference to a regular file using pathnames.
@@ -32,6 +34,35 @@ pub fn hard_link_file_at_path_journaled(
     let (parent_path, name) = split_destination(destination)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
     hard_link_file_journaled(device, superblock, parent, name, target)
+}
+
+/// Creates one additional durable namespace reference to a symbolic-link inode using pathnames.
+///
+/// Intermediate source symlinks are followed, but the final source component is deliberately not
+/// followed. The final source inode must itself be a symbolic link. The destination parent is
+/// resolved with the normal bounded symlink-following rules while its final basename remains a
+/// collision-checked namespace key. Publication is delegated to [`hard_link_symlink_journaled`],
+/// which validates the persisted symlink payload before issuing the directory-only WAL update.
+///
+/// # Errors
+/// Returns `InvalidInput` when either pathname is not absolute, when the destination names the root
+/// or has an empty final component, or when the final source inode is not a symbolic link. Source or
+/// parent path-resolution errors, symlink corruption, and all [`hard_link_symlink_journaled`] durable
+/// I/O errors propagate.
+pub fn hard_link_symlink_at_path_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    source: &str,
+    destination: &str,
+) -> io::Result<RecoveryReport> {
+    if !source.starts_with('/') {
+        return Err(invalid_input("hard-link source must be an absolute path"));
+    }
+
+    let target = resolve_path_without_following_final_symlink(device, superblock, source)?;
+    let (parent_path, name) = split_destination(destination)?;
+    let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
+    hard_link_symlink_journaled(device, superblock, parent, name, target)
 }
 
 fn split_destination(path: &str) -> io::Result<(&str, &str)> {
