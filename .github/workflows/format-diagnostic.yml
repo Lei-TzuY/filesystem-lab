@@ -1,0 +1,25 @@
+name: Format Diagnostic
+
+on:
+  push:
+    branches:
+      - conquest/inode-capacity-format
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Produce canonical formatting
+        run: cargo fmt --all
+      - name: Upload formatted sources
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustfmt-output
+          path: |
+            src/format_capacity.rs
+            src/lib.rs
+            tests/format_inode_capacity.rs
