@@ -6,6 +6,7 @@ use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 use crate::rename_overwrite_tx::{
     rename_overwrite_file_journaled, rename_overwrite_linked_file_journaled,
+    rename_overwrite_symlink_journaled,
 };
 
 /// Atomically renames one regular file over an existing singly linked regular file by pathname.
@@ -23,7 +24,11 @@ pub fn rename_overwrite_file_at_path_journaled(
     source: &str,
     destination: &str,
 ) -> io::Result<RecoveryReport> {
-    rename_overwrite_at_path_impl(device, superblock, source, destination, false)
+    let (old_parent, old_name, new_parent, new_name) =
+        resolve_rename_overwrite_parents(device, superblock, source, destination)?;
+    rename_overwrite_file_journaled(
+        device, superblock, old_parent, old_name, new_parent, new_name,
+    )
 }
 
 /// Atomically renames one regular file over one alias of a multiply linked regular file by pathname.
@@ -40,30 +45,48 @@ pub fn rename_overwrite_linked_file_at_path_journaled(
     source: &str,
     destination: &str,
 ) -> io::Result<RecoveryReport> {
-    rename_overwrite_at_path_impl(device, superblock, source, destination, true)
+    let (old_parent, old_name, new_parent, new_name) =
+        resolve_rename_overwrite_parents(device, superblock, source, destination)?;
+    rename_overwrite_linked_file_journaled(
+        device, superblock, old_parent, old_name, new_parent, new_name,
+    )
 }
 
-fn rename_overwrite_at_path_impl(
+/// Atomically renames one symbolic link over an existing singly linked symbolic link by pathname.
+///
+/// Only parent pathnames follow bounded symbolic-link traversal; final components are deliberately
+/// not followed, so the link inodes themselves participate in replacement even when their targets
+/// are dangling. The destination symlink inode and its payload block are released atomically with
+/// namespace publication while the source inode and payload survive under the destination name.
+///
+/// # Errors
+/// Returns `InvalidInput` for malformed paths, non-symlink endpoints, same-inode aliases, or a
+/// multiply linked destination. Parent-resolution, ownership, WAL, recovery, checkpoint, and device
+/// I/O failures are propagated.
+pub fn rename_overwrite_symlink_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
     source: &str,
     destination: &str,
-    linked_destination: bool,
 ) -> io::Result<RecoveryReport> {
+    let (old_parent, old_name, new_parent, new_name) =
+        resolve_rename_overwrite_parents(device, superblock, source, destination)?;
+    rename_overwrite_symlink_journaled(
+        device, superblock, old_parent, old_name, new_parent, new_name,
+    )
+}
+
+fn resolve_rename_overwrite_parents<'a>(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    source: &'a str,
+    destination: &'a str,
+) -> io::Result<(u64, &'a str, u64, &'a str)> {
     let (old_parent_path, old_name) = split_path(source, "rename-overwrite source")?;
     let (new_parent_path, new_name) = split_path(destination, "rename-overwrite destination")?;
     let old_parent = resolve_path_following_symlinks(device, superblock, old_parent_path)?;
     let new_parent = resolve_path_following_symlinks(device, superblock, new_parent_path)?;
-
-    if linked_destination {
-        rename_overwrite_linked_file_journaled(
-            device, superblock, old_parent, old_name, new_parent, new_name,
-        )
-    } else {
-        rename_overwrite_file_journaled(
-            device, superblock, old_parent, old_name, new_parent, new_name,
-        )
-    }
+    Ok((old_parent, old_name, new_parent, new_name))
 }
 
 fn split_path<'a>(path: &'a str, label: &str) -> io::Result<(&'a str, &'a str)> {
