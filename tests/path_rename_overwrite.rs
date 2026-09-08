@@ -85,12 +85,10 @@ fn overwrites_destination_through_parent_symlinks() {
         resolve_path_following_symlinks(&mut device, &superblock, "/dst/target").unwrap(),
         4
     );
-    assert!(
-        !load_inode_table(&mut device, &superblock)
-            .unwrap()
-            .iter()
-            .any(|inode| inode.id == 5)
-    );
+    assert!(!load_inode_table(&mut device, &superblock)
+        .unwrap()
+        .iter()
+        .any(|inode| inode.id == 5));
     assert_eq!(
         load_allocator(&mut device, &superblock).unwrap(),
         allocator_before
@@ -109,14 +107,9 @@ fn rejects_malformed_paths_without_publication() {
         ("/src/source", "/"),
     ] {
         assert_eq!(
-            rename_overwrite_file_at_path_journaled(
-                &mut device,
-                &superblock,
-                source,
-                destination
-            )
-            .unwrap_err()
-            .kind(),
+            rename_overwrite_file_at_path_journaled(&mut device, &superblock, source, destination)
+                .unwrap_err()
+                .kind(),
             io::ErrorKind::InvalidInput
         );
     }
@@ -183,12 +176,10 @@ fn every_pathname_overwrite_crash_point_recovers_old_or_complete_new_state() {
                 resolve_path_following_symlinks(&mut device, &superblock, "/dst/target").unwrap(),
                 4
             );
-            assert!(
-                !load_inode_table(&mut device, &superblock)
-                    .unwrap()
-                    .iter()
-                    .any(|inode| inode.id == 5)
-            );
+            assert!(!load_inode_table(&mut device, &superblock)
+                .unwrap()
+                .iter()
+                .any(|inode| inode.id == 5));
         }
         check_device(&mut device).unwrap();
         assert!(load_journal_image(&mut device, superblock)
