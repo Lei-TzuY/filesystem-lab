@@ -60,12 +60,7 @@ pub fn create_directory_at_path_journaled(
     superblock: &Superblock,
     destination: &str,
 ) -> io::Result<(u64, RecoveryReport)> {
-    create_blockless_inode_at_path_journaled(
-        device,
-        superblock,
-        destination,
-        InodeKind::Directory,
-    )
+    create_blockless_inode_at_path_journaled(device, superblock, destination, InodeKind::Directory)
 }
 
 fn create_blockless_inode_at_path_journaled(

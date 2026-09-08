@@ -206,9 +206,11 @@ fn every_pathname_directory_create_crash_point_recovers_old_or_complete_new_stat
             assert_eq!(metadata.kind, InodeKind::Directory);
             assert_eq!(metadata.logical_blocks, 0);
             assert_eq!(metadata.namespace_references, 1);
-            assert!(list_directory_at_path(&mut device, &superblock, "/dir/new_dir")
-                .unwrap()
-                .is_empty());
+            assert!(
+                list_directory_at_path(&mut device, &superblock, "/dir/new_dir")
+                    .unwrap()
+                    .is_empty()
+            );
         }
 
         assert_unique_ownership(&mut device, &superblock);
