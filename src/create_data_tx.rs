@@ -39,8 +39,13 @@ pub fn store_create_with_data_journaled(
             "atomic create-with-data device geometry does not match superblock",
         ));
     }
-    allocator.validate()?;
-    if !allocator.is_owned(data_block)? {
+    allocator
+        .validate()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+    let owned = allocator
+        .is_owned(data_block)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+    if !owned {
         return Err(invalid_input(
             "atomic create-with-data block is not allocator-owned",
         ));
