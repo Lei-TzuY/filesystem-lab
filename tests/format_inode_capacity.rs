@@ -55,10 +55,7 @@ fn formatter_reserves_enough_space_for_requested_blockless_inode_capacity() {
         })
         .collect();
     store_inode_table(&mut device, &superblock, &inodes).unwrap();
-    assert_eq!(
-        load_inode_table(&mut device, &superblock).unwrap(),
-        inodes,
-    );
+    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes,);
 }
 
 #[test]
