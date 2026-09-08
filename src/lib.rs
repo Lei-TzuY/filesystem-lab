@@ -28,6 +28,7 @@ pub mod file_replace;
 pub mod file_transfer;
 pub mod file_zero_range;
 pub mod format;
+pub mod format_capacity;
 pub mod format_geometry;
 pub mod fsck;
 pub mod hard_link_tx;
