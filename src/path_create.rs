@@ -35,6 +35,40 @@ pub fn create_empty_file_at_path_journaled(
     superblock: &Superblock,
     destination: &str,
 ) -> io::Result<(u64, RecoveryReport)> {
+    create_blockless_inode_at_path_journaled(device, superblock, destination, InodeKind::File)
+}
+
+/// Creates one durable empty directory at an absolute pathname.
+///
+/// The destination parent is resolved with the existing bounded symbolic-link rules. The final
+/// component is not resolved: it becomes one new durable directory entry naming a freshly assigned
+/// directory inode. Format v5 represents an empty directory with no child entries and no data
+/// blocks, so allocator ownership is preserved exactly.
+///
+/// The new inode and parent namespace entry are published together through the existing create WAL
+/// transaction. Recovery therefore exposes either the complete old namespace or the complete new
+/// empty directory, never an inode-only or directory-entry-only state.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` for malformed destinations, a non-directory parent, namespace collision,
+/// invalid directory-entry name, or exhausted inode identifiers. Returns `InvalidData` when the
+/// persisted inode table contains duplicate identifiers. Parent-resolution, metadata decoding, WAL,
+/// recovery, checkpoint, and device I/O errors are propagated.
+pub fn create_directory_at_path_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    destination: &str,
+) -> io::Result<(u64, RecoveryReport)> {
+    create_blockless_inode_at_path_journaled(device, superblock, destination, InodeKind::Directory)
+}
+
+fn create_blockless_inode_at_path_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    destination: &str,
+    kind: InodeKind,
+) -> io::Result<(u64, RecoveryReport)> {
     let (parent_path, name) = split_destination(destination)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
 
@@ -78,7 +112,7 @@ pub fn create_empty_file_at_path_journaled(
 
     inodes.push(PersistedInode {
         id: inode_id,
-        kind: InodeKind::File,
+        kind,
         blocks: Vec::new(),
     });
     entries.push(new_entry);
