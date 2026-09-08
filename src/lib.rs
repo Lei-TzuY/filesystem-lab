@@ -5,6 +5,7 @@ pub mod allocation_disk;
 pub mod allocation_tx;
 pub mod block;
 pub mod cache;
+pub mod create_data_tx;
 pub mod create_tx;
 pub mod directory;
 pub mod directory_codec;
