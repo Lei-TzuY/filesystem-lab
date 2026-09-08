@@ -110,8 +110,11 @@ fn inserts_blocks_through_direct_and_symlink_paths() {
         let allocator = load_allocator(&mut device, &superblock).unwrap();
         assert!(allocator.is_owned(inserted[0]).unwrap());
         assert!(allocator.is_owned(inserted[1]).unwrap());
-        assert_eq!(device.read_block(inserted[0]).unwrap(), INSERT_DATA[0]);
-        assert_eq!(device.read_block(inserted[1]).unwrap(), INSERT_DATA[1]);
+        let mut data = [0_u8; BLOCK_SIZE];
+        device.read_block(inserted[0], &mut data).unwrap();
+        assert_eq!(data, INSERT_DATA[0]);
+        device.read_block(inserted[1], &mut data).unwrap();
+        assert_eq!(data, INSERT_DATA[1]);
         check_device(&mut device).unwrap();
         assert!(load_journal_image(&mut device, superblock)
             .unwrap()
