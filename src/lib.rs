@@ -49,6 +49,7 @@ pub mod path_copy_range;
 pub mod path_exchange;
 pub mod path_hard_link;
 pub mod path_lookup;
+pub mod path_move;
 pub mod path_rename;
 pub mod path_symlink;
 pub mod path_transfer;
