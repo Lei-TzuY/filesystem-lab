@@ -41,7 +41,12 @@ fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
     }
 }
 
-fn operation(path: &str, source_index: usize, block_count: usize, destination_index: usize) -> PathFileBlockMove<'_> {
+fn operation(
+    path: &str,
+    source_index: usize,
+    block_count: usize,
+    destination_index: usize,
+) -> PathFileBlockMove<'_> {
     PathFileBlockMove {
         path,
         source_index,
