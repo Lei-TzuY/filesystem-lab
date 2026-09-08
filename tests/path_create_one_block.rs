@@ -70,7 +70,10 @@ fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
     let mut seen = HashSet::new();
     for inode in &inodes {
         for block in &inode.blocks {
-            assert!(seen.insert(*block), "duplicate physical block reference {block}");
+            assert!(
+                seen.insert(*block),
+                "duplicate physical block reference {block}"
+            );
             assert!(allocator.is_owned(*block).unwrap());
         }
     }
@@ -164,9 +167,18 @@ fn rejects_invalid_destinations_without_allocating_or_publishing_namespace() {
         io::ErrorKind::InvalidInput
     );
 
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        entries_before
+    );
     assert!(load_journal_image(&mut device, superblock)
         .unwrap()
         .is_empty());
@@ -178,13 +190,8 @@ fn every_one_block_create_crash_point_recovers_old_or_complete_new_file() {
     let data = [0xc3_u8; BLOCK_SIZE];
     let (mut probe, superblock) = setup();
     probe.arm(None);
-    create_one_block_file_at_path_journaled(
-        &mut probe,
-        &superblock,
-        "/dir_alias/seeded",
-        &data,
-    )
-    .unwrap();
+    create_one_block_file_at_path_journaled(&mut probe, &superblock, "/dir_alias/seeded", &data)
+        .unwrap();
     let operations = probe.operations();
 
     for crash_at in 0..operations {
@@ -210,9 +217,18 @@ fn every_one_block_create_crash_point_recovers_old_or_complete_new_file() {
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
 
         if recovery.committed_transactions == 0 {
-            assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-            assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
-            assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
+            assert_eq!(
+                load_allocator(&mut device, &superblock).unwrap(),
+                allocator_before
+            );
+            assert_eq!(
+                load_inode_table(&mut device, &superblock).unwrap(),
+                inodes_before
+            );
+            assert_eq!(
+                load_directory_table(&mut device, &superblock).unwrap(),
+                entries_before
+            );
             assert_eq!(
                 metadata_at_path(&mut device, &superblock, "/dir/seeded")
                     .unwrap_err()
@@ -221,8 +237,16 @@ fn every_one_block_create_crash_point_recovers_old_or_complete_new_file() {
             );
         } else {
             assert_eq!(recovery.committed_transactions, 1);
-            assert_eq!(load_inode_table(&mut device, &superblock).unwrap().len(), inodes_before.len() + 1);
-            assert_eq!(load_directory_table(&mut device, &superblock).unwrap().len(), entries_before.len() + 1);
+            assert_eq!(
+                load_inode_table(&mut device, &superblock).unwrap().len(),
+                inodes_before.len() + 1
+            );
+            assert_eq!(
+                load_directory_table(&mut device, &superblock)
+                    .unwrap()
+                    .len(),
+                entries_before.len() + 1
+            );
             assert_created_file(&mut device, &superblock, "/dir/seeded", &data);
         }
 
