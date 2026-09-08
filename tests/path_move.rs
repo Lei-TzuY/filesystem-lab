@@ -16,9 +16,7 @@ use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::journal_region::load_journal_image;
 use filesystem_lab::path_append::append_file_blocks_at_path_journaled;
 use filesystem_lab::path_lookup::read_file_range_at_path;
-use filesystem_lab::path_move::{
-    move_file_block_range_at_path_journaled, PathFileBlockMove,
-};
+use filesystem_lab::path_move::{move_file_block_range_at_path_journaled, PathFileBlockMove};
 use filesystem_lab::recovery::RecoveryReport;
 use filesystem_lab::symlink::create_symlink_journaled;
 use support::CrashDevice;
@@ -94,12 +92,25 @@ fn setup() -> (CrashDevice, Superblock) {
 }
 
 fn move_middle(device: &mut CrashDevice, superblock: &Superblock) -> io::Result<RecoveryReport> {
-    move_file_block_range_at_path_journaled(
-        device,
-        superblock,
-        operation("/file_alias", 1, 2, 0),
+    move_file_block_range_at_path_journaled(device, superblock, operation("/file_alias", 1, 2, 0))
+        .map(|(_, report)| report)
+}
+
+#[test]
+fn moves_block_range_through_direct_path() {
+    let (mut device, superblock) = setup();
+    let (moved, _) = move_file_block_range_at_path_journaled(
+        &mut device,
+        &superblock,
+        operation("/dir/file", 1, 2, 0),
     )
-    .map(|(_, report)| report)
+    .unwrap();
+    assert_eq!(moved.len(), 2);
+    assert_eq!(
+        read_file_range_at_path(&mut device, &superblock, "/dir/file", 0, 0, 1).unwrap(),
+        vec![0x22]
+    );
+    check_device(&mut device).unwrap();
 }
 
 #[test]
@@ -114,15 +125,8 @@ fn moves_block_range_through_intermediate_and_final_symlinks() {
     assert_eq!(moved.len(), 2);
     for (logical_block, byte) in [0x22, 0x33, 0x11, 0x44].into_iter().enumerate() {
         assert_eq!(
-            read_file_range_at_path(
-                &mut device,
-                &superblock,
-                "/file_alias",
-                logical_block,
-                0,
-                1,
-            )
-            .unwrap(),
+            read_file_range_at_path(&mut device, &superblock, "/file_alias", logical_block, 0, 1,)
+                .unwrap(),
             vec![byte]
         );
     }
