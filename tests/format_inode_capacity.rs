@@ -17,6 +17,11 @@ impl MemoryBlockDevice {
             blocks: vec![[0; BLOCK_SIZE]; blocks],
         }
     }
+
+    fn block_index(block: u64) -> io::Result<usize> {
+        usize::try_from(block)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "block index overflow"))
+    }
 }
 
 impl BlockDevice for MemoryBlockDevice {
@@ -25,12 +30,14 @@ impl BlockDevice for MemoryBlockDevice {
     }
 
     fn read_block(&mut self, block: u64, buf: &mut [u8; BLOCK_SIZE]) -> io::Result<()> {
-        buf.copy_from_slice(&self.blocks[block as usize]);
+        let block = Self::block_index(block)?;
+        buf.copy_from_slice(&self.blocks[block]);
         Ok(())
     }
 
     fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> io::Result<()> {
-        self.blocks[block as usize].copy_from_slice(buf);
+        let block = Self::block_index(block)?;
+        self.blocks[block].copy_from_slice(buf);
         Ok(())
     }
 
