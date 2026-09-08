@@ -141,10 +141,14 @@ pub fn remove_directory_journaled(
     let inode = &inodes[inode_index];
 
     if target == 1 {
-        return Err(invalid_input("directory removal cannot remove the root inode"));
+        return Err(invalid_input(
+            "directory removal cannot remove the root inode",
+        ));
     }
     if inode.kind != InodeKind::Directory {
-        return Err(invalid_input("directory removal requires a directory inode"));
+        return Err(invalid_input(
+            "directory removal requires a directory inode",
+        ));
     }
     if entries
         .iter()
@@ -157,7 +161,9 @@ pub fn remove_directory_journaled(
         ));
     }
     if entries.iter().any(|entry| entry.parent == target) {
-        return Err(invalid_input("directory removal requires an empty directory"));
+        return Err(invalid_input(
+            "directory removal requires an empty directory",
+        ));
     }
 
     let unique_blocks: BTreeSet<u64> = inode.blocks.iter().copied().collect();
