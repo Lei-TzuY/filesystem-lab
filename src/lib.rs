@@ -53,6 +53,7 @@ pub mod path_exchange;
 pub mod path_hard_link;
 pub mod path_insert;
 pub mod path_lookup;
+pub mod path_metadata;
 pub mod path_move;
 pub mod path_overwrite_batch;
 pub mod path_remove;
