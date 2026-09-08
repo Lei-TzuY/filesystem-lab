@@ -92,7 +92,10 @@ fn explicit_directory_geometry_supports_namespace_beyond_default_capacity() {
     store_directory_table(&mut device, &superblock, &entries).unwrap();
 
     assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes);
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries);
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        entries
+    );
     check_device(&mut device).unwrap();
 }
 
