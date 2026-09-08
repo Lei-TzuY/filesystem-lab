@@ -2,8 +2,8 @@ use std::io;
 
 use crate::block::BlockDevice;
 use crate::file_exchange::{
-    exchange_file_block_ranges_journaled, exchange_variable_file_block_ranges_journaled,
-    FileBlockExchangeRange,
+    exchange_file_block_ranges_journaled, exchange_same_file_block_ranges_journaled,
+    exchange_variable_file_block_ranges_journaled, FileBlockExchangeRange,
 };
 use crate::format::Superblock;
 use crate::path_lookup::resolve_path_following_symlinks;
@@ -94,6 +94,49 @@ pub fn exchange_variable_file_block_ranges_at_path_journaled(
             inode: right_inode,
             start: right.start,
             block_count: right.block_count,
+        },
+    )
+}
+
+/// Atomically exchanges two disjoint logical-block ranges within one regular file addressed by
+/// absolute pathnames.
+///
+/// Both pathname operands follow intermediate and final symbolic links with the repository-wide
+/// bounded expansion rules. They must resolve to the same regular-file inode. Range coordinates
+/// refer to that inode's original block vector and may have different lengths, but must be non-empty,
+/// disjoint, and entirely within the file. The resolved inode and ranges are delegated to
+/// [`exchange_same_file_block_ranges_journaled`], so allocator ownership, block contents, namespace
+/// state, WAL ordering, recovery, and checkpoint semantics remain centralized in the existing
+/// inode-ID primitive.
+///
+/// Format v5 has no persisted byte length. This operation is deliberately block-granular and does
+/// not define EOF, sparse-hole, extent, reflink, or POSIX range-exchange semantics.
+///
+/// # Errors
+/// Propagates pathname lookup errors and all [`exchange_same_file_block_ranges_journaled`]
+/// validation or durable I/O errors, including operands resolving to different/non-file inodes,
+/// empty, overlapping, overflowing, or out-of-range intervals, duplicate physical references,
+/// allocator ownership disagreement, or journal errors.
+pub fn exchange_same_file_block_ranges_at_path_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    first: PathVariableFileBlockRange<'_>,
+    second: PathVariableFileBlockRange<'_>,
+) -> io::Result<RecoveryReport> {
+    let first_inode = resolve_path_following_symlinks(device, superblock, first.path)?;
+    let second_inode = resolve_path_following_symlinks(device, superblock, second.path)?;
+    exchange_same_file_block_ranges_journaled(
+        device,
+        superblock,
+        FileBlockExchangeRange {
+            inode: first_inode,
+            start: first.start,
+            block_count: first.block_count,
+        },
+        FileBlockExchangeRange {
+            inode: second_inode,
+            start: second.start,
+            block_count: second.block_count,
         },
     )
 }
