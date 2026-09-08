@@ -99,7 +99,13 @@ fn inserts_blocks_through_direct_and_symlink_paths() {
         assert_eq!(report.committed_transactions, 1);
         assert_eq!(
             file_blocks(&mut device, &superblock),
-            vec![old_blocks[0], inserted[0], inserted[1], old_blocks[1], old_blocks[2]]
+            vec![
+                old_blocks[0],
+                inserted[0],
+                inserted[1],
+                old_blocks[1],
+                old_blocks[2]
+            ]
         );
         let allocator = load_allocator(&mut device, &superblock).unwrap();
         assert!(allocator.is_owned(inserted[0]).unwrap());
