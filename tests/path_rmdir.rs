@@ -66,14 +66,7 @@ fn setup() -> (CrashDevice, Superblock) {
     )
     .unwrap();
     create_symlink_journaled(&mut device, &superblock, 1, "alias", "/parent").unwrap();
-    create_symlink_journaled(
-        &mut device,
-        &superblock,
-        1,
-        "final_link",
-        "/parent/empty",
-    )
-    .unwrap();
+    create_symlink_journaled(&mut device, &superblock, 1, "final_link", "/parent/empty").unwrap();
     check_device(&mut device).unwrap();
     (device, superblock)
 }
@@ -144,7 +137,10 @@ fn rejects_root_nonempty_non_directory_final_symlink_and_malformed_paths() {
         load_allocator(&mut device, &superblock).unwrap(),
         allocator_before
     );
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
     assert_eq!(
         load_directory_table(&mut device, &superblock).unwrap(),
         entries_before
