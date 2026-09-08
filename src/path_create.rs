@@ -70,7 +70,7 @@ pub fn create_one_block_file_at_path_journaled(
     let inode_id = next_inode_id(&inodes)?;
     let data_block = allocator
         .allocate()
-        .ok_or_else(|| invalid_input("no free data block is available"))?;
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
 
     let new_entry = PersistedDirectoryEntry {
         parent,
