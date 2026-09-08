@@ -86,13 +86,7 @@ pub fn create_one_block_file_at_path_journaled(
     entries.push(new_entry);
 
     let report = store_create_with_data_journaled(
-        device,
-        superblock,
-        &allocator,
-        &inodes,
-        &entries,
-        data_block,
-        data,
+        device, superblock, &allocator, &inodes, &entries, data_block, data,
     )?;
     Ok((inode_id, report))
 }
