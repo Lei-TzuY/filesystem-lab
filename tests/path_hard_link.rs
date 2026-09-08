@@ -94,12 +94,9 @@ fn creates_regular_file_hard_link_through_source_and_parent_symlinks() {
 #[test]
 fn creates_symlink_hard_link_without_following_final_source() {
     let (mut device, superblock) = setup();
-    let source_inode = resolve_path_without_following_final_symlink(
-        &mut device,
-        &superblock,
-        "/file_alias",
-    )
-    .unwrap();
+    let source_inode =
+        resolve_path_without_following_final_symlink(&mut device, &superblock, "/file_alias")
+            .unwrap();
     let allocator_before = load_allocator(&mut device, &superblock).unwrap();
     let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
 
@@ -290,17 +287,13 @@ fn every_pathname_symlink_hard_link_crash_point_recovers_old_or_complete_new_sta
 
     for crash_at in 0..operations {
         let (mut device, superblock) = setup();
-        let source_inode = resolve_path_without_following_final_symlink(
-            &mut device,
-            &superblock,
-            "/file_alias",
-        )
-        .unwrap();
+        let source_inode =
+            resolve_path_without_following_final_symlink(&mut device, &superblock, "/file_alias")
+                .unwrap();
         let allocator_before = load_allocator(&mut device, &superblock).unwrap();
         let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
         let entries_before = load_directory_table(&mut device, &superblock).unwrap();
-        let target_before =
-            read_symlink_at_path(&mut device, &superblock, "/file_alias").unwrap();
+        let target_before = read_symlink_at_path(&mut device, &superblock, "/file_alias").unwrap();
 
         device.arm(Some(crash_at));
         assert_eq!(
