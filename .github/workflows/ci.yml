@@ -5,22 +5,29 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
   rust:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: conquest/path-data-splice
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Canonical rustfmt
+      - name: Apply canonical rustfmt
         run: |
           cargo fmt --all
-          git diff > rustfmt.diff
-      - uses: actions/upload-artifact@v4
-        with:
-          name: rustfmt-diff
-          path: rustfmt.diff
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/file_replace.rs tests/path_replace.rs
+          if ! git diff --cached --quiet; then
+            git commit -m "Apply canonical rustfmt"
+            git push origin HEAD:conquest/path-data-splice
+          fi
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
