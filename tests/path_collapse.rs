@@ -95,7 +95,10 @@ fn collapses_ranges_through_direct_and_symlink_paths() {
                 .unwrap();
         assert_eq!(released, vec![blocks[2], blocks[3]]);
         assert_eq!(report.committed_transactions, 1);
-        assert_eq!(file_blocks(&mut device, &superblock), vec![blocks[0], blocks[1], blocks[4]]);
+        assert_eq!(
+            file_blocks(&mut device, &superblock),
+            vec![blocks[0], blocks[1], blocks[4]]
+        );
         let allocator = load_allocator(&mut device, &superblock).unwrap();
         assert!(!allocator.is_owned(blocks[2]).unwrap());
         assert!(!allocator.is_owned(blocks[3]).unwrap());
@@ -138,8 +141,14 @@ fn rejects_invalid_pathname_collapses_without_publication() {
         io::ErrorKind::InvalidInput
     );
 
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
     assert_eq!(
         load_directory_table(&mut device, &superblock).unwrap(),
         directory_before
