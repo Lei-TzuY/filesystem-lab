@@ -13,8 +13,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Canonicalize format
+        run: cargo fmt --all
+      - name: Upload rustfmt output
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustfmt-output
+          path: |
+            src/path_create.rs
+            src/lib.rs
+            tests/path_create.rs
       - name: Format
-        run: cargo fmt --all -- --check
+        run: git diff --exit-code
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
