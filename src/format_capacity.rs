@@ -12,6 +12,12 @@ use crate::inode_table::INODE_TABLE_HEADER_LEN;
 /// The guarantee is deliberately narrow: each additional physical block reference
 /// consumes eight more bytes in the inode table. Callers planning block-bearing
 /// inodes must account for that separately.
+///
+/// # Errors
+///
+/// Returns [`io::ErrorKind::InvalidInput`] when `inode_capacity` is zero or when
+/// the required inode-table geometry overflows. Propagates formatting errors from
+/// the underlying metadata-geometry formatter.
 pub fn format_device_for_blockless_inode_capacity(
     device: &mut impl BlockDevice,
     journal_blocks: u64,
