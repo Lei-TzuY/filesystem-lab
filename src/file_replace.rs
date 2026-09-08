@@ -54,7 +54,9 @@ pub fn replace_file_blocks_journaled(
     let inode = inodes
         .iter_mut()
         .find(|inode| inode.id == inode_id)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "replacement inode is missing"))?;
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "replacement inode is missing")
+        })?;
     if inode.kind != InodeKind::File {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -112,7 +114,8 @@ pub fn replace_file_blocks_journaled(
         "block replacement image did not render every inode metadata block",
         &mut changed,
     )?;
-    capture.ensure_empty("block replacement image rendered outside allocation and inode regions")?;
+    capture
+        .ensure_empty("block replacement image rendered outside allocation and inode regions")?;
     changed.extend(new_blocks.iter().copied().zip(replacements.iter().copied()));
 
     let mut log = JournalLog::new();

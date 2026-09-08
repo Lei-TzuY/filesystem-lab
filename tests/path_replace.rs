@@ -92,7 +92,10 @@ fn assert_old(
         assert!(!allocator.is_owned(*block).unwrap());
     }
     for (index, expected) in ORIGINAL.iter().enumerate() {
-        assert_eq!(read_file_block(device, superblock, 2, index).unwrap(), *expected);
+        assert_eq!(
+            read_file_block(device, superblock, 2, index).unwrap(),
+            *expected
+        );
     }
 }
 
@@ -118,7 +121,10 @@ fn assert_new(
     for block in expected_new {
         assert!(allocator.is_owned(*block).unwrap());
     }
-    assert_eq!(read_file_block(device, superblock, 2, 0).unwrap(), ORIGINAL[0]);
+    assert_eq!(
+        read_file_block(device, superblock, 2, 0).unwrap(),
+        ORIGINAL[0]
+    );
     assert_eq!(
         read_file_block(device, superblock, 2, 1).unwrap(),
         REPLACEMENT[0]
@@ -127,7 +133,10 @@ fn assert_new(
         read_file_block(device, superblock, 2, 2).unwrap(),
         REPLACEMENT[1]
     );
-    assert_eq!(read_file_block(device, superblock, 2, 3).unwrap(), ORIGINAL[2]);
+    assert_eq!(
+        read_file_block(device, superblock, 2, 3).unwrap(),
+        ORIGINAL[2]
+    );
 }
 
 #[test]
@@ -148,12 +157,7 @@ fn pathname_replacement_follows_final_symlink_and_resizes_atomically() {
     assert_eq!(new_blocks, expected_new);
     assert_eq!(displaced, vec![original_blocks[1]]);
     assert_eq!(report.committed_transactions, 1);
-    assert_new(
-        &mut device,
-        &superblock,
-        &original_blocks,
-        &expected_new,
-    );
+    assert_new(&mut device, &superblock, &original_blocks, &expected_new);
     assert_eq!(
         load_directory_table(&mut device, &superblock).unwrap(),
         namespace_before
@@ -180,14 +184,7 @@ fn pathname_replacement_rejects_invalid_ranges_without_publication() {
             0,
             &REPLACEMENT,
         ),
-        replace_file_blocks_at_path_journaled(
-            &mut device,
-            &superblock,
-            "/target",
-            1,
-            1,
-            &[],
-        ),
+        replace_file_blocks_at_path_journaled(&mut device, &superblock, "/target", 1, 1, &[]),
         replace_file_blocks_at_path_journaled(
             &mut device,
             &superblock,
@@ -196,30 +193,24 @@ fn pathname_replacement_rejects_invalid_ranges_without_publication() {
             1,
             &REPLACEMENT,
         ),
-        replace_file_blocks_at_path_journaled(
-            &mut device,
-            &superblock,
-            "/",
-            0,
-            1,
-            &REPLACEMENT,
-        ),
+        replace_file_blocks_at_path_journaled(&mut device, &superblock, "/", 0, 1, &REPLACEMENT),
     ] {
         assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidInput);
     }
 
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inode_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inode_before
+    );
     assert_eq!(
         load_directory_table(&mut device, &superblock).unwrap(),
         namespace_before
     );
-    assert_old(
-        &mut device,
-        &superblock,
-        &original_blocks,
-        &expected_new,
-    );
+    assert_old(&mut device, &superblock, &original_blocks, &expected_new);
     assert!(load_journal_image(&mut device, superblock)
         .unwrap()
         .is_empty());
@@ -265,20 +256,10 @@ fn every_pathname_replacement_crash_point_is_old_or_recoverable_new_state() {
 
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         if recovery.committed_transactions == 0 {
-            assert_old(
-                &mut device,
-                &superblock,
-                &original_blocks,
-                &expected_new,
-            );
+            assert_old(&mut device, &superblock, &original_blocks, &expected_new);
         } else {
             assert_eq!(recovery.committed_transactions, 1);
-            assert_new(
-                &mut device,
-                &superblock,
-                &original_blocks,
-                &expected_new,
-            );
+            assert_new(&mut device, &superblock, &original_blocks, &expected_new);
         }
         assert_eq!(
             load_directory_table(&mut device, &superblock).unwrap(),
