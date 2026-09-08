@@ -13,6 +13,12 @@ use crate::inode_table::load_inode_table;
 use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::recovery::RecoveryReport;
 
+#[derive(Clone, Copy)]
+struct RenameOverwritePolicy {
+    expected_kind: InodeKind,
+    require_multiple_links: bool,
+}
+
 /// Atomically renames one regular-file entry over an existing singly linked regular file.
 ///
 /// The destination inode and exactly its data ownership are released in the same WAL transaction as
@@ -31,8 +37,17 @@ pub fn rename_overwrite_file_journaled(
     new_parent: u64,
     new_name: &str,
 ) -> io::Result<RecoveryReport> {
-    rename_overwrite_file_impl(
-        device, superblock, old_parent, old_name, new_parent, new_name, false,
+    rename_overwrite_impl(
+        device,
+        superblock,
+        old_parent,
+        old_name,
+        new_parent,
+        new_name,
+        RenameOverwritePolicy {
+            expected_kind: InodeKind::File,
+            require_multiple_links: false,
+        },
     )
 }
 
@@ -55,19 +70,62 @@ pub fn rename_overwrite_linked_file_journaled(
     new_parent: u64,
     new_name: &str,
 ) -> io::Result<RecoveryReport> {
-    rename_overwrite_file_impl(
-        device, superblock, old_parent, old_name, new_parent, new_name, true,
+    rename_overwrite_impl(
+        device,
+        superblock,
+        old_parent,
+        old_name,
+        new_parent,
+        new_name,
+        RenameOverwritePolicy {
+            expected_kind: InodeKind::File,
+            require_multiple_links: true,
+        },
     )
 }
 
-fn rename_overwrite_file_impl(
+/// Atomically renames one symbolic-link entry over an existing singly linked symbolic link.
+///
+/// The source symbolic-link inode and payload survive unchanged under the destination name. The
+/// replaced destination inode and exactly its owned payload block are removed in the same WAL
+/// transaction as namespace publication. Multiply linked symbolic-link destinations are rejected so
+/// their inode lifetime is never guessed from a single namespace entry.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` for invalid parents, missing entries, non-symlink targets, same-inode
+/// aliases, multiply linked destinations, invalid replacement names, or inconsistent block release.
+/// Existing corruption and WAL/recovery/device failures are propagated.
+pub fn rename_overwrite_symlink_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
     old_parent: u64,
     old_name: &str,
     new_parent: u64,
     new_name: &str,
-    require_multiple_links: bool,
+) -> io::Result<RecoveryReport> {
+    rename_overwrite_impl(
+        device,
+        superblock,
+        old_parent,
+        old_name,
+        new_parent,
+        new_name,
+        RenameOverwritePolicy {
+            expected_kind: InodeKind::Symlink,
+            require_multiple_links: false,
+        },
+    )
+}
+
+fn rename_overwrite_impl(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    old_parent: u64,
+    old_name: &str,
+    new_parent: u64,
+    new_name: &str,
+    policy: RenameOverwritePolicy,
 ) -> io::Result<RecoveryReport> {
     check_device(device)?;
 
@@ -102,26 +160,28 @@ fn rename_overwrite_file_impl(
         .iter()
         .find(|inode| inode.id == source_target)
         .ok_or_else(|| invalid_input("rename-overwrite source targets a missing inode"))?;
-    if source_inode.kind != InodeKind::File {
-        return Err(invalid_input(
-            "rename-overwrite source must be a regular file",
-        ));
+    if source_inode.kind != policy.expected_kind {
+        return Err(invalid_input(format!(
+            "rename-overwrite source must be {}",
+            kind_name(policy.expected_kind)
+        )));
     }
     let destination_inode = inodes
         .iter()
         .find(|inode| inode.id == destination_target)
         .ok_or_else(|| invalid_input("rename-overwrite destination targets a missing inode"))?;
-    if destination_inode.kind != InodeKind::File {
-        return Err(invalid_input(
-            "rename-overwrite destination must be a regular file",
-        ));
+    if destination_inode.kind != policy.expected_kind {
+        return Err(invalid_input(format!(
+            "rename-overwrite destination must be {}",
+            kind_name(policy.expected_kind)
+        )));
     }
     let destination_blocks = destination_inode.blocks.clone();
     let destination_references = entries
         .iter()
         .filter(|entry| entry.target == destination_target)
         .count();
-    if require_multiple_links {
+    if policy.require_multiple_links {
         if destination_references < 2 {
             return Err(invalid_input(
                 "linked rename-overwrite destination must have multiple namespace references",
@@ -152,7 +212,7 @@ fn rename_overwrite_file_impl(
         }
     }
 
-    if require_multiple_links {
+    if policy.require_multiple_links {
         let report = store_directory_table_journaled(device, superblock, &desired_entries)?;
         recover_journal_and_checkpoint(device, *superblock)?;
         return Ok(report);
@@ -166,6 +226,14 @@ fn rename_overwrite_file_impl(
     inodes.retain(|inode| inode.id != destination_target);
 
     store_create_metadata_journaled(device, superblock, &allocator, &inodes, &desired_entries)
+}
+
+fn kind_name(kind: InodeKind) -> &'static str {
+    match kind {
+        InodeKind::File => "a regular file",
+        InodeKind::Symlink => "a symbolic link",
+        InodeKind::Directory => "a directory",
+    }
 }
 
 fn validate_parent(
