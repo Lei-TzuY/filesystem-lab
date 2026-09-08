@@ -87,12 +87,9 @@ fn creates_zero_block_files_at_direct_and_symlinked_parent_paths() {
         create_empty_file_at_path_journaled(&mut device, &superblock, "/root_file").unwrap();
     let (nested_file, _) =
         create_empty_file_at_path_journaled(&mut device, &superblock, "/dir/nested").unwrap();
-    let (alias_file, _) = create_empty_file_at_path_journaled(
-        &mut device,
-        &superblock,
-        "/dir_alias/via_alias",
-    )
-    .unwrap();
+    let (alias_file, _) =
+        create_empty_file_at_path_journaled(&mut device, &superblock, "/dir_alias/via_alias")
+            .unwrap();
 
     for (path, inode_id) in [
         ("/root_file", root_file),
@@ -106,7 +103,10 @@ fn creates_zero_block_files_at_direct_and_symlinked_parent_paths() {
         assert_eq!(metadata.namespace_references, 1);
     }
 
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
     assert_unique_ownership(&mut device, &superblock);
     check_device(&mut device).unwrap();
 }
@@ -145,9 +145,18 @@ fn rejects_invalid_destinations_collisions_and_non_directory_parent_before_publi
         io::ErrorKind::InvalidInput
     );
 
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        entries_before
+    );
     assert!(load_journal_image(&mut device, superblock)
         .unwrap()
         .is_empty());
