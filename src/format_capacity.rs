@@ -82,11 +82,15 @@ pub fn format_device_for_directory_capacity(
 
     let record_bytes = DIRECTORY_ENTRY_HEADER_LEN
         .checked_add(max_name_bytes)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "directory capacity overflow"))?;
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "directory capacity overflow")
+        })?;
     let table_bytes = entry_capacity
         .checked_mul(record_bytes)
         .and_then(|bytes| bytes.checked_add(DIRECTORY_TABLE_HEADER_LEN))
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "directory capacity overflow"))?;
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "directory capacity overflow")
+        })?;
     let directory_blocks = blocks_for_bytes(table_bytes, "directory capacity overflow")?;
 
     format_device_with_metadata_blocks(

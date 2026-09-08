@@ -95,7 +95,9 @@ fn directory_capacity_planner_persists_namespace_beyond_default_geometry() {
         });
     }
 
-    assert!(entries.iter().all(|entry| entry.name.len() == MAX_NAME_BYTES));
+    assert!(entries
+        .iter()
+        .all(|entry| entry.name.len() == MAX_NAME_BYTES));
     store_inode_table(&mut device, &superblock, &inodes).unwrap();
     store_directory_table(&mut device, &superblock, &entries).unwrap();
 
@@ -111,13 +113,9 @@ fn directory_capacity_planner_persists_namespace_beyond_default_geometry() {
 fn invalid_directory_capacity_is_rejected_before_superblock_publication() {
     for (entry_capacity, max_name_bytes) in [(0, 80), (1, 0), (1, 256), (usize::MAX, 255)] {
         let mut device = MemoryBlockDevice::new(64);
-        let error = format_device_for_directory_capacity(
-            &mut device,
-            8,
-            entry_capacity,
-            max_name_bytes,
-        )
-        .unwrap_err();
+        let error =
+            format_device_for_directory_capacity(&mut device, 8, entry_capacity, max_name_bytes)
+                .unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
         assert_eq!(device.blocks[0], [0; BLOCK_SIZE]);
         assert_eq!(device.flushes, 0);
