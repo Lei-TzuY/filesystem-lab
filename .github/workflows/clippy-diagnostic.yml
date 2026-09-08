@@ -1,0 +1,22 @@
+name: Clippy Diagnostic
+
+on:
+  push:
+    branches:
+      - conquest/inode-capacity-format
+
+jobs:
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Capture clippy diagnostics
+        run: cargo clippy --all-targets --all-features -- -D warnings > clippy.txt 2>&1 || true
+      - name: Upload clippy diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: clippy-output
+          path: clippy.txt
