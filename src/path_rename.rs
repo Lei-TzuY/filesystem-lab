@@ -4,6 +4,7 @@ use crate::block::BlockDevice;
 use crate::format::Superblock;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
+use crate::rename_exchange_tx::rename_exchange_files_journaled;
 use crate::rename_tx::rename_entry_journaled;
 
 /// Atomically renames one durable namespace entry addressed by absolute pathnames.
@@ -32,6 +33,40 @@ pub fn rename_at_path_journaled(
 
     rename_entry_journaled(
         device, superblock, old_parent, old_name, new_parent, new_name,
+    )
+}
+
+/// Atomically exchanges two existing regular-file namespace entries addressed by pathnames.
+///
+/// Only the parent portions are resolved through bounded symbolic-link traversal. Final components
+/// are deliberately not followed, so both namespace keys are exchanged exactly as named. The
+/// durable mutation is delegated to [`rename_exchange_files_journaled`], preserving its
+/// directory-only WAL transaction, regular-file validation, hard-link-alias no-op semantics, and
+/// pre-publication fsck check.
+///
+/// # Errors
+/// Returns `InvalidInput` when either pathname is not absolute, names the root, or has an empty
+/// final component. Parent-resolution errors and all [`rename_exchange_files_journaled`]
+/// validation/durable I/O errors are propagated.
+pub fn rename_exchange_files_at_path_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    first: &str,
+    second: &str,
+) -> io::Result<RecoveryReport> {
+    let (first_parent_path, first_name) = split_path(first, "first exchange path")?;
+    let (second_parent_path, second_name) = split_path(second, "second exchange path")?;
+
+    let first_parent = resolve_path_following_symlinks(device, superblock, first_parent_path)?;
+    let second_parent = resolve_path_following_symlinks(device, superblock, second_parent_path)?;
+
+    rename_exchange_files_journaled(
+        device,
+        superblock,
+        first_parent,
+        first_name,
+        second_parent,
+        second_name,
     )
 }
 
