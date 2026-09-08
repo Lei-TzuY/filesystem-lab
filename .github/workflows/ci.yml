@@ -13,14 +13,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Canonical format
-        run: cargo fmt --all
-      - name: Upload canonical path-move files
-        uses: actions/upload-artifact@v4
-        with:
-          name: canonical-path-move
-          path: |
-            src/path_move.rs
-            tests/path_move.rs
-      - name: Show formatting drift
-        run: git diff --exit-code
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Test
+        run: cargo test --all-targets --all-features
