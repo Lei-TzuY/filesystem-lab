@@ -67,11 +67,7 @@ fn setup() -> (CrashDevice, Superblock) {
         &mut device,
         &superblock,
         "/dir/file",
-        &[
-            [0x11; BLOCK_SIZE],
-            [0x22; BLOCK_SIZE],
-            [0x33; BLOCK_SIZE],
-        ],
+        &[[0x11; BLOCK_SIZE], [0x22; BLOCK_SIZE], [0x33; BLOCK_SIZE]],
     )
     .unwrap();
     check_device(&mut device).unwrap();
@@ -132,12 +128,7 @@ fn rejects_invalid_batches_without_publication() {
             "/dir/file",
             &[(3, NEW_FIRST)],
         ),
-        write_file_blocks_at_path_journaled(
-            &mut device,
-            &superblock,
-            "/dir",
-            &[(0, NEW_FIRST)],
-        ),
+        write_file_blocks_at_path_journaled(&mut device, &superblock, "/dir", &[(0, NEW_FIRST)]),
     ] {
         assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidInput);
     }
@@ -153,8 +144,14 @@ fn rejects_invalid_batches_without_publication() {
         io::ErrorKind::NotFound
     );
 
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
     assert_eq!(
         load_directory_table(&mut device, &superblock).unwrap(),
         directory_before
@@ -187,16 +184,24 @@ fn every_pathname_batch_overwrite_crash_point_recovers_old_or_complete_new_state
         device.reboot();
         recover_journal_and_checkpoint(&mut device, superblock).unwrap();
 
-        let first = read_file_range_at_path(&mut device, &superblock, "/dir/file", 0, 0, 1)
-            .unwrap()[0];
-        let middle = read_file_range_at_path(&mut device, &superblock, "/dir/file", 1, 0, 1)
-            .unwrap()[0];
-        let third = read_file_range_at_path(&mut device, &superblock, "/dir/file", 2, 0, 1)
-            .unwrap()[0];
-        assert!((first, middle, third) == (0x11, 0x22, 0x33)
-            || (first, middle, third) == (0xa1, 0x22, 0xc3));
-        assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-        assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+        let first =
+            read_file_range_at_path(&mut device, &superblock, "/dir/file", 0, 0, 1).unwrap()[0];
+        let middle =
+            read_file_range_at_path(&mut device, &superblock, "/dir/file", 1, 0, 1).unwrap()[0];
+        let third =
+            read_file_range_at_path(&mut device, &superblock, "/dir/file", 2, 0, 1).unwrap()[0];
+        assert!(
+            (first, middle, third) == (0x11, 0x22, 0x33)
+                || (first, middle, third) == (0xa1, 0x22, 0xc3)
+        );
+        assert_eq!(
+            load_allocator(&mut device, &superblock).unwrap(),
+            allocator_before
+        );
+        assert_eq!(
+            load_inode_table(&mut device, &superblock).unwrap(),
+            inodes_before
+        );
         assert_eq!(
             load_directory_table(&mut device, &superblock).unwrap(),
             directory_before
