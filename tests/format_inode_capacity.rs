@@ -13,12 +13,16 @@ struct MemoryBlockDevice {
 
 impl MemoryBlockDevice {
     fn new(blocks: usize) -> Self {
-        Self { blocks: vec![[0; BLOCK_SIZE]; blocks] }
+        Self {
+            blocks: vec![[0; BLOCK_SIZE]; blocks],
+        }
     }
 }
 
 impl BlockDevice for MemoryBlockDevice {
-    fn block_count(&self) -> u64 { self.blocks.len() as u64 }
+    fn block_count(&self) -> u64 {
+        self.blocks.len() as u64
+    }
 
     fn read_block(&mut self, block: u64, buf: &mut [u8; BLOCK_SIZE]) -> io::Result<()> {
         buf.copy_from_slice(&self.blocks[block as usize]);
@@ -30,7 +34,9 @@ impl BlockDevice for MemoryBlockDevice {
         Ok(())
     }
 
-    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 #[test]
@@ -42,10 +48,17 @@ fn formatter_reserves_enough_space_for_requested_blockless_inode_capacity() {
     assert_eq!(superblock.directory_blocks, DEFAULT_DIRECTORY_BLOCKS);
 
     let inodes: Vec<_> = (1..=400)
-        .map(|id| PersistedInode { id, kind: InodeKind::File, blocks: Vec::new() })
+        .map(|id| PersistedInode {
+            id,
+            kind: InodeKind::File,
+            blocks: Vec::new(),
+        })
         .collect();
     store_inode_table(&mut device, &superblock, &inodes).unwrap();
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes);
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes
+    );
 }
 
 #[test]
