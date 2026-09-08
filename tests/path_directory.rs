@@ -161,11 +161,9 @@ fn resolves_nested_and_final_symlink_directory_paths() {
 #[test]
 fn empty_directory_returns_an_empty_listing() {
     let (mut device, superblock) = setup();
-    assert!(
-        list_directory_at_path(&mut device, &superblock, "/empty")
-            .unwrap()
-            .is_empty()
-    );
+    assert!(list_directory_at_path(&mut device, &superblock, "/empty")
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -183,12 +181,7 @@ fn rejects_non_directory_and_preserves_bounded_path_validation() {
 #[test]
 fn rejects_durable_namespace_target_missing_from_inode_table() {
     let (mut device, superblock) = setup();
-    store_directory_table(
-        &mut device,
-        &superblock,
-        &[entry(1, 999, "dangling-entry")],
-    )
-    .unwrap();
+    store_directory_table(&mut device, &superblock, &[entry(1, 999, "dangling-entry")]).unwrap();
 
     let error = list_directory_at_path(&mut device, &superblock, "/").unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
