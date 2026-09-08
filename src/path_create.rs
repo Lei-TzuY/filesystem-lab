@@ -83,13 +83,8 @@ pub fn create_empty_file_at_path_journaled(
     });
     entries.push(new_entry);
 
-    let report = store_create_metadata_journaled(
-        device,
-        superblock,
-        &allocator,
-        &inodes,
-        &entries,
-    )?;
+    let report =
+        store_create_metadata_journaled(device, superblock, &allocator, &inodes, &entries)?;
     Ok((inode_id, report))
 }
 
