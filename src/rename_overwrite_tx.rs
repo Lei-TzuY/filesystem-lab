@@ -13,6 +13,12 @@ use crate::inode_table::load_inode_table;
 use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::recovery::RecoveryReport;
 
+#[derive(Clone, Copy)]
+struct RenameOverwritePolicy {
+    expected_kind: InodeKind,
+    require_multiple_links: bool,
+}
+
 /// Atomically renames one regular-file entry over an existing singly linked regular file.
 ///
 /// The destination inode and exactly its data ownership are released in the same WAL transaction as
@@ -38,8 +44,10 @@ pub fn rename_overwrite_file_journaled(
         old_name,
         new_parent,
         new_name,
-        InodeKind::File,
-        false,
+        RenameOverwritePolicy {
+            expected_kind: InodeKind::File,
+            require_multiple_links: false,
+        },
     )
 }
 
@@ -69,8 +77,10 @@ pub fn rename_overwrite_linked_file_journaled(
         old_name,
         new_parent,
         new_name,
-        InodeKind::File,
-        true,
+        RenameOverwritePolicy {
+            expected_kind: InodeKind::File,
+            require_multiple_links: true,
+        },
     )
 }
 
@@ -101,8 +111,10 @@ pub fn rename_overwrite_symlink_journaled(
         old_name,
         new_parent,
         new_name,
-        InodeKind::Symlink,
-        false,
+        RenameOverwritePolicy {
+            expected_kind: InodeKind::Symlink,
+            require_multiple_links: false,
+        },
     )
 }
 
@@ -113,8 +125,7 @@ fn rename_overwrite_impl(
     old_name: &str,
     new_parent: u64,
     new_name: &str,
-    expected_kind: InodeKind,
-    require_multiple_links: bool,
+    policy: RenameOverwritePolicy,
 ) -> io::Result<RecoveryReport> {
     check_device(device)?;
 
@@ -149,20 +160,20 @@ fn rename_overwrite_impl(
         .iter()
         .find(|inode| inode.id == source_target)
         .ok_or_else(|| invalid_input("rename-overwrite source targets a missing inode"))?;
-    if source_inode.kind != expected_kind {
+    if source_inode.kind != policy.expected_kind {
         return Err(invalid_input(format!(
             "rename-overwrite source must be {}",
-            kind_name(expected_kind)
+            kind_name(policy.expected_kind)
         )));
     }
     let destination_inode = inodes
         .iter()
         .find(|inode| inode.id == destination_target)
         .ok_or_else(|| invalid_input("rename-overwrite destination targets a missing inode"))?;
-    if destination_inode.kind != expected_kind {
+    if destination_inode.kind != policy.expected_kind {
         return Err(invalid_input(format!(
             "rename-overwrite destination must be {}",
-            kind_name(expected_kind)
+            kind_name(policy.expected_kind)
         )));
     }
     let destination_blocks = destination_inode.blocks.clone();
@@ -170,7 +181,7 @@ fn rename_overwrite_impl(
         .iter()
         .filter(|entry| entry.target == destination_target)
         .count();
-    if require_multiple_links {
+    if policy.require_multiple_links {
         if destination_references < 2 {
             return Err(invalid_input(
                 "linked rename-overwrite destination must have multiple namespace references",
@@ -201,7 +212,7 @@ fn rename_overwrite_impl(
         }
     }
 
-    if require_multiple_links {
+    if policy.require_multiple_links {
         let report = store_directory_table_journaled(device, superblock, &desired_entries)?;
         recover_journal_and_checkpoint(device, *superblock)?;
         return Ok(report);
