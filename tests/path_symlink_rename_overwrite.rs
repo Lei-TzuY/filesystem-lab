@@ -62,14 +62,9 @@ fn setup() -> (CrashDevice, Superblock, u64, u64, u64, u64) {
 
     let (source_inode, _) =
         create_symlink_journaled(&mut device, &superblock, 2, "source", "/source-target").unwrap();
-    let (destination_inode, _) = create_symlink_journaled(
-        &mut device,
-        &superblock,
-        3,
-        "target",
-        "/destination-target",
-    )
-    .unwrap();
+    let (destination_inode, _) =
+        create_symlink_journaled(&mut device, &superblock, 3, "target", "/destination-target")
+            .unwrap();
     create_symlink_journaled(&mut device, &superblock, 1, "src_alias", "/src").unwrap();
     create_symlink_journaled(&mut device, &superblock, 1, "dst_alias", "/dst").unwrap();
 
@@ -103,7 +98,9 @@ fn assert_new_state(
     source_block: u64,
     destination_block: u64,
 ) {
-    assert!(resolve_path_without_following_final_symlink(device, superblock, "/src/source").is_err());
+    assert!(
+        resolve_path_without_following_final_symlink(device, superblock, "/src/source").is_err()
+    );
     assert_eq!(
         resolve_path_without_following_final_symlink(device, superblock, "/dst/target").unwrap(),
         source_inode
@@ -123,14 +120,8 @@ fn assert_new_state(
 
 #[test]
 fn overwrites_symlink_without_following_final_components() {
-    let (
-        mut device,
-        superblock,
-        source_inode,
-        destination_inode,
-        source_block,
-        destination_block,
-    ) = setup();
+    let (mut device, superblock, source_inode, destination_inode, source_block, destination_block) =
+        setup();
 
     rename_overwrite_symlink_at_path_journaled(
         &mut device,
@@ -193,8 +184,14 @@ fn rejects_wrong_kind_malformed_paths_and_multiply_linked_destination() {
         entries_before
     );
 
-    hard_link_symlink_journaled(&mut device, &superblock, 3, "target_alias", destination_inode)
-        .unwrap();
+    hard_link_symlink_journaled(
+        &mut device,
+        &superblock,
+        3,
+        "target_alias",
+        destination_inode,
+    )
+    .unwrap();
     let entries_with_alias = load_directory_table(&mut device, &superblock).unwrap();
     assert_eq!(
         rename_overwrite_symlink_at_path_journaled(
@@ -219,14 +216,7 @@ fn rejects_wrong_kind_malformed_paths_and_multiply_linked_destination() {
 
 #[test]
 fn every_pathname_symlink_overwrite_crash_point_recovers_old_or_complete_new_state() {
-    let (
-        mut probe,
-        superblock,
-        _,
-        _,
-        _,
-        _,
-    ) = setup();
+    let (mut probe, superblock, _, _, _, _) = setup();
     probe.arm(None);
     rename_overwrite_symlink_at_path_journaled(
         &mut probe,
