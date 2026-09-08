@@ -6,7 +6,8 @@ use filesystem_lab::allocation_disk::{load_allocator, store_allocator};
 use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
 use filesystem_lab::directory_table::{load_directory_table, store_directory_table};
-use filesystem_lab::format::{format_device, Superblock};
+use filesystem_lab::format::Superblock;
+use filesystem_lab::format_geometry::format_device_with_journal_blocks;
 use filesystem_lab::fsck::check_device;
 use filesystem_lab::inode::InodeKind;
 use filesystem_lab::inode_codec::PersistedInode;
@@ -32,7 +33,7 @@ fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
 
 fn setup() -> (CrashDevice, Superblock, [u64; 5]) {
     let mut device = CrashDevice::new(96);
-    let superblock = format_device(&mut device).unwrap();
+    let superblock = format_device_with_journal_blocks(&mut device, 10).unwrap();
     let mut allocator = load_allocator(&mut device, &superblock).unwrap();
     let blocks = [
         allocator.allocate().unwrap(),
