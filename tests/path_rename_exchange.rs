@@ -20,11 +20,19 @@ use support::CrashDevice;
 const JOURNAL_BLOCKS: u64 = 8;
 
 fn inode(id: u64, kind: InodeKind) -> PersistedInode {
-    PersistedInode { id, kind, blocks: Vec::new() }
+    PersistedInode {
+        id,
+        kind,
+        blocks: Vec::new(),
+    }
 }
 
 fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
-    PersistedDirectoryEntry { parent, target, name: name.to_owned() }
+    PersistedDirectoryEntry {
+        parent,
+        target,
+        name: name.to_owned(),
+    }
 }
 
 fn setup() -> (CrashDevice, Superblock) {
@@ -73,10 +81,22 @@ fn exchanges_regular_files_through_symlinked_parents() {
     )
     .unwrap();
 
-    assert_eq!(resolve_path_following_symlinks(&mut device, &superblock, "/left/a").unwrap(), 5);
-    assert_eq!(resolve_path_following_symlinks(&mut device, &superblock, "/right/b").unwrap(), 4);
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+    assert_eq!(
+        resolve_path_following_symlinks(&mut device, &superblock, "/left/a").unwrap(),
+        5
+    );
+    assert_eq!(
+        resolve_path_following_symlinks(&mut device, &superblock, "/right/b").unwrap(),
+        4
+    );
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
     check_device(&mut device).unwrap();
 }
 
@@ -110,14 +130,29 @@ fn every_pathname_exchange_crash_point_recovers_old_or_complete_new_state() {
         device.reboot();
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
 
-        assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-        assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+        assert_eq!(
+            load_allocator(&mut device, &superblock).unwrap(),
+            allocator_before
+        );
+        assert_eq!(
+            load_inode_table(&mut device, &superblock).unwrap(),
+            inodes_before
+        );
         if recovery.committed_transactions == 0 {
-            assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
+            assert_eq!(
+                load_directory_table(&mut device, &superblock).unwrap(),
+                entries_before
+            );
         } else {
             assert_eq!(recovery.committed_transactions, 1);
-            assert_eq!(resolve_path_following_symlinks(&mut device, &superblock, "/left/a").unwrap(), 5);
-            assert_eq!(resolve_path_following_symlinks(&mut device, &superblock, "/right/b").unwrap(), 4);
+            assert_eq!(
+                resolve_path_following_symlinks(&mut device, &superblock, "/left/a").unwrap(),
+                5
+            );
+            assert_eq!(
+                resolve_path_following_symlinks(&mut device, &superblock, "/right/b").unwrap(),
+                4
+            );
         }
         check_device(&mut device).unwrap();
         assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
