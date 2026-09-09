@@ -11,6 +11,7 @@ use crate::format::Superblock;
 use crate::inode::InodeKind;
 use crate::inode_codec::PersistedInode;
 use crate::inode_table::load_inode_table;
+use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 
@@ -20,6 +21,10 @@ use crate::recovery::RecoveryReport;
 /// component is not resolved: it becomes one new durable directory entry naming a freshly assigned
 /// regular-file inode. Format v5 has no persisted byte length, so the created file starts with an
 /// empty logical-block vector and therefore owns no data blocks.
+///
+/// Before reading persistent allocator, inode, or namespace state, pathname create recovers and
+/// checkpoints any older durable journal image. That guarantees the mutation is recomputed from
+/// recovered home state rather than from a partial post-crash home-write prefix.
 ///
 /// The inode-table and directory-table changes are published together through the existing create
 /// WAL transaction. The allocator image is passed through unchanged, which makes zero-block create
@@ -45,6 +50,11 @@ pub fn create_empty_file_at_path_journaled(
 /// component is never followed. A fresh data block is allocated and the allocator image, new inode,
 /// namespace entry, and complete initial block image are published in one WAL transaction.
 ///
+/// After validating the pathname shape but before resolving its parent or loading mutable filesystem
+/// state, this operation recovers and checkpoints any prior durable journal image. The fresh create
+/// is therefore derived only from recovered allocator, inode, directory, and data state. This is the
+/// high-level retry boundary paired with the low-level journal replacement guard.
+///
 /// Format v5 persists logical blocks but not byte EOF, so this API deliberately creates exactly one
 /// logical block rather than implying a byte length smaller than `BLOCK_SIZE`.
 ///
@@ -61,6 +71,7 @@ pub fn create_one_block_file_at_path_journaled(
     data: &[u8; BLOCK_SIZE],
 ) -> io::Result<(u64, RecoveryReport)> {
     let (parent_path, name) = split_destination(destination)?;
+    recover_journal_and_checkpoint(device, *superblock)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
 
     let mut allocator = load_allocator(device, superblock)?;
@@ -98,6 +109,10 @@ pub fn create_one_block_file_at_path_journaled(
 /// directory inode. Format v5 represents an empty directory with no child entries and no data
 /// blocks, so allocator ownership is preserved exactly.
 ///
+/// Before reading persistent allocator, inode, or namespace state, pathname create recovers and
+/// checkpoints any older durable journal image. Recovery therefore establishes the state from which
+/// the new directory mutation is computed.
+///
 /// The new inode and parent namespace entry are published together through the existing create WAL
 /// transaction. Recovery therefore exposes either the complete old namespace or the complete new
 /// empty directory, never an inode-only or directory-entry-only state.
@@ -123,6 +138,7 @@ fn create_blockless_inode_at_path_journaled(
     kind: InodeKind,
 ) -> io::Result<(u64, RecoveryReport)> {
     let (parent_path, name) = split_destination(destination)?;
+    recover_journal_and_checkpoint(device, *superblock)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
 
     let allocator = load_allocator(device, superblock)?;
