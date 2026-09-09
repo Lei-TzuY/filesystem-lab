@@ -48,15 +48,16 @@ pub fn rename_at_path_journaled(
 /// Atomically exchanges two existing regular-file namespace entries addressed by pathnames.
 ///
 /// Only the parent portions are resolved through bounded symbolic-link traversal. Final components
-/// are deliberately not followed, so both namespace keys are exchanged exactly as named. The
-/// durable mutation is delegated to [`rename_exchange_files_journaled`], preserving its
-/// directory-only WAL transaction, regular-file validation, hard-link-alias no-op semantics, and
+/// are deliberately not followed, so both namespace keys are exchanged exactly as named. Any older
+/// durable WAL is recovered and checkpointed after pathname-shape validation but before parent
+/// resolution. The durable mutation is delegated to [`rename_exchange_files_journaled`], preserving
+/// its directory-only WAL transaction, regular-file validation, hard-link-alias no-op semantics, and
 /// pre-publication fsck check.
 ///
 /// # Errors
 /// Returns `InvalidInput` when either pathname is not absolute, names the root, or has an empty
-/// final component. Parent-resolution errors and all [`rename_exchange_files_journaled`]
-/// validation/durable I/O errors are propagated.
+/// final component. Parent-resolution errors and all recovery, checkpoint,
+/// [`rename_exchange_files_journaled`] validation, and durable I/O errors are propagated.
 pub fn rename_exchange_files_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -80,13 +81,15 @@ pub fn rename_exchange_files_at_path_journaled(
 ///
 /// Parent portions follow bounded symbolic-link traversal while final components remain unfollowed,
 /// so the symbolic-link inodes themselves are exchanged even when either persisted target is
-/// dangling. Publication is delegated to [`rename_exchange_symlinks_journaled`], which advances
-/// only the directory table and preserves both link inodes, payload blocks, and allocator ownership.
+/// dangling. Any older durable WAL is recovered and checkpointed before parent resolution.
+/// Publication is delegated to [`rename_exchange_symlinks_journaled`], which advances only the
+/// directory table and preserves both link inodes, payload blocks, and allocator ownership.
 ///
 /// # Errors
 /// Returns `InvalidInput` when either pathname is not absolute, names the root, has an empty final
 /// component, or either final namespace target is not a symbolic link. Parent-resolution errors and
-/// all [`rename_exchange_symlinks_journaled`] validation/durable I/O errors are propagated.
+/// all recovery, checkpoint, [`rename_exchange_symlinks_journaled`] validation, and durable I/O
+/// errors are propagated.
 pub fn rename_exchange_symlinks_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -109,14 +112,15 @@ pub fn rename_exchange_symlinks_at_path_journaled(
 /// Atomically exchanges two existing directory namespace entries addressed by pathnames.
 ///
 /// Parent portions follow bounded symbolic-link traversal while final components remain unfollowed.
-/// Publication is delegated to [`rename_exchange_directories_journaled`], which preserves inode and
-/// allocator images and rejects any candidate namespace that would introduce a directory cycle.
+/// Any older durable WAL is recovered and checkpointed before parent resolution. Publication is
+/// delegated to [`rename_exchange_directories_journaled`], which preserves inode and allocator
+/// images and rejects any candidate namespace that would introduce a directory cycle.
 ///
 /// # Errors
 /// Returns `InvalidInput` when either pathname is not absolute, names the root, has an empty final
 /// component, either final target is not a directory, or the exchange would create a directory
-/// cycle. Parent-resolution errors and all [`rename_exchange_directories_journaled`] durable I/O
-/// errors are propagated.
+/// cycle. Parent-resolution errors and all recovery, checkpoint,
+/// [`rename_exchange_directories_journaled`] durable I/O errors are propagated.
 pub fn rename_exchange_directories_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -145,6 +149,7 @@ fn resolve_exchange_parents<'a>(
     let (first_parent_path, first_name) = split_path(first, "first exchange path")?;
     let (second_parent_path, second_name) = split_path(second, "second exchange path")?;
 
+    recover_journal_and_checkpoint(device, *superblock)?;
     let first_parent = resolve_path_following_symlinks(device, superblock, first_parent_path)?;
     let second_parent = resolve_path_following_symlinks(device, superblock, second_parent_path)?;
     Ok((first_parent, first_name, second_parent, second_name))
