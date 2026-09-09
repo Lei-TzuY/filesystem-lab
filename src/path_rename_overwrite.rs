@@ -6,7 +6,7 @@ use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 use crate::rename_overwrite_tx::{
     rename_overwrite_file_journaled, rename_overwrite_linked_file_journaled,
-    rename_overwrite_symlink_journaled,
+    rename_overwrite_linked_symlink_journaled, rename_overwrite_symlink_journaled,
 };
 
 /// Atomically renames one regular file over an existing singly linked regular file by pathname.
@@ -72,6 +72,29 @@ pub fn rename_overwrite_symlink_at_path_journaled(
     let (old_parent, old_name, new_parent, new_name) =
         resolve_rename_overwrite_parents(device, superblock, source, destination)?;
     rename_overwrite_symlink_journaled(
+        device, superblock, old_parent, old_name, new_parent, new_name,
+    )
+}
+
+/// Atomically renames one symbolic link over one alias of a multiply linked symbolic link.
+///
+/// Parent pathnames follow bounded symbolic-link traversal while final components are never
+/// followed. Only the selected destination alias is replaced; the destination symlink inode,
+/// payload block, allocator ownership, and every other alias remain alive.
+///
+/// # Errors
+/// Returns `InvalidInput` for malformed paths, non-symlink endpoints, same-inode aliases, or a
+/// destination with fewer than two namespace references. Parent-resolution, WAL, recovery,
+/// checkpoint, and device I/O failures are propagated.
+pub fn rename_overwrite_linked_symlink_at_path_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    source: &str,
+    destination: &str,
+) -> io::Result<RecoveryReport> {
+    let (old_parent, old_name, new_parent, new_name) =
+        resolve_rename_overwrite_parents(device, superblock, source, destination)?;
+    rename_overwrite_linked_symlink_journaled(
         device, superblock, old_parent, old_name, new_parent, new_name,
     )
 }
