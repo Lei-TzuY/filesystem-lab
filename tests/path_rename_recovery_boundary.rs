@@ -46,6 +46,43 @@ fn has_commit(entries: &[JournalEntry]) -> bool {
         .any(|entry| matches!(entry, JournalEntry::Commit { .. }))
 }
 
+fn assert_renamed_state(device: &mut CrashDevice, superblock: &Superblock, allocated_before: usize) {
+    assert_eq!(
+        resolve_path_following_symlinks(device, superblock, "/source")
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::NotFound
+    );
+    let destination_inode =
+        resolve_path_following_symlinks(device, superblock, "/destination").unwrap();
+    let inodes = load_inode_table(device, superblock).unwrap();
+    let file = inodes
+        .iter()
+        .find(|inode| inode.id == destination_inode)
+        .expect("renamed file inode must remain present");
+    assert_eq!(file.kind, InodeKind::File);
+    assert_eq!(file.blocks.len(), 1);
+
+    let entries = load_directory_table(device, superblock).unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].parent, 1);
+    assert_eq!(entries[0].target, destination_inode);
+    assert_eq!(entries[0].name, "destination");
+
+    let mut owned = HashSet::new();
+    for inode in &inodes {
+        for &block in &inode.blocks {
+            assert!(owned.insert(block), "physical block {block} is double-owned");
+        }
+    }
+    assert_eq!(owned.len(), 1);
+    assert_eq!(
+        load_allocator(device, superblock).unwrap().allocated_blocks(),
+        allocated_before + 1
+    );
+    check_device(device).unwrap();
+}
+
 #[test]
 fn pathname_rename_recovers_committed_create_before_resolving_and_recomputing() {
     let data = [0x6d_u8; BLOCK_SIZE];
@@ -96,46 +133,7 @@ fn pathname_rename_recovers_committed_create_before_resolving_and_recomputing() 
         );
 
         rename_at_path_journaled(&mut device, &superblock, "/source", "/destination").unwrap();
-
-        assert_eq!(
-            resolve_path_following_symlinks(&mut device, &superblock, "/source")
-                .unwrap_err()
-                .kind(),
-            io::ErrorKind::NotFound
-        );
-        let destination_inode =
-            resolve_path_following_symlinks(&mut device, &superblock, "/destination").unwrap();
-        let inodes = load_inode_table(&mut device, &superblock).unwrap();
-        let file = inodes
-            .iter()
-            .find(|inode| inode.id == destination_inode)
-            .expect("renamed file inode must remain present");
-        assert_eq!(file.kind, InodeKind::File);
-        assert_eq!(file.blocks.len(), 1);
-
-        let entries = load_directory_table(&mut device, &superblock).unwrap();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].parent, 1);
-        assert_eq!(entries[0].target, destination_inode);
-        assert_eq!(entries[0].name, "destination");
-
-        let mut owned = HashSet::new();
-        for inode in &inodes {
-            for &block in &inode.blocks {
-                assert!(
-                    owned.insert(block),
-                    "physical block {block} is double-owned"
-                );
-            }
-        }
-        assert_eq!(owned.len(), 1);
-        assert_eq!(
-            load_allocator(&mut device, &superblock)
-                .unwrap()
-                .allocated_blocks(),
-            allocated_before + 1
-        );
-        check_device(&mut device).unwrap();
+        assert_renamed_state(&mut device, &superblock, allocated_before);
 
         let rename_journal = load_journal_image(&mut device, superblock).unwrap();
         assert!(
