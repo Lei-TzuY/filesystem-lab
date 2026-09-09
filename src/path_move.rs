@@ -3,6 +3,7 @@ use std::io;
 use crate::block::BlockDevice;
 use crate::file_transfer::move_file_block_range_journaled;
 use crate::format::Superblock;
+use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 
@@ -16,10 +17,12 @@ pub struct PathFileBlockMove<'a> {
 
 /// Atomically reorders one contiguous logical-block range inside a regular file addressed by path.
 ///
-/// The pathname follows intermediate and final symbolic links using the repository-wide bounded
-/// pathname expansion rules. The resolved inode ID is delegated to
-/// [`move_file_block_range_journaled`], which changes only that inode's logical block-reference
-/// ordering and publishes the complete inode-table mutation through the existing WAL.
+/// Any older committed WAL is recovered and checkpointed before pathname resolution so lookup never
+/// derives the target inode from a partially replayed namespace. The pathname then follows
+/// intermediate and final symbolic links using the repository-wide bounded pathname expansion rules.
+/// The resolved inode ID is delegated to [`move_file_block_range_journaled`], which changes only that
+/// inode's logical block-reference ordering and publishes the complete inode-table mutation through
+/// the existing WAL.
 ///
 /// `destination_index` is interpreted against the logical-block vector after the source range has
 /// been removed, matching the inode-ID primitive. Format v5 has no persisted byte length, so this
@@ -27,14 +30,16 @@ pub struct PathFileBlockMove<'a> {
 /// extent, reflink, or POSIX semantics.
 ///
 /// # Errors
-/// Propagates pathname lookup errors and all [`move_file_block_range_journaled`] validation or
-/// durable I/O errors, including a non-file target, empty or out-of-range source interval, invalid
-/// post-removal destination boundary, a no-op move, ownership disagreement, or journal errors.
+/// Propagates recovery/checkpoint failures, pathname lookup errors, and all
+/// [`move_file_block_range_journaled`] validation or durable I/O errors, including a non-file target,
+/// empty or out-of-range source interval, invalid post-removal destination boundary, a no-op move,
+/// ownership disagreement, or journal errors.
 pub fn move_file_block_range_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
     operation: PathFileBlockMove<'_>,
 ) -> io::Result<(Vec<u64>, RecoveryReport)> {
+    recover_journal_and_checkpoint(device, *superblock)?;
     let inode_id = resolve_path_following_symlinks(device, superblock, operation.path)?;
     move_file_block_range_journaled(
         device,
