@@ -69,7 +69,10 @@ fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
     let mut seen = HashSet::new();
     for inode in &inodes {
         for block in &inode.blocks {
-            assert!(seen.insert(*block), "duplicate physical block reference {block}");
+            assert!(
+                seen.insert(*block),
+                "duplicate physical block reference {block}"
+            );
             assert!(allocator.is_owned(*block).unwrap());
         }
     }
@@ -81,13 +84,8 @@ fn committed_create_journal_cannot_be_overwritten_before_recovery() {
     let second_data = [0x72_u8; BLOCK_SIZE];
     let (mut probe, superblock) = setup();
     probe.arm(None);
-    create_one_block_file_at_path_journaled(
-        &mut probe,
-        &superblock,
-        "/dir/first",
-        &first_data,
-    )
-    .unwrap();
+    create_one_block_file_at_path_journaled(&mut probe, &superblock, "/dir/first", &first_data)
+        .unwrap();
     let operations = probe.operations();
     let mut committed_crash_states = 0;
 
@@ -115,11 +113,7 @@ fn committed_create_journal_cannot_be_overwritten_before_recovery() {
         let mut replacement = JournalLog::new();
         let txid = replacement.begin().unwrap();
         replacement
-            .write(
-                txid,
-                superblock.reserved_blocks(),
-                [0xee_u8; BLOCK_SIZE],
-            )
+            .write(txid, superblock.reserved_blocks(), [0xee_u8; BLOCK_SIZE])
             .unwrap();
         replacement.commit(txid).unwrap();
 
@@ -158,7 +152,9 @@ fn committed_create_journal_cannot_be_overwritten_before_recovery() {
         assert_ne!(first.inode_id, second.inode_id);
         assert_unique_ownership(&mut device, &superblock);
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
     }
 
     assert!(
