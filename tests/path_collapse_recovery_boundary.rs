@@ -50,19 +50,15 @@ fn setup_without_alias() -> (CrashDevice, Superblock) {
     )
     .unwrap();
     store_directory_table(&mut device, &superblock, &[entry(1, 2, "file")]).unwrap();
-    append_file_blocks_at_path_journaled(
-        &mut device,
-        &superblock,
-        "/file",
-        &[
-            [0x11; BLOCK_SIZE],
-            [0x22; BLOCK_SIZE],
-            [0x33; BLOCK_SIZE],
-            [0x44; BLOCK_SIZE],
-            [0x55; BLOCK_SIZE],
-        ],
-    )
-    .unwrap();
+    let blocks = vec![
+        [0x11; BLOCK_SIZE],
+        [0x22; BLOCK_SIZE],
+        [0x33; BLOCK_SIZE],
+        [0x44; BLOCK_SIZE],
+        [0x55; BLOCK_SIZE],
+    ]
+    .into_boxed_slice();
+    append_file_blocks_at_path_journaled(&mut device, &superblock, "/file", &blocks).unwrap();
     recover_journal_and_checkpoint(&mut device, superblock).unwrap();
     check_device(&mut device).unwrap();
     (device, superblock)
