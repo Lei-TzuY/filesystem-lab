@@ -177,7 +177,9 @@ fn validate_target_kind(
         .find(|inode| inode.id == target)
         .ok_or_else(|| invalid_input(format!("{label} inode does not exist")))?;
     if inode.kind != expected_kind {
-        return Err(invalid_input(format!("{label} inode is not a {kind_label}")));
+        return Err(invalid_input(format!(
+            "{label} inode is not a {kind_label}"
+        )));
     }
     Ok(())
 }
