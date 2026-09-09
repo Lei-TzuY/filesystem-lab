@@ -5,7 +5,8 @@ use crate::format::Superblock;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 use crate::rename_exchange_tx::{
-    rename_exchange_files_journaled, rename_exchange_symlinks_journaled,
+    rename_exchange_directories_journaled, rename_exchange_files_journaled,
+    rename_exchange_symlinks_journaled,
 };
 use crate::rename_tx::rename_entry_journaled;
 
@@ -90,6 +91,36 @@ pub fn rename_exchange_symlinks_at_path_journaled(
         resolve_exchange_parents(device, superblock, first, second)?;
 
     rename_exchange_symlinks_journaled(
+        device,
+        superblock,
+        first_parent,
+        first_name,
+        second_parent,
+        second_name,
+    )
+}
+
+/// Atomically exchanges two existing directory namespace entries addressed by pathnames.
+///
+/// Parent portions follow bounded symbolic-link traversal while final components remain unfollowed.
+/// Publication is delegated to [`rename_exchange_directories_journaled`], which preserves inode and
+/// allocator images and rejects any candidate namespace that would introduce a directory cycle.
+///
+/// # Errors
+/// Returns `InvalidInput` when either pathname is not absolute, names the root, has an empty final
+/// component, either final target is not a directory, or the exchange would create a directory
+/// cycle. Parent-resolution errors and all [`rename_exchange_directories_journaled`] durable I/O
+/// errors are propagated.
+pub fn rename_exchange_directories_at_path_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    first: &str,
+    second: &str,
+) -> io::Result<RecoveryReport> {
+    let (first_parent, first_name, second_parent, second_name) =
+        resolve_exchange_parents(device, superblock, first, second)?;
+
+    rename_exchange_directories_journaled(
         device,
         superblock,
         first_parent,
