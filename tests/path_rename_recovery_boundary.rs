@@ -142,8 +142,7 @@ fn pathname_rename_recovers_committed_create_before_resolving_and_recomputing() 
             has_commit(&rename_journal),
             "successful rename keeps its committed WAL until checkpoint"
         );
-        let checkpoint_recovery =
-            recover_journal_and_checkpoint(&mut device, superblock).unwrap();
+        let checkpoint_recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         assert_eq!(checkpoint_recovery.committed_transactions, 1);
         assert!(checkpoint_recovery.home_writes > 0);
         assert!(load_journal_image(&mut device, superblock)
