@@ -1,0 +1,25 @@
+name: Format diagnostic
+
+on:
+  push:
+    branches:
+      - conquest/path-clone-append-recovery-boundary
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rustfmt-output
+          path: |
+            src/path_clone_append.rs
+            tests/path_clone_append_recovery_boundary.rs
