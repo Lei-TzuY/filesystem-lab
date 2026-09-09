@@ -13,6 +13,7 @@ use filesystem_lab::fsck::check_device;
 use filesystem_lab::inode::InodeKind;
 use filesystem_lab::inode_codec::PersistedInode;
 use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
+use filesystem_lab::journal::JournalEntry;
 use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::journal_region::load_journal_image;
 use filesystem_lab::path_append::append_file_blocks_at_path_journaled;
@@ -40,7 +41,7 @@ fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
     }
 }
 
-fn setup() -> (CrashDevice, Superblock) {
+fn setup_without_file_alias() -> (CrashDevice, Superblock) {
     let mut device = CrashDevice::new(128);
     let superblock = format_device_with_journal_blocks(&mut device, JOURNAL_BLOCKS).unwrap();
     store_inode_table(
@@ -60,10 +61,24 @@ fn setup() -> (CrashDevice, Superblock) {
     )
     .unwrap();
     create_symlink_journaled(&mut device, &superblock, 1, "dir_alias", "/dir").unwrap();
-    create_symlink_journaled(&mut device, &superblock, 1, "file_alias", "/dir/file").unwrap();
+    recover_journal_and_checkpoint(&mut device, superblock).unwrap();
     create_symlink_journaled(&mut device, &superblock, 1, "dangling", "/missing").unwrap();
+    recover_journal_and_checkpoint(&mut device, superblock).unwrap();
     check_device(&mut device).unwrap();
     (device, superblock)
+}
+
+fn setup() -> (CrashDevice, Superblock) {
+    let (mut device, superblock) = setup_without_file_alias();
+    create_symlink_journaled(&mut device, &superblock, 1, "file_alias", "/dir/file").unwrap();
+    check_device(&mut device).unwrap();
+    (device, superblock)
+}
+
+fn has_commit(entries: &[JournalEntry]) -> bool {
+    entries
+        .iter()
+        .any(|entry| matches!(entry, JournalEntry::Commit { .. }))
 }
 
 fn append_through_final_symlink(
@@ -179,6 +194,64 @@ fn propagates_path_and_append_validation_before_publication() {
     assert!(load_journal_image(&mut device, superblock)
         .unwrap()
         .is_empty());
+}
+
+#[test]
+fn append_recovers_committed_final_symlink_before_resolving_it() {
+    let (mut probe, superblock) = setup_without_file_alias();
+    probe.arm(None);
+    create_symlink_journaled(&mut probe, &superblock, 1, "file_alias", "/dir/file").unwrap();
+    let operations = probe.operations();
+    let mut committed_crash_states = 0;
+
+    for crash_at in 0..operations {
+        let (mut device, superblock) = setup_without_file_alias();
+        let allocated_before = load_allocator(&mut device, &superblock)
+            .unwrap()
+            .allocated_blocks();
+        let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
+
+        device.arm(Some(crash_at));
+        if create_symlink_journaled(&mut device, &superblock, 1, "file_alias", "/dir/file").is_ok() {
+            continue;
+        }
+        device.reboot();
+        let durable_journal = load_journal_image(&mut device, superblock).unwrap();
+        if !has_commit(&durable_journal) {
+            continue;
+        }
+        committed_crash_states += 1;
+
+        append_through_final_symlink(&mut device, &superblock).unwrap();
+
+        let allocator_after = load_allocator(&mut device, &superblock).unwrap();
+        assert_eq!(allocator_after.allocated_blocks(), allocated_before + 3);
+        let inodes_after = load_inode_table(&mut device, &superblock).unwrap();
+        assert_eq!(inodes_after.len(), inodes_before.len() + 1);
+        let file = inodes_after.iter().find(|inode| inode.id == 3).unwrap();
+        assert_eq!(file.blocks.len(), 2);
+        assert_eq!(
+            read_file_range_at_path(&mut device, &superblock, "/file_alias", 0, 0, 1).unwrap(),
+            vec![0xa1]
+        );
+        assert_eq!(
+            read_file_range_at_path(&mut device, &superblock, "/file_alias", 1, 0, 1).unwrap(),
+            vec![0xb2]
+        );
+        assert_unique_file_ownership(&mut device, &superblock);
+        check_device(&mut device).unwrap();
+
+        recover_journal_and_checkpoint(&mut device, superblock).unwrap();
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
+            RecoveryReport::default()
+        );
+    }
+
+    assert!(committed_crash_states > 0);
 }
 
 #[test]
