@@ -13,6 +13,7 @@ use filesystem_lab::inode::InodeKind;
 use filesystem_lab::inode_codec::PersistedInode;
 use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
 use filesystem_lab::journal::{JournalEntry, JournalLog};
+use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::journal_region::{load_journal_image, store_journal_image};
 use filesystem_lab::path_create::create_one_block_file_at_path_journaled;
 use filesystem_lab::path_lookup::resolve_path_following_symlinks;
@@ -135,9 +136,20 @@ fn pathname_rename_recovers_committed_create_before_resolving_and_recomputing() 
             allocated_before + 1
         );
         check_device(&mut device).unwrap();
+
+        let rename_journal = load_journal_image(&mut device, superblock).unwrap();
+        assert!(
+            has_commit(&rename_journal),
+            "successful rename keeps its committed WAL until checkpoint"
+        );
+        let checkpoint_recovery =
+            recover_journal_and_checkpoint(&mut device, superblock).unwrap();
+        assert_eq!(checkpoint_recovery.committed_transactions, 1);
+        assert!(checkpoint_recovery.home_writes > 0);
         assert!(load_journal_image(&mut device, superblock)
             .unwrap()
             .is_empty());
+        check_device(&mut device).unwrap();
 
         let second_recovery = recover_journal(&mut device, superblock).unwrap();
         assert_eq!(second_recovery.committed_transactions, 0);
