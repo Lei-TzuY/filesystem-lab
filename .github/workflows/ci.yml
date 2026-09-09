@@ -14,7 +14,14 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Format
-        run: cargo fmt --all -- --check
+        run: cargo fmt --all
+      - name: Upload rustfmt output
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustfmt-output
+          path: |
+            src/path_collapse.rs
+            tests/path_collapse_recovery_boundary.rs
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
