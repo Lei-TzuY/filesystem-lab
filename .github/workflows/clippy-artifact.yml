@@ -1,0 +1,28 @@
+name: Clippy artifact
+
+on:
+  pull_request:
+
+jobs:
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Capture clippy
+        shell: bash
+        run: |
+          set +e
+          cargo clippy --all-targets --all-features -- -D warnings > clippy.log 2>&1
+          status=$?
+          cat clippy.log
+          echo "$status" > clippy.status
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clippy-output
+          path: |
+            clippy.log
+            clippy.status
