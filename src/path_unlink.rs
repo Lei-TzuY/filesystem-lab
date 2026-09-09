@@ -7,6 +7,7 @@ use crate::directory_table::load_directory_table;
 use crate::format::Superblock;
 use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
+use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 use crate::unlink_tx::store_unlink_metadata_journaled;
@@ -89,19 +90,23 @@ pub fn unlink_file_journaled(
 ///
 /// Intermediate components, including the parent itself, use the repository-wide bounded symlink
 /// expansion rules. The final component is intentionally not resolved: a final symlink is rejected
-/// as a non-file inode instead of deleting its target. Publication is delegated to
-/// [`unlink_file_journaled`], preserving one allocation/inode/directory WAL transaction.
+/// as a non-file inode instead of deleting its target. After pathname-shape validation and before
+/// resolving the parent, any older durable journal is recovered and checkpointed so the unlink is
+/// recomputed from recovered home state rather than a partial post-crash home-write prefix.
+/// Publication is delegated to [`unlink_file_journaled`], preserving one
+/// allocation/inode/directory WAL transaction.
 ///
 /// # Errors
 /// Returns `InvalidInput` when the pathname is not absolute, names the root, has an empty final
-/// component, or names an unsupported target. Parent-resolution errors and all
-/// [`unlink_file_journaled`] durable I/O errors are propagated.
+/// component, or names an unsupported target. Parent-resolution errors and all recovery,
+/// checkpoint, [`unlink_file_journaled`] durable I/O errors are propagated.
 pub fn unlink_file_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
     path: &str,
 ) -> io::Result<RecoveryReport> {
     let (parent_path, name) = split_path(path)?;
+    recover_journal_and_checkpoint(device, *superblock)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
     unlink_file_journaled(device, superblock, parent, name)
 }
