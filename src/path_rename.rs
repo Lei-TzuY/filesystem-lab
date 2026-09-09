@@ -4,7 +4,9 @@ use crate::block::BlockDevice;
 use crate::format::Superblock;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
-use crate::rename_exchange_tx::rename_exchange_files_journaled;
+use crate::rename_exchange_tx::{
+    rename_exchange_files_journaled, rename_exchange_symlinks_journaled,
+};
 use crate::rename_tx::rename_entry_journaled;
 
 /// Atomically renames one durable namespace entry addressed by absolute pathnames.
@@ -54,11 +56,8 @@ pub fn rename_exchange_files_at_path_journaled(
     first: &str,
     second: &str,
 ) -> io::Result<RecoveryReport> {
-    let (first_parent_path, first_name) = split_path(first, "first exchange path")?;
-    let (second_parent_path, second_name) = split_path(second, "second exchange path")?;
-
-    let first_parent = resolve_path_following_symlinks(device, superblock, first_parent_path)?;
-    let second_parent = resolve_path_following_symlinks(device, superblock, second_parent_path)?;
+    let (first_parent, first_name, second_parent, second_name) =
+        resolve_exchange_parents(device, superblock, first, second)?;
 
     rename_exchange_files_journaled(
         device,
@@ -68,6 +67,50 @@ pub fn rename_exchange_files_at_path_journaled(
         second_parent,
         second_name,
     )
+}
+
+/// Atomically exchanges two existing symbolic-link namespace entries addressed by pathnames.
+///
+/// Parent portions follow bounded symbolic-link traversal while final components remain unfollowed,
+/// so the symbolic-link inodes themselves are exchanged even when either persisted target is
+/// dangling. Publication is delegated to [`rename_exchange_symlinks_journaled`], which advances
+/// only the directory table and preserves both link inodes, payload blocks, and allocator ownership.
+///
+/// # Errors
+/// Returns `InvalidInput` when either pathname is not absolute, names the root, has an empty final
+/// component, or either final namespace target is not a symbolic link. Parent-resolution errors and
+/// all [`rename_exchange_symlinks_journaled`] validation/durable I/O errors are propagated.
+pub fn rename_exchange_symlinks_at_path_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    first: &str,
+    second: &str,
+) -> io::Result<RecoveryReport> {
+    let (first_parent, first_name, second_parent, second_name) =
+        resolve_exchange_parents(device, superblock, first, second)?;
+
+    rename_exchange_symlinks_journaled(
+        device,
+        superblock,
+        first_parent,
+        first_name,
+        second_parent,
+        second_name,
+    )
+}
+
+fn resolve_exchange_parents<'a>(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    first: &'a str,
+    second: &'a str,
+) -> io::Result<(u64, &'a str, u64, &'a str)> {
+    let (first_parent_path, first_name) = split_path(first, "first exchange path")?;
+    let (second_parent_path, second_name) = split_path(second, "second exchange path")?;
+
+    let first_parent = resolve_path_following_symlinks(device, superblock, first_parent_path)?;
+    let second_parent = resolve_path_following_symlinks(device, superblock, second_parent_path)?;
+    Ok((first_parent, first_name, second_parent, second_name))
 }
 
 fn split_path<'a>(path: &'a str, label: &str) -> io::Result<(&'a str, &'a str)> {
