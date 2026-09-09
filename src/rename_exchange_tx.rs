@@ -11,6 +11,21 @@ use crate::inode_table::load_inode_table;
 use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::recovery::RecoveryReport;
 
+#[derive(Clone, Copy)]
+struct ExchangeTargetPolicy {
+    kind: InodeKind,
+    label: &'static str,
+}
+
+const FILE_POLICY: ExchangeTargetPolicy = ExchangeTargetPolicy {
+    kind: InodeKind::File,
+    label: "regular file",
+};
+const SYMLINK_POLICY: ExchangeTargetPolicy = ExchangeTargetPolicy {
+    kind: InodeKind::Symlink,
+    label: "symbolic link",
+};
+
 /// Atomically exchanges two existing regular-file namespace entries.
 ///
 /// The two directory keys stay in place while their target inode identifiers are swapped in one
@@ -35,6 +50,57 @@ pub fn rename_exchange_files_journaled(
     second_parent: u64,
     second_name: &str,
 ) -> io::Result<RecoveryReport> {
+    rename_exchange_by_kind_journaled(
+        device,
+        superblock,
+        first_parent,
+        first_name,
+        second_parent,
+        second_name,
+        FILE_POLICY,
+    )
+}
+
+/// Atomically exchanges two existing symbolic-link namespace entries.
+///
+/// Final link inodes are exchanged exactly as named. Their persisted target payload blocks and
+/// allocator ownership remain unchanged because only the directory table is published through the
+/// WAL. Exchanging aliases of the same symlink inode, or a path with itself, is a durable no-op.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` when either parent is missing or is not a directory, either namespace
+/// entry is missing, either target is missing or is not a symbolic link, or either persisted entry
+/// cannot be encoded. Existing corruption is rejected by fsck before WAL publication. Journal,
+/// recovery, checkpoint, and block-device failures are propagated.
+pub fn rename_exchange_symlinks_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    first_parent: u64,
+    first_name: &str,
+    second_parent: u64,
+    second_name: &str,
+) -> io::Result<RecoveryReport> {
+    rename_exchange_by_kind_journaled(
+        device,
+        superblock,
+        first_parent,
+        first_name,
+        second_parent,
+        second_name,
+        SYMLINK_POLICY,
+    )
+}
+
+fn rename_exchange_by_kind_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    first_parent: u64,
+    first_name: &str,
+    second_parent: u64,
+    second_name: &str,
+    policy: ExchangeTargetPolicy,
+) -> io::Result<RecoveryReport> {
     check_device(device)?;
 
     let inodes = load_inode_table(device, superblock)?;
@@ -57,8 +123,8 @@ pub fn rename_exchange_files_journaled(
 
     let first_target = entries[first_index].target;
     let second_target = entries[second_index].target;
-    validate_regular_file_target(&inodes, first_target, "first exchange target")?;
-    validate_regular_file_target(&inodes, second_target, "second exchange target")?;
+    validate_target_kind(&inodes, first_target, policy, "first exchange target")?;
+    validate_target_kind(&inodes, second_target, policy, "second exchange target")?;
 
     if first_target == second_target {
         return Ok(RecoveryReport::default());
@@ -99,18 +165,20 @@ fn validate_directory_parent(
     Ok(())
 }
 
-fn validate_regular_file_target(
+fn validate_target_kind(
     inodes: &[crate::inode_codec::PersistedInode],
     target: u64,
+    policy: ExchangeTargetPolicy,
     label: &str,
 ) -> io::Result<()> {
     let inode = inodes
         .iter()
         .find(|inode| inode.id == target)
         .ok_or_else(|| invalid_input(format!("{label} inode does not exist")))?;
-    if inode.kind != InodeKind::File {
+    if inode.kind != policy.kind {
         return Err(invalid_input(format!(
-            "{label} inode is not a regular file"
+            "{label} inode is not a {}",
+            policy.label
         )));
     }
     Ok(())
