@@ -1,3 +1,4 @@
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 
 use crate::block::BlockDevice;
@@ -15,15 +16,23 @@ use crate::recovery::RecoveryReport;
 struct ExchangeTargetPolicy {
     kind: InodeKind,
     label: &'static str,
+    reject_directory_cycles: bool,
 }
 
 const FILE_POLICY: ExchangeTargetPolicy = ExchangeTargetPolicy {
     kind: InodeKind::File,
     label: "regular file",
+    reject_directory_cycles: false,
 };
 const SYMLINK_POLICY: ExchangeTargetPolicy = ExchangeTargetPolicy {
     kind: InodeKind::Symlink,
     label: "symbolic link",
+    reject_directory_cycles: false,
+};
+const DIRECTORY_POLICY: ExchangeTargetPolicy = ExchangeTargetPolicy {
+    kind: InodeKind::Directory,
+    label: "directory",
+    reject_directory_cycles: true,
 };
 
 /// Atomically exchanges two existing regular-file namespace entries.
@@ -92,6 +101,38 @@ pub fn rename_exchange_symlinks_journaled(
     )
 }
 
+/// Atomically exchanges two existing directory namespace entries.
+///
+/// Only the directory-table targets are swapped; inode and allocator images remain unchanged. The
+/// complete candidate namespace is checked for directory cycles before WAL publication, so an
+/// exchange that would place an ancestor below its descendant is rejected without durable writes.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` when either parent is missing or is not a directory, either namespace
+/// entry is missing, either target is missing or is not a directory, either persisted entry cannot
+/// be encoded, or the exchanged namespace would contain a directory cycle. Existing corruption is
+/// rejected by fsck before WAL publication. Journal, recovery, checkpoint, and block-device
+/// failures are propagated.
+pub fn rename_exchange_directories_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    first_parent: u64,
+    first_name: &str,
+    second_parent: u64,
+    second_name: &str,
+) -> io::Result<RecoveryReport> {
+    rename_exchange_by_kind_journaled(
+        device,
+        superblock,
+        first_parent,
+        first_name,
+        second_parent,
+        second_name,
+        DIRECTORY_POLICY,
+    )
+}
+
 fn rename_exchange_by_kind_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -145,6 +186,10 @@ fn rename_exchange_by_kind_journaled(
 
     entries[first_index] = first_replacement;
     entries[second_index] = second_replacement;
+    if policy.reject_directory_cycles {
+        validate_directory_acyclic(&entries, &inodes)?;
+    }
+
     let report = store_directory_table_journaled(device, superblock, &entries)?;
     recover_journal_and_checkpoint(device, *superblock)?;
     Ok(report)
@@ -180,6 +225,35 @@ fn validate_target_kind(
             "{label} inode is not a {}",
             policy.label
         )));
+    }
+    Ok(())
+}
+
+fn validate_directory_acyclic(
+    entries: &[PersistedDirectoryEntry],
+    inodes: &[crate::inode_codec::PersistedInode],
+) -> io::Result<()> {
+    let directories: BTreeSet<u64> = inodes
+        .iter()
+        .filter(|inode| inode.kind == InodeKind::Directory)
+        .map(|inode| inode.id)
+        .collect();
+    let mut parent_of = BTreeMap::new();
+    for entry in entries {
+        if directories.contains(&entry.target) {
+            parent_of.insert(entry.target, entry.parent);
+        }
+    }
+
+    for directory in directories {
+        let mut seen = BTreeSet::new();
+        let mut current = directory;
+        while let Some(parent) = parent_of.get(&current).copied() {
+            if !seen.insert(current) {
+                return Err(invalid_input("directory exchange would create a cycle"));
+            }
+            current = parent;
+        }
     }
     Ok(())
 }
