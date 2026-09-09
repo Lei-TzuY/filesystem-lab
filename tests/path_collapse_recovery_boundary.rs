@@ -25,11 +25,19 @@ use support::CrashDevice;
 const JOURNAL_BLOCKS: u64 = 10;
 
 fn inode(id: u64, kind: InodeKind) -> PersistedInode {
-    PersistedInode { id, kind, blocks: Vec::new() }
+    PersistedInode {
+        id,
+        kind,
+        blocks: Vec::new(),
+    }
 }
 
 fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
-    PersistedDirectoryEntry { parent, target, name: name.to_owned() }
+    PersistedDirectoryEntry {
+        parent,
+        target,
+        name: name.to_owned(),
+    }
 }
 
 fn setup_without_alias() -> (CrashDevice, Superblock) {
@@ -61,7 +69,9 @@ fn setup_without_alias() -> (CrashDevice, Superblock) {
 }
 
 fn has_commit(entries: &[JournalEntry]) -> bool {
-    entries.iter().any(|entry| matches!(entry, JournalEntry::Commit { .. }))
+    entries
+        .iter()
+        .any(|entry| matches!(entry, JournalEntry::Commit { .. }))
 }
 
 fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
@@ -71,7 +81,10 @@ fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
     let mut seen = HashSet::new();
     for inode in &inodes {
         for block in &inode.blocks {
-            assert!(seen.insert(*block), "duplicate physical block reference {block}");
+            assert!(
+                seen.insert(*block),
+                "duplicate physical block reference {block}"
+            );
             assert!(allocator.is_owned(*block).unwrap());
         }
     }
@@ -113,8 +126,15 @@ fn collapse_recovers_committed_final_symlink_before_resolving_it() {
         .unwrap();
         assert_eq!(released.len(), 2);
 
-        let bytes = read_file_range_at_path(&mut device, &superblock, "/file", 0, 0, 3 * BLOCK_SIZE)
-            .unwrap();
+        let bytes = read_file_range_at_path(
+            &mut device,
+            &superblock,
+            "/file",
+            0,
+            0,
+            3 * BLOCK_SIZE,
+        )
+        .unwrap();
         assert_eq!(&bytes[..BLOCK_SIZE], &[0x11; BLOCK_SIZE]);
         assert_eq!(&bytes[BLOCK_SIZE..2 * BLOCK_SIZE], &[0x44; BLOCK_SIZE]);
         assert_eq!(&bytes[2 * BLOCK_SIZE..], &[0x55; BLOCK_SIZE]);
@@ -130,7 +150,9 @@ fn collapse_recovers_committed_final_symlink_before_resolving_it() {
         check_device(&mut device).unwrap();
 
         recover_journal_and_checkpoint(&mut device, superblock).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
