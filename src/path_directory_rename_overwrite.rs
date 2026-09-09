@@ -58,12 +58,16 @@ pub fn rename_overwrite_directory_journaled(
     let source_target = entries[source_index].target;
     let destination_target = entries[destination_index].target;
     if source_target == destination_target {
-        return Err(invalid_input("directory rename-overwrite endpoints alias the same inode"));
+        return Err(invalid_input(
+            "directory rename-overwrite endpoints alias the same inode",
+        ));
     }
     validate_directory(&inodes, source_target, "source")?;
     validate_directory(&inodes, destination_target, "destination")?;
     if source_target == 1 || destination_target == 1 {
-        return Err(invalid_input("directory rename-overwrite cannot replace the root inode"));
+        return Err(invalid_input(
+            "directory rename-overwrite cannot replace the root inode",
+        ));
     }
     if entries
         .iter()
@@ -75,7 +79,10 @@ pub fn rename_overwrite_directory_journaled(
             "directory rename-overwrite destination must be singly referenced",
         ));
     }
-    if entries.iter().any(|entry| entry.parent == destination_target) {
+    if entries
+        .iter()
+        .any(|entry| entry.parent == destination_target)
+    {
         return Err(invalid_input(
             "directory rename-overwrite destination must be empty",
         ));
@@ -179,14 +186,11 @@ fn find_entry(
 }
 
 fn validate_directory(inodes: &[PersistedInode], id: u64, label: &str) -> io::Result<()> {
-    let inode = inodes
-        .iter()
-        .find(|inode| inode.id == id)
-        .ok_or_else(|| {
-            invalid_input(format!(
-                "directory rename-overwrite {label} inode does not exist"
-            ))
-        })?;
+    let inode = inodes.iter().find(|inode| inode.id == id).ok_or_else(|| {
+        invalid_input(format!(
+            "directory rename-overwrite {label} inode does not exist"
+        ))
+    })?;
     if inode.kind != InodeKind::Directory {
         return Err(invalid_input(format!(
             "directory rename-overwrite {label} must be a directory"
