@@ -67,8 +67,7 @@ fn pathname_unlink_recovers_committed_create_before_resolving_and_recomputing() 
     let data = [0x5a_u8; BLOCK_SIZE];
     let (mut probe, superblock) = setup();
     probe.arm(None);
-    create_one_block_file_at_path_journaled(&mut probe, &superblock, "/dir/victim", &data)
-        .unwrap();
+    create_one_block_file_at_path_journaled(&mut probe, &superblock, "/dir/victim", &data).unwrap();
     let operations = probe.operations();
     let mut committed_crash_states = 0;
 
@@ -79,12 +78,8 @@ fn pathname_unlink_recovers_committed_create_before_resolving_and_recomputing() 
             .allocated_blocks();
 
         device.arm(Some(crash_at));
-        let result = create_one_block_file_at_path_journaled(
-            &mut device,
-            &superblock,
-            "/dir/victim",
-            &data,
-        );
+        let result =
+            create_one_block_file_at_path_journaled(&mut device, &superblock, "/dir/victim", &data);
         if result.is_ok() {
             continue;
         }
