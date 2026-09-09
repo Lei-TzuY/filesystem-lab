@@ -212,7 +212,8 @@ fn append_recovers_committed_final_symlink_before_resolving_it() {
         let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
 
         device.arm(Some(crash_at));
-        if create_symlink_journaled(&mut device, &superblock, 1, "file_alias", "/dir/file").is_ok() {
+        if create_symlink_journaled(&mut device, &superblock, 1, "file_alias", "/dir/file").is_ok()
+        {
             continue;
         }
         device.reboot();
