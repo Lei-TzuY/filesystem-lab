@@ -59,13 +59,22 @@ fn exchanges_final_symlink_inodes_without_following_dangling_targets() {
 
     assert_eq!(target_for(&mut device, &superblock, "left"), right);
     assert_eq!(target_for(&mut device, &superblock, "right"), left);
-    assert_eq!(read_symlink(&mut device, &superblock, left).unwrap(), LEFT_TARGET);
+    assert_eq!(
+        read_symlink(&mut device, &superblock, left).unwrap(),
+        LEFT_TARGET
+    );
     assert_eq!(
         read_symlink(&mut device, &superblock, right).unwrap(),
         RIGHT_TARGET
     );
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
     check_device(&mut device).unwrap();
 }
 
@@ -73,8 +82,7 @@ fn exchanges_final_symlink_inodes_without_following_dangling_targets() {
 fn every_pathname_symlink_exchange_crash_point_recovers_old_or_complete_new_state() {
     let (mut probe, superblock, _, _) = setup();
     probe.arm(None);
-    rename_exchange_symlinks_at_path_journaled(&mut probe, &superblock, "/left", "/right")
-        .unwrap();
+    rename_exchange_symlinks_at_path_journaled(&mut probe, &superblock, "/left", "/right").unwrap();
     let operations = probe.operations();
 
     for crash_at in 0..operations {
@@ -93,8 +101,14 @@ fn every_pathname_symlink_exchange_crash_point_recovers_old_or_complete_new_stat
         device.reboot();
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
 
-        assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-        assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+        assert_eq!(
+            load_allocator(&mut device, &superblock).unwrap(),
+            allocator_before
+        );
+        assert_eq!(
+            load_inode_table(&mut device, &superblock).unwrap(),
+            inodes_before
+        );
         if recovery.committed_transactions == 0 {
             assert_eq!(target_for(&mut device, &superblock, "left"), left);
             assert_eq!(target_for(&mut device, &superblock, "right"), right);
@@ -103,7 +117,10 @@ fn every_pathname_symlink_exchange_crash_point_recovers_old_or_complete_new_stat
             assert_eq!(target_for(&mut device, &superblock, "left"), right);
             assert_eq!(target_for(&mut device, &superblock, "right"), left);
         }
-        assert_eq!(read_symlink(&mut device, &superblock, left).unwrap(), LEFT_TARGET);
+        assert_eq!(
+            read_symlink(&mut device, &superblock, left).unwrap(),
+            LEFT_TARGET
+        );
         assert_eq!(
             read_symlink(&mut device, &superblock, right).unwrap(),
             RIGHT_TARGET
