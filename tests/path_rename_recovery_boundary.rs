@@ -46,7 +46,11 @@ fn has_commit(entries: &[JournalEntry]) -> bool {
         .any(|entry| matches!(entry, JournalEntry::Commit { .. }))
 }
 
-fn assert_renamed_state(device: &mut CrashDevice, superblock: &Superblock, allocated_before: usize) {
+fn assert_renamed_state(
+    device: &mut CrashDevice,
+    superblock: &Superblock,
+    allocated_before: usize,
+) {
     assert_eq!(
         resolve_path_following_symlinks(device, superblock, "/source")
             .unwrap_err()
@@ -72,12 +76,17 @@ fn assert_renamed_state(device: &mut CrashDevice, superblock: &Superblock, alloc
     let mut owned = HashSet::new();
     for inode in &inodes {
         for &block in &inode.blocks {
-            assert!(owned.insert(block), "physical block {block} is double-owned");
+            assert!(
+                owned.insert(block),
+                "physical block {block} is double-owned"
+            );
         }
     }
     assert_eq!(owned.len(), 1);
     assert_eq!(
-        load_allocator(device, superblock).unwrap().allocated_blocks(),
+        load_allocator(device, superblock)
+            .unwrap()
+            .allocated_blocks(),
         allocated_before + 1
     );
     check_device(device).unwrap();
