@@ -11,6 +11,21 @@ use crate::inode_table::load_inode_table;
 use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::recovery::RecoveryReport;
 
+#[derive(Clone, Copy)]
+struct ExchangeTargetPolicy {
+    kind: InodeKind,
+    label: &'static str,
+}
+
+const FILE_POLICY: ExchangeTargetPolicy = ExchangeTargetPolicy {
+    kind: InodeKind::File,
+    label: "regular file",
+};
+const SYMLINK_POLICY: ExchangeTargetPolicy = ExchangeTargetPolicy {
+    kind: InodeKind::Symlink,
+    label: "symbolic link",
+};
+
 /// Atomically exchanges two existing regular-file namespace entries.
 ///
 /// The two directory keys stay in place while their target inode identifiers are swapped in one
@@ -42,8 +57,7 @@ pub fn rename_exchange_files_journaled(
         first_name,
         second_parent,
         second_name,
-        InodeKind::File,
-        "regular file",
+        FILE_POLICY,
     )
 }
 
@@ -74,8 +88,7 @@ pub fn rename_exchange_symlinks_journaled(
         first_name,
         second_parent,
         second_name,
-        InodeKind::Symlink,
-        "symbolic link",
+        SYMLINK_POLICY,
     )
 }
 
@@ -86,8 +99,7 @@ fn rename_exchange_by_kind_journaled(
     first_name: &str,
     second_parent: u64,
     second_name: &str,
-    expected_kind: InodeKind,
-    kind_label: &str,
+    policy: ExchangeTargetPolicy,
 ) -> io::Result<RecoveryReport> {
     check_device(device)?;
 
@@ -111,20 +123,8 @@ fn rename_exchange_by_kind_journaled(
 
     let first_target = entries[first_index].target;
     let second_target = entries[second_index].target;
-    validate_target_kind(
-        &inodes,
-        first_target,
-        expected_kind,
-        kind_label,
-        "first exchange target",
-    )?;
-    validate_target_kind(
-        &inodes,
-        second_target,
-        expected_kind,
-        kind_label,
-        "second exchange target",
-    )?;
+    validate_target_kind(&inodes, first_target, policy, "first exchange target")?;
+    validate_target_kind(&inodes, second_target, policy, "second exchange target")?;
 
     if first_target == second_target {
         return Ok(RecoveryReport::default());
@@ -168,17 +168,17 @@ fn validate_directory_parent(
 fn validate_target_kind(
     inodes: &[crate::inode_codec::PersistedInode],
     target: u64,
-    expected_kind: InodeKind,
-    kind_label: &str,
+    policy: ExchangeTargetPolicy,
     label: &str,
 ) -> io::Result<()> {
     let inode = inodes
         .iter()
         .find(|inode| inode.id == target)
         .ok_or_else(|| invalid_input(format!("{label} inode does not exist")))?;
-    if inode.kind != expected_kind {
+    if inode.kind != policy.kind {
         return Err(invalid_input(format!(
-            "{label} inode is not a {kind_label}"
+            "{label} inode is not a {}",
+            policy.label
         )));
     }
     Ok(())
