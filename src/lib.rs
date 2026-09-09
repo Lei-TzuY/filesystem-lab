@@ -52,6 +52,7 @@ pub mod path_collapse;
 pub mod path_copy_range;
 pub mod path_create;
 pub mod path_directory;
+pub mod path_directory_rename_overwrite;
 pub mod path_exchange;
 pub mod path_hard_link;
 pub mod path_insert;
