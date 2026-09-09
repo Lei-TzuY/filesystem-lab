@@ -97,7 +97,12 @@ fn exchanges_directories_across_parents_without_changing_ownership() {
 fn rejects_exchange_that_would_create_directory_cycle_before_wal() {
     let mut device = CrashDevice::new(96);
     let superblock = format_device_with_journal_blocks(&mut device, JOURNAL_BLOCKS).unwrap();
-    store_inode_table(&mut device, &superblock, &[inode(1), inode(2), inode(3)]).unwrap();
+    store_inode_table(
+        &mut device,
+        &superblock,
+        &[inode(1), inode(2), inode(3)],
+    )
+    .unwrap();
     let original = vec![entry(1, 2, "a"), entry(2, 3, "child")];
     store_directory_table(&mut device, &superblock, &original).unwrap();
     check_device(&mut device).unwrap();
@@ -113,13 +118,13 @@ fn rejects_exchange_that_would_create_directory_cycle_before_wal() {
         .kind(),
         io::ErrorKind::InvalidInput
     );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
     assert_eq!(
         load_directory_table(&mut device, &superblock).unwrap(),
         original
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
     check_device(&mut device).unwrap();
 }
 
