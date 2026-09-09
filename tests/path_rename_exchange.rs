@@ -124,7 +124,9 @@ fn exchange_recovers_committed_parent_symlink_before_resolving_it() {
 
     for crash_at in 0..operations {
         let (mut device, superblock) = setup_without_right_alias();
-        let allocator_before = load_allocator(&mut device, &superblock).unwrap();
+        let allocated_before = load_allocator(&mut device, &superblock)
+            .unwrap()
+            .allocated_blocks();
         let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
 
         device.arm(Some(crash_at));
@@ -155,8 +157,10 @@ fn exchange_recovers_committed_parent_symlink_before_resolving_it() {
             4
         );
         assert_eq!(
-            load_allocator(&mut device, &superblock).unwrap(),
-            allocator_before + 1
+            load_allocator(&mut device, &superblock)
+                .unwrap()
+                .allocated_blocks(),
+            allocated_before + 1
         );
         let inodes_after = load_inode_table(&mut device, &superblock).unwrap();
         assert_eq!(inodes_after.len(), inodes_before.len() + 1);
