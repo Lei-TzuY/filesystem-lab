@@ -8,6 +8,8 @@ This ordering matters because recovering only at the moment of journal replaceme
 
 The pathname create surface provides that retry boundary for new files and directories. `create_empty_file_at_path_journaled()`, `create_one_block_file_at_path_journaled()`, and `create_directory_at_path_journaled()` first validate the destination pathname shape, then recover and checkpoint any older journal before resolving the parent or loading allocator, inode, and directory state. The new mutation is therefore computed only after the prior committed state has been replayed to durable home locations.
 
+The pathname regular-file unlink surface applies the same rule. `unlink_file_at_path_journaled()` validates the path shape, recovers and checkpoints any older durable WAL, and only then resolves the parent and loads allocator, inode, and directory state. A file created by an older committed transaction can therefore be safely unlinked after reboot even when the create crashed during home replay; unlink never derives its lifecycle mutation from the partial home-write prefix.
+
 The rule does not change the v5 on-disk encoding. Empty-image writes remain available for explicit journal initialization/checkpoint behavior, and malformed existing journal images are rejected by normal journal decoding before a replacement can proceed.
 
 ## Durability invariant
@@ -24,3 +26,5 @@ A later transaction must never destroy the only durable copy of an earlier commi
 `tests/journal_replacement_safety.rs` enumerates every modeled write/flush crash point of a one-block pathname create. For each reboot state whose journal contains a durable commit, the test first proves that direct WAL replacement returns `WouldBlock` and leaves the old journal byte-for-byte intact. It then invokes a second pathname create without an external recovery step.
 
 The second create must recover and checkpoint the first transaction before recomputing allocator, inode, and namespace state. After it commits, both files must be reachable with distinct inode identities and unique physical-block ownership, allocator accounting must remain valid, fsck must pass, the journal must be empty, and a second recovery must perform no work.
+
+`tests/path_file_unlink_recovery_boundary.rs` performs the complementary lifecycle check. It enumerates the same create crash matrix, selects every reboot state with a durable commit, proves the old journal cannot be replaced directly, then invokes pathname unlink without an external recovery call. The unlink must first recover the created file, recompute from that recovered namespace and ownership state, remove the file completely, return allocator accounting to the pre-create baseline, leave fsck clean and the journal empty, and make a subsequent recovery a no-op.
