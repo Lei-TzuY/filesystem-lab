@@ -14,6 +14,12 @@ use crate::inode_table::load_inode_table;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 
+/// Resolves both parent paths and atomically moves a directory over an existing empty directory.
+///
+/// # Errors
+///
+/// Returns an error for malformed paths, lookup failures, invalid directory endpoint state,
+/// cycle-producing replacements, inconsistent metadata, or journal/device failures.
 pub fn rename_overwrite_directory_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -35,6 +41,12 @@ pub fn rename_overwrite_directory_at_path_journaled(
 /// The destination must be singly referenced and empty. Its inode and any owned blocks are released
 /// in the same allocation+inode+directory WAL transaction that publishes the source under the
 /// destination name. The complete candidate namespace is cycle-checked before publication.
+///
+/// # Errors
+///
+/// Returns an error when either endpoint or parent is invalid, the destination is non-empty or
+/// multiply referenced, the replacement would create a directory cycle, allocator/inode metadata
+/// is inconsistent, or the journal/device operation fails.
 pub fn rename_overwrite_directory_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -91,7 +103,7 @@ pub fn rename_overwrite_directory_journaled(
     let destination_blocks = inodes
         .iter()
         .find(|inode| inode.id == destination_target)
-        .expect("validated destination inode")
+        .ok_or_else(|| invalid_input("validated destination inode disappeared"))?
         .blocks
         .clone();
     let unique_blocks: BTreeSet<u64> = destination_blocks.iter().copied().collect();
