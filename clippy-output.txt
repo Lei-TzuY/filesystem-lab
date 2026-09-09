@@ -1,0 +1,38 @@
+[1m[92m    Checking[0m filesystem-lab v0.1.0 (/home/runner/work/filesystem-lab/filesystem-lab)
+[1m[91merror[E0308][0m[1m: mismatched types[0m
+  [1m[94m--> [0mtests/path_rename_recovery_boundary.rs:90:9
+   [1m[94m|[0m
+[1m[94m90[0m [1m[94m|[0m         allocated_before + 1
+   [1m[94m|[0m         [1m[91m^^^^^^^^^^^^^^^^^^^^[0m [1m[91mexpected `u64`, found `usize`[0m
+   [1m[94m|[0m
+[1m[96mhelp[0m: you can convert a `usize` to a `u64` and panic if the converted value doesn't fit
+   [1m[94m|[0m
+[1m[94m90[0m [1m[94m| [0m        [92m([0mallocated_before + 1[92m).try_into().unwrap()[0m
+   [1m[94m|[0m         [92m+[0m                    [92m+++++++++++++++++++++[0m
+
+[1m[91merror[E0308][0m[1m: mismatched types[0m
+   [1m[94m--> [0mtests/path_rename_recovery_boundary.rs:145:56
+    [1m[94m|[0m
+[1m[94m145[0m [1m[94m|[0m         assert_renamed_state(&mut device, &superblock, allocated_before);
+    [1m[94m|[0m         [1m[94m--------------------[0m                           [1m[91m^^^^^^^^^^^^^^^^[0m [1m[91mexpected `usize`, found `u64`[0m
+    [1m[94m|[0m         [1m[94m|[0m
+    [1m[94m|[0m         [1m[94marguments to this function are incorrect[0m
+    [1m[94m|[0m
+[1m[92mnote[0m: function defined here
+   [1m[94m--> [0mtests/path_rename_recovery_boundary.rs:49:4
+    [1m[94m|[0m
+[1m[94m 49[0m [1m[94m|[0m fn assert_renamed_state(
+    [1m[94m|[0m    [1m[92m^^^^^^^^^^^^^^^^^^^^[0m
+[1m[94m...[0m
+[1m[94m 52[0m [1m[94m|[0m     allocated_before: usize,
+    [1m[94m|[0m     [1m[94m-----------------------[0m
+[1m[96mhelp[0m: you can convert a `u64` to a `usize` and panic if the converted value doesn't fit
+    [1m[94m|[0m
+[1m[94m145[0m [1m[94m| [0m        assert_renamed_state(&mut device, &superblock, allocated_before[92m.try_into().unwrap()[0m);
+    [1m[94m|[0m                                                                        [92m++++++++++++++++++++[0m
+
+[1mFor more information about this error, try `rustc --explain E0308`.[0m
+[1m[91merror[0m: could not compile `filesystem-lab` (test "path_rename_recovery_boundary") due to 2 previous errors
+[1m[33mwarning[0m: build failed, waiting for other jobs to finish...
+
+exit_status=101
