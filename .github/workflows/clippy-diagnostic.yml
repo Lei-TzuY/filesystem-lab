@@ -1,0 +1,25 @@
+name: Clippy diagnostic
+
+on:
+  push:
+    branches: [conquest/path-exchange-recovery-boundary]
+
+jobs:
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Run clippy
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy --all-targets --all-features -- -D warnings 2>&1 | tee clippy.log
+      - name: Upload clippy log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clippy-log
+          path: clippy.log
