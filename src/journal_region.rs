@@ -368,11 +368,7 @@ mod tests {
         let mut second_log = JournalLog::new();
         let txid = second_log.begin().unwrap();
         second_log
-            .write(
-                txid,
-                superblock.reserved_blocks() + 1,
-                [0xa5; BLOCK_SIZE],
-            )
+            .write(txid, superblock.reserved_blocks() + 1, [0xa5; BLOCK_SIZE])
             .unwrap();
         second_log.commit(txid).unwrap();
         let mut device = MemoryDevice::new(16);
@@ -389,10 +385,7 @@ mod tests {
         );
         assert_eq!(device.writes, writes_before);
         assert_eq!(device.flushes, flushes_before);
-        assert_eq!(
-            load_journal_image(&mut device, superblock).unwrap(),
-            first
-        );
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), first);
     }
 
     #[test]
