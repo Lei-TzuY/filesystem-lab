@@ -3,6 +3,7 @@ use std::io;
 use crate::block::BlockDevice;
 use crate::file_copy_range::{copy_file_range_journaled, FileRangeEndpoint};
 use crate::format::Superblock;
+use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 
@@ -15,7 +16,9 @@ pub struct PathFileRangeEndpoint<'a> {
 
 /// Atomically copies a byte range between existing regular-file blocks addressed by absolute paths.
 ///
-/// Source and destination path resolution follow intermediate and final symbolic links with the
+/// Any older committed WAL is recovered and checkpointed before either pathname is resolved, so
+/// source and destination inode selection never observes a partially replayed namespace. Source and
+/// destination path resolution then follow intermediate and final symbolic links with the
 /// repository-wide bounded expansion rules. The resolved inode IDs are delegated to
 /// [`copy_file_range_journaled`], preserving its snapshot semantics for overlapping same-inode
 /// copies and its WAL-backed atomic destination publication.
@@ -24,9 +27,9 @@ pub struct PathFileRangeEndpoint<'a> {
 /// logical blocks; this operation does not allocate, extend files, infer EOF, or create sparse holes.
 ///
 /// # Errors
-/// Propagates pathname lookup errors and all [`copy_file_range_journaled`] validation or durable I/O
-/// errors, including non-file endpoints, empty ranges, invalid offsets, or ranges beyond existing
-/// logical blocks.
+/// Propagates recovery/checkpoint failures, pathname lookup errors, and all
+/// [`copy_file_range_journaled`] validation or durable I/O errors, including non-file endpoints,
+/// empty ranges, invalid offsets, or ranges beyond existing logical blocks.
 pub fn copy_file_range_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -34,6 +37,7 @@ pub fn copy_file_range_at_path_journaled(
     destination: PathFileRangeEndpoint<'_>,
     len: usize,
 ) -> io::Result<RecoveryReport> {
+    recover_journal_and_checkpoint(device, *superblock)?;
     let source_inode = resolve_path_following_symlinks(device, superblock, source.path)?;
     let destination_inode = resolve_path_following_symlinks(device, superblock, destination.path)?;
     copy_file_range_journaled(
