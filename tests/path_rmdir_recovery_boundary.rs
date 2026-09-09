@@ -6,7 +6,9 @@ use filesystem_lab::block::BLOCK_SIZE;
 use filesystem_lab::directory_table::load_directory_table;
 use filesystem_lab::format_geometry::format_device_with_journal_blocks;
 use filesystem_lab::fsck::check_device;
-use filesystem_lab::inode_table::load_inode_table;
+use filesystem_lab::inode::InodeKind;
+use filesystem_lab::inode_codec::PersistedInode;
+use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
 use filesystem_lab::journal::{JournalEntry, JournalLog};
 use filesystem_lab::journal_region::{load_journal_image, store_journal_image};
 use filesystem_lab::path_create::create_directory_at_path_journaled;
@@ -20,6 +22,16 @@ const JOURNAL_BLOCKS: u64 = 10;
 fn setup() -> (CrashDevice, filesystem_lab::format::Superblock) {
     let mut device = CrashDevice::new(128);
     let superblock = format_device_with_journal_blocks(&mut device, JOURNAL_BLOCKS).unwrap();
+    store_inode_table(
+        &mut device,
+        &superblock,
+        &[PersistedInode {
+            id: 1,
+            kind: InodeKind::Directory,
+            blocks: Vec::new(),
+        }],
+    )
+    .unwrap();
     check_device(&mut device).unwrap();
     (device, superblock)
 }
