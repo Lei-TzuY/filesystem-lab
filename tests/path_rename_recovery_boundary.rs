@@ -121,7 +121,10 @@ fn pathname_rename_recovers_committed_create_before_resolving_and_recomputing() 
         let mut owned = HashSet::new();
         for inode in &inodes {
             for &block in &inode.blocks {
-                assert!(owned.insert(block), "physical block {block} is double-owned");
+                assert!(
+                    owned.insert(block),
+                    "physical block {block} is double-owned"
+                );
             }
         }
         assert_eq!(owned.len(), 1);
