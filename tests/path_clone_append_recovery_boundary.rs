@@ -69,13 +69,8 @@ fn setup_without_source_alias() -> (CrashDevice, Superblock) {
     )
     .unwrap();
     recover_journal_and_checkpoint(&mut device, superblock).unwrap();
-    append_file_blocks_at_path_journaled(
-        &mut device,
-        &superblock,
-        "/dst",
-        &[[0x33; BLOCK_SIZE]],
-    )
-    .unwrap();
+    append_file_blocks_at_path_journaled(&mut device, &superblock, "/dst", &[[0x33; BLOCK_SIZE]])
+        .unwrap();
     recover_journal_and_checkpoint(&mut device, superblock).unwrap();
     check_device(&mut device).unwrap();
     (device, superblock)
