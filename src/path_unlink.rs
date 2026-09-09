@@ -47,7 +47,12 @@ pub fn unlink_file_journaled(
     if inode.kind != InodeKind::File {
         return Err(invalid_input("unlink requires a regular-file inode"));
     }
-    if entries.iter().filter(|entry| entry.target == target).count() != 1 {
+    if entries
+        .iter()
+        .filter(|entry| entry.target == target)
+        .count()
+        != 1
+    {
         return Err(invalid_input(
             "regular-file final unlink requires exactly one namespace reference",
         ));
@@ -150,7 +155,12 @@ pub fn remove_directory_journaled(
             "directory removal requires a directory inode",
         ));
     }
-    if entries.iter().filter(|entry| entry.target == target).count() != 1 {
+    if entries
+        .iter()
+        .filter(|entry| entry.target == target)
+        .count()
+        != 1
+    {
         return Err(invalid_input(
             "directory removal requires exactly one namespace reference",
         ));

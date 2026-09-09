@@ -83,7 +83,9 @@ fn pathname_rmdir_recovers_committed_create_before_resolving_and_recomputing() {
             io::ErrorKind::NotFound
         );
         assert_eq!(load_inode_table(&mut device, &superblock).unwrap().len(), 1);
-        assert!(load_directory_table(&mut device, &superblock).unwrap().is_empty());
+        assert!(load_directory_table(&mut device, &superblock)
+            .unwrap()
+            .is_empty());
         check_device(&mut device).unwrap();
         assert!(load_journal_image(&mut device, superblock)
             .unwrap()
