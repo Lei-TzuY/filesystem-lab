@@ -10,6 +10,8 @@ The pathname create surface provides that retry boundary for new files and direc
 
 The pathname regular-file unlink surface applies the same rule. `unlink_file_at_path_journaled()` validates the path shape, recovers and checkpoints any older durable WAL, and only then resolves the parent and loads allocator, inode, and directory state. A file created by an older committed transaction can therefore be safely unlinked after reboot even when the create crashed during home replay; unlink never derives its lifecycle mutation from the partial home-write prefix.
 
+Pathname empty-directory removal applies the same retry boundary. `remove_directory_at_path_journaled()` validates the pathname shape, recovers and checkpoints any older durable WAL, and only then resolves the parent and evaluates directory emptiness, namespace references, inode state, and allocator ownership. A directory created by an older committed transaction can therefore be removed after reboot without deriving the rmdir mutation from a partial home-write prefix.
+
 The rule does not change the v5 on-disk encoding. Empty-image writes remain available for explicit journal initialization/checkpoint behavior, and malformed existing journal images are rejected by normal journal decoding before a replacement can proceed.
 
 ## Durability invariant
@@ -28,3 +30,5 @@ A later transaction must never destroy the only durable copy of an earlier commi
 The second create must recover and checkpoint the first transaction before recomputing allocator, inode, and namespace state. After it commits, both files must be reachable with distinct inode identities and unique physical-block ownership, allocator accounting must remain valid, fsck must pass, the journal must be empty, and a second recovery must perform no work.
 
 `tests/path_file_unlink_recovery_boundary.rs` performs the complementary lifecycle check. It enumerates the same create crash matrix, selects every reboot state with a durable commit, proves the old journal cannot be replaced directly, then invokes pathname unlink without an external recovery call. The unlink must first recover the created file, recompute from that recovered namespace and ownership state, remove the file completely, return allocator accounting to the pre-create baseline, leave fsck clean and the journal empty, and make a subsequent recovery a no-op.
+
+`tests/path_rmdir_recovery_boundary.rs` applies the lifecycle check to directories. It enumerates pathname mkdir crash points, selects reboot states with a durable commit, proves the committed mkdir WAL cannot be replaced directly, then invokes pathname rmdir without an external recovery call. Rmdir must recover the created directory before recomputing its namespace and inode retirement, leave only the root namespace/inode state, pass fsck, checkpoint the journal to empty, and make a subsequent recovery a no-op.

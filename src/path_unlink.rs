@@ -201,18 +201,21 @@ pub fn remove_directory_journaled(
 ///
 /// Intermediate components, including the parent itself, use bounded symlink expansion. The final
 /// component is intentionally not resolved, matching `rmdir`-style semantics: a final symlink is
-/// rejected instead of removing the directory it targets.
+/// rejected instead of removing the directory it targets. After pathname-shape validation and
+/// before resolving the parent, any older durable journal is recovered and checkpointed so the
+/// removal is recomputed from recovered home state rather than a partial post-crash home prefix.
 ///
 /// # Errors
 /// Returns `InvalidInput` when the pathname is not absolute, names the root, has an empty final
-/// component, or names an unsupported/non-empty target. Parent-resolution errors and all
-/// [`remove_directory_journaled`] durable I/O errors are propagated.
+/// component, or names an unsupported/non-empty target. Parent-resolution errors and all recovery,
+/// checkpoint, and [`remove_directory_journaled`] durable I/O errors are propagated.
 pub fn remove_directory_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
     path: &str,
 ) -> io::Result<RecoveryReport> {
     let (parent_path, name) = split_path(path)?;
+    recover_journal_and_checkpoint(device, *superblock)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
     remove_directory_journaled(device, superblock, parent, name)
 }
