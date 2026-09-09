@@ -2,6 +2,7 @@ use std::io;
 
 use crate::block::BlockDevice;
 use crate::format::Superblock;
+use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 use crate::rename_exchange_tx::{
@@ -15,13 +16,17 @@ use crate::rename_tx::rename_entry_journaled;
 /// Only the source and destination parent pathnames are resolved through the repository-wide
 /// bounded symbolic-link traversal rules. Neither final component is followed, so renaming a
 /// symbolic link moves the link inode itself and an existing destination remains a collision.
-/// Publication is delegated to [`rename_entry_journaled`], preserving its directory-only WAL
-/// transaction and its directory-cycle validation.
+///
+/// After validating both pathname shapes but before resolving either parent, the operation recovers
+/// and checkpoints any older durable journal image. The rename is therefore derived only from fully
+/// recovered namespace state rather than from a partial post-crash home-write prefix. Publication is
+/// delegated to [`rename_entry_journaled`], preserving its directory-only WAL transaction and its
+/// directory-cycle validation.
 ///
 /// # Errors
 /// Returns `InvalidInput` when either pathname is not absolute, names the root, or has an empty
-/// final component. Parent-resolution errors and all [`rename_entry_journaled`] validation/durable
-/// I/O errors are propagated.
+/// final component. Parent-resolution errors and all recovery, checkpoint,
+/// [`rename_entry_journaled`] validation, and durable I/O errors are propagated.
 pub fn rename_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -31,6 +36,7 @@ pub fn rename_at_path_journaled(
     let (old_parent_path, old_name) = split_path(source, "rename source")?;
     let (new_parent_path, new_name) = split_path(destination, "rename destination")?;
 
+    recover_journal_and_checkpoint(device, *superblock)?;
     let old_parent = resolve_path_following_symlinks(device, superblock, old_parent_path)?;
     let new_parent = resolve_path_following_symlinks(device, superblock, new_parent_path)?;
 
