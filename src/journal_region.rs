@@ -19,14 +19,21 @@ const RESERVED_OFFSET: usize = 20;
 /// containing the region header is the final on-device anchor before `flush` establishes the
 /// durability boundary.
 ///
+/// A new non-empty journal image may only be published when the current reservation is empty. This
+/// prevents a later transaction from overwriting the only durable recovery source for an earlier
+/// committed transaction whose home replay has not completed. Callers that encounter a non-empty
+/// journal must recover and checkpoint it before retrying the mutation.
+///
 /// Journal writes may target data blocks or the allocation/inode/directory metadata home regions.
 /// They may never target the superblock or journal reservation itself.
 ///
 /// # Errors
 ///
-/// Returns an error if the superblock does not describe this device, the journal reservation is
+/// Returns `WouldBlock` when a non-empty journal image already occupies the reservation and the
+/// caller attempts to publish another non-empty image. Returns an error if the superblock does not
+/// describe this device, the existing or replacement journal image is corrupt, the reservation is
 /// malformed or too large to address, an entry targets a forbidden/out-of-range block, transaction
-/// ordering is malformed, the encoded stream does not fit, or an underlying write/flush fails.
+/// ordering is malformed, the encoded stream does not fit, or an underlying read/write/flush fails.
 pub fn store_journal_image(
     device: &mut impl BlockDevice,
     superblock: Superblock,
@@ -34,6 +41,13 @@ pub fn store_journal_image(
 ) -> io::Result<()> {
     validate_region(device, superblock)?;
     validate_entries(superblock, entries)?;
+
+    if !entries.is_empty() && !load_journal_image(device, superblock)?.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::WouldBlock,
+            "journal contains an older transaction; recover and checkpoint before replacement",
+        ));
+    }
 
     let payload = encode_entries(entries)?;
     let capacity = region_capacity(superblock)?;
@@ -344,6 +358,40 @@ mod tests {
         assert_eq!(
             load_journal_image(&mut device, superblock).unwrap(),
             entries
+        );
+    }
+
+    #[test]
+    fn rejects_replacement_while_an_older_journal_image_is_present() {
+        let superblock = Superblock::with_journal_blocks(16, 2).unwrap();
+        let first = sample_entries(superblock);
+        let mut second_log = JournalLog::new();
+        let txid = second_log.begin().unwrap();
+        second_log
+            .write(
+                txid,
+                superblock.reserved_blocks() + 1,
+                [0xa5; BLOCK_SIZE],
+            )
+            .unwrap();
+        second_log.commit(txid).unwrap();
+        let mut device = MemoryDevice::new(16);
+
+        store_journal_image(&mut device, superblock, &first).unwrap();
+        let writes_before = device.writes.clone();
+        let flushes_before = device.flushes;
+
+        assert_eq!(
+            store_journal_image(&mut device, superblock, second_log.entries())
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::WouldBlock
+        );
+        assert_eq!(device.writes, writes_before);
+        assert_eq!(device.flushes, flushes_before);
+        assert_eq!(
+            load_journal_image(&mut device, superblock).unwrap(),
+            first
         );
     }
 
