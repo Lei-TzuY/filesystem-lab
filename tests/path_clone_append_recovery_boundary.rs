@@ -27,11 +27,19 @@ use support::CrashDevice;
 const JOURNAL_BLOCKS: u64 = 10;
 
 fn inode(id: u64, kind: InodeKind) -> PersistedInode {
-    PersistedInode { id, kind, blocks: Vec::new() }
+    PersistedInode {
+        id,
+        kind,
+        blocks: Vec::new(),
+    }
 }
 
 fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
-    PersistedDirectoryEntry { parent, target, name: name.to_owned() }
+    PersistedDirectoryEntry {
+        parent,
+        target,
+        name: name.to_owned(),
+    }
 }
 
 fn setup_without_source_alias() -> (CrashDevice, Superblock) {
@@ -74,7 +82,9 @@ fn setup_without_source_alias() -> (CrashDevice, Superblock) {
 }
 
 fn has_commit(entries: &[JournalEntry]) -> bool {
-    entries.iter().any(|entry| matches!(entry, JournalEntry::Commit { .. }))
+    entries
+        .iter()
+        .any(|entry| matches!(entry, JournalEntry::Commit { .. }))
 }
 
 fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
@@ -84,7 +94,10 @@ fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
     let mut seen = HashSet::new();
     for inode in &inodes {
         for block in &inode.blocks {
-            assert!(seen.insert(*block), "duplicate physical block reference {block}");
+            assert!(
+                seen.insert(*block),
+                "duplicate physical block reference {block}"
+            );
             assert!(allocator.is_owned(*block).unwrap());
         }
     }
@@ -119,7 +132,11 @@ fn clone_append_recovers_committed_source_symlink_before_resolving_it() {
         let (new_blocks, _) = clone_file_blocks_append_at_path_journaled(
             &mut device,
             &superblock,
-            PathCloneAppendRange { path: "/src_alias", start: 0, block_count: 2 },
+            PathCloneAppendRange {
+                path: "/src_alias",
+                start: 0,
+                block_count: 2,
+            },
             "/dst",
         )
         .unwrap();
@@ -141,7 +158,9 @@ fn clone_append_recovers_committed_source_symlink_before_resolving_it() {
         check_device(&mut device).unwrap();
 
         recover_journal_and_checkpoint(&mut device, superblock).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
