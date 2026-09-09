@@ -66,13 +66,8 @@ fn exchanges_directories_across_parents_without_changing_ownership() {
     let allocator_before = load_allocator(&mut device, &superblock).unwrap();
     let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
 
-    rename_exchange_directories_at_path_journaled(
-        &mut device,
-        &superblock,
-        "/left/a",
-        "/right/b",
-    )
-    .unwrap();
+    rename_exchange_directories_at_path_journaled(&mut device, &superblock, "/left/a", "/right/b")
+        .unwrap();
 
     assert_eq!(
         resolve_path_following_symlinks(&mut device, &superblock, "/left/a").unwrap(),
@@ -97,25 +92,15 @@ fn exchanges_directories_across_parents_without_changing_ownership() {
 fn rejects_exchange_that_would_create_directory_cycle_before_wal() {
     let mut device = CrashDevice::new(96);
     let superblock = format_device_with_journal_blocks(&mut device, JOURNAL_BLOCKS).unwrap();
-    store_inode_table(
-        &mut device,
-        &superblock,
-        &[inode(1), inode(2), inode(3)],
-    )
-    .unwrap();
+    store_inode_table(&mut device, &superblock, &[inode(1), inode(2), inode(3)]).unwrap();
     let original = vec![entry(1, 2, "a"), entry(2, 3, "child")];
     store_directory_table(&mut device, &superblock, &original).unwrap();
     check_device(&mut device).unwrap();
 
     assert_eq!(
-        rename_exchange_directories_at_path_journaled(
-            &mut device,
-            &superblock,
-            "/a",
-            "/a/child",
-        )
-        .unwrap_err()
-        .kind(),
+        rename_exchange_directories_at_path_journaled(&mut device, &superblock, "/a", "/a/child",)
+            .unwrap_err()
+            .kind(),
         io::ErrorKind::InvalidInput
     );
     assert!(load_journal_image(&mut device, superblock)
@@ -132,13 +117,8 @@ fn rejects_exchange_that_would_create_directory_cycle_before_wal() {
 fn every_directory_exchange_crash_point_recovers_old_or_complete_new_state() {
     let (mut probe, superblock) = setup_siblings();
     probe.arm(None);
-    rename_exchange_directories_at_path_journaled(
-        &mut probe,
-        &superblock,
-        "/left/a",
-        "/right/b",
-    )
-    .unwrap();
+    rename_exchange_directories_at_path_journaled(&mut probe, &superblock, "/left/a", "/right/b")
+        .unwrap();
     let operations = probe.operations();
 
     for crash_at in 0..operations {
