@@ -14,10 +14,10 @@ use filesystem_lab::inode::InodeKind;
 use filesystem_lab::inode_codec::PersistedInode;
 use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
 use filesystem_lab::journal::{JournalEntry, JournalLog};
-use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::journal_region::{load_journal_image, store_journal_image};
 use filesystem_lab::path_create::create_one_block_file_at_path_journaled;
 use filesystem_lab::path_metadata::metadata_at_path;
+use filesystem_lab::recovery::recover_journal;
 use support::CrashDevice;
 
 const JOURNAL_BLOCKS: u64 = 10;
@@ -79,7 +79,7 @@ fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
 }
 
 #[test]
-fn committed_create_journal_cannot_be_overwritten_before_recovery() {
+fn pathname_create_recovers_committed_journal_before_recomputing_next_mutation() {
     let first_data = [0x31_u8; BLOCK_SIZE];
     let second_data = [0x72_u8; BLOCK_SIZE];
     let (mut probe, superblock) = setup();
@@ -130,15 +130,6 @@ fn committed_create_journal_cannot_be_overwritten_before_recovery() {
             "rejected replacement must not mutate the recovery source"
         );
 
-        let recovered = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
-        assert_eq!(recovered.committed_transactions, 1);
-        let first = metadata_at_path(&mut device, &superblock, "/dir/first").unwrap();
-        assert_eq!(first.kind, InodeKind::File);
-        assert_eq!(first.logical_blocks, 1);
-        assert_eq!(first.namespace_references, 1);
-        assert_unique_ownership(&mut device, &superblock);
-        check_device(&mut device).unwrap();
-
         create_one_block_file_at_path_journaled(
             &mut device,
             &superblock,
@@ -146,15 +137,27 @@ fn committed_create_journal_cannot_be_overwritten_before_recovery() {
             &second_data,
         )
         .unwrap();
+
+        let first = metadata_at_path(&mut device, &superblock, "/dir/first").unwrap();
         let second = metadata_at_path(&mut device, &superblock, "/dir/second").unwrap();
+        assert_eq!(first.kind, InodeKind::File);
+        assert_eq!(first.logical_blocks, 1);
+        assert_eq!(first.namespace_references, 1);
         assert_eq!(second.kind, InodeKind::File);
         assert_eq!(second.logical_blocks, 1);
+        assert_eq!(second.namespace_references, 1);
         assert_ne!(first.inode_id, second.inode_id);
         assert_unique_ownership(&mut device, &superblock);
         check_device(&mut device).unwrap();
         assert!(load_journal_image(&mut device, superblock)
             .unwrap()
             .is_empty());
+
+        let second_recovery = recover_journal(&mut device, superblock).unwrap();
+        assert_eq!(second_recovery.committed_transactions, 0);
+        assert_eq!(second_recovery.home_writes, 0);
+        assert_unique_ownership(&mut device, &superblock);
+        check_device(&mut device).unwrap();
     }
 
     assert!(
