@@ -15,17 +15,7 @@ jobs:
           components: rustfmt, clippy
       - name: Format
         run: cargo fmt --all -- --check
-      - name: Clippy diagnostic
-        run: |
-          set +e
-          cargo clippy --all-targets --all-features -- -D warnings > clippy.txt 2>&1
-          echo $? > clippy-exit.txt
-      - name: Upload Clippy diagnostic
-        uses: actions/upload-artifact@v4
-        with:
-          name: clippy-diagnostic
-          path: |
-            clippy.txt
-            clippy-exit.txt
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
         run: cargo test --all-targets --all-features
