@@ -46,11 +46,7 @@ fn has_commit(entries: &[JournalEntry]) -> bool {
         .any(|entry| matches!(entry, JournalEntry::Commit { .. }))
 }
 
-fn assert_renamed_state(
-    device: &mut CrashDevice,
-    superblock: &Superblock,
-    allocated_before: u64,
-) {
+fn assert_renamed_state(device: &mut CrashDevice, superblock: &Superblock, allocated_before: u64) {
     assert_eq!(
         resolve_path_following_symlinks(device, superblock, "/source")
             .unwrap_err()
