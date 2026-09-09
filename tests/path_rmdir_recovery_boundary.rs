@@ -57,7 +57,11 @@ fn pathname_rmdir_recovers_committed_create_before_resolving_and_recomputing() {
         let mut replacement = JournalLog::new();
         let txid = replacement.begin().unwrap();
         replacement
-            .write(txid, superblock.reserved_blocks(), [0xee_u8; filesystem_lab::block::BLOCK_SIZE])
+            .write(
+                txid,
+                superblock.reserved_blocks(),
+                [0xee_u8; filesystem_lab::block::BLOCK_SIZE],
+            )
             .unwrap();
         replacement.commit(txid).unwrap();
         assert_eq!(
