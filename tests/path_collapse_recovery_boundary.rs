@@ -126,15 +126,9 @@ fn collapse_recovers_committed_final_symlink_before_resolving_it() {
         .unwrap();
         assert_eq!(released.len(), 2);
 
-        let bytes = read_file_range_at_path(
-            &mut device,
-            &superblock,
-            "/file",
-            0,
-            0,
-            3 * BLOCK_SIZE,
-        )
-        .unwrap();
+        let bytes =
+            read_file_range_at_path(&mut device, &superblock, "/file", 0, 0, 3 * BLOCK_SIZE)
+                .unwrap();
         assert_eq!(&bytes[..BLOCK_SIZE], &[0x11; BLOCK_SIZE]);
         assert_eq!(&bytes[BLOCK_SIZE..2 * BLOCK_SIZE], &[0x44; BLOCK_SIZE]);
         assert_eq!(&bytes[2 * BLOCK_SIZE..], &[0x55; BLOCK_SIZE]);
