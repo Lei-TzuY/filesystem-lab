@@ -46,10 +46,7 @@ fn setup_without_alias() -> (CrashDevice, Superblock) {
     store_inode_table(
         &mut device,
         &superblock,
-        &[
-            inode(1, InodeKind::Directory),
-            inode(2, InodeKind::File),
-        ],
+        &[inode(1, InodeKind::Directory), inode(2, InodeKind::File)],
     )
     .unwrap();
     store_directory_table(&mut device, &superblock, &[entry(1, 2, "file")]).unwrap();
