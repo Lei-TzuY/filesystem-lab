@@ -122,8 +122,14 @@ fn replaces_only_selected_alias_and_preserves_destination_inode_and_payload() {
     .unwrap();
 
     assert_new_state(&mut device, &superblock, source_inode, destination_inode);
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
     assert!(load_journal_image(&mut device, superblock)
         .unwrap()
         .is_empty());
@@ -149,7 +155,10 @@ fn rejects_singly_linked_destination_without_mutation() {
         .kind(),
         io::ErrorKind::InvalidInput
     );
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), before);
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        before
+    );
     assert!(load_inode_table(&mut device, &superblock)
         .unwrap()
         .iter()
@@ -191,10 +200,19 @@ fn every_linked_symlink_overwrite_crash_point_recovers_old_or_complete_new_state
         device.reboot();
 
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
-        assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-        assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+        assert_eq!(
+            load_allocator(&mut device, &superblock).unwrap(),
+            allocator_before
+        );
+        assert_eq!(
+            load_inode_table(&mut device, &superblock).unwrap(),
+            inodes_before
+        );
         if recovery.committed_transactions == 0 {
-            assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
+            assert_eq!(
+                load_directory_table(&mut device, &superblock).unwrap(),
+                entries_before
+            );
         } else {
             assert_eq!(recovery.committed_transactions, 1);
             assert_new_state(&mut device, &superblock, source_inode, destination_inode);
