@@ -118,6 +118,39 @@ pub fn rename_overwrite_symlink_journaled(
     )
 }
 
+/// Atomically renames one symbolic-link entry over one alias of a multiply linked symbolic link.
+///
+/// Only the selected destination namespace entry is replaced. The destination symbolic-link inode,
+/// its payload block, allocator ownership, and every remaining alias survive unchanged. Link count
+/// is derived from format-v5 namespace references, so no persisted link-count field is introduced.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` for invalid parents, missing entries, non-symlink targets, same-inode
+/// aliases, a destination with fewer than two namespace references, or an invalid replacement name.
+/// Existing corruption and WAL/recovery/device failures are propagated.
+pub fn rename_overwrite_linked_symlink_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    old_parent: u64,
+    old_name: &str,
+    new_parent: u64,
+    new_name: &str,
+) -> io::Result<RecoveryReport> {
+    rename_overwrite_impl(
+        device,
+        superblock,
+        old_parent,
+        old_name,
+        new_parent,
+        new_name,
+        RenameOverwritePolicy {
+            expected_kind: InodeKind::Symlink,
+            require_multiple_links: true,
+        },
+    )
+}
+
 fn rename_overwrite_impl(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
