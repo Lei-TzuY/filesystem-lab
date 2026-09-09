@@ -49,7 +49,7 @@ fn has_commit(entries: &[JournalEntry]) -> bool {
 fn assert_renamed_state(
     device: &mut CrashDevice,
     superblock: &Superblock,
-    allocated_before: usize,
+    allocated_before: u64,
 ) {
     assert_eq!(
         resolve_path_following_symlinks(device, superblock, "/source")
