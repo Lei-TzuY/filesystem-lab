@@ -8,18 +8,12 @@ use crate::directory_codec::{encode_directory_entry, PersistedDirectoryEntry};
 use crate::directory_table::load_directory_table;
 use crate::format::Superblock;
 use crate::fsck::check_device;
-use crate::inode::{InodeKind, ROOT_INODE_ID};
+use crate::inode::InodeKind;
 use crate::inode_codec::PersistedInode;
 use crate::inode_table::load_inode_table;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 
-/// Atomically renames one directory over an existing empty directory by pathname.
-///
-/// Parent pathnames follow bounded symbolic-link traversal while final components are not followed.
-/// The destination must be singly referenced and empty. Its inode and owned blocks are released in
-/// the same WAL transaction that moves the source namespace entry. The complete candidate namespace
-/// is checked for directory cycles before publication. Filesystem format remains v5.
 pub fn rename_overwrite_directory_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -36,7 +30,11 @@ pub fn rename_overwrite_directory_at_path_journaled(
     )
 }
 
-/// Inode-ID-based primitive for directory rename-overwrite.
+/// Atomically moves a directory over an existing empty directory.
+///
+/// The destination must be singly referenced and empty. Its inode and any owned blocks are released
+/// in the same allocation+inode+directory WAL transaction that publishes the source under the
+/// destination name. The complete candidate namespace is cycle-checked before publication.
 pub fn rename_overwrite_directory_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -49,8 +47,8 @@ pub fn rename_overwrite_directory_journaled(
     let mut allocator = load_allocator(device, superblock)?;
     let mut inodes = load_inode_table(device, superblock)?;
     let entries = load_directory_table(device, superblock)?;
-    validate_parent(&inodes, old_parent)?;
-    validate_parent(&inodes, new_parent)?;
+    validate_directory(&inodes, old_parent, "source parent")?;
+    validate_directory(&inodes, new_parent, "destination parent")?;
 
     let source_index = find_entry(&entries, old_parent, old_name, "source")?;
     let destination_index = find_entry(&entries, new_parent, new_name, "destination")?;
@@ -64,24 +62,45 @@ pub fn rename_overwrite_directory_journaled(
     }
     validate_directory(&inodes, source_target, "source")?;
     validate_directory(&inodes, destination_target, "destination")?;
-    if source_target == ROOT_INODE_ID || destination_target == ROOT_INODE_ID {
+    if source_target == 1 || destination_target == 1 {
         return Err(invalid_input("directory rename-overwrite cannot replace the root inode"));
     }
-    if entries.iter().filter(|entry| entry.target == destination_target).count() != 1 {
-        return Err(invalid_input("directory rename-overwrite destination must be singly referenced"));
+    if entries
+        .iter()
+        .filter(|entry| entry.target == destination_target)
+        .count()
+        != 1
+    {
+        return Err(invalid_input(
+            "directory rename-overwrite destination must be singly referenced",
+        ));
     }
     if entries.iter().any(|entry| entry.parent == destination_target) {
-        return Err(invalid_input("directory rename-overwrite destination must be empty"));
+        return Err(invalid_input(
+            "directory rename-overwrite destination must be empty",
+        ));
     }
 
-    let destination_inode = inodes.iter().find(|inode| inode.id == destination_target).unwrap();
-    let unique_blocks: BTreeSet<u64> = destination_inode.blocks.iter().copied().collect();
-    if unique_blocks.len() != destination_inode.blocks.len() {
-        return Err(invalid_input("destination directory contains duplicate block references"));
+    let destination_blocks = inodes
+        .iter()
+        .find(|inode| inode.id == destination_target)
+        .expect("validated destination inode")
+        .blocks
+        .clone();
+    let unique_blocks: BTreeSet<u64> = destination_blocks.iter().copied().collect();
+    if unique_blocks.len() != destination_blocks.len() {
+        return Err(invalid_input(
+            "destination directory contains duplicate block references",
+        ));
     }
-    for block in &destination_inode.blocks {
-        if !allocator.is_owned(*block).map_err(|e| invalid_input(e.to_string()))? {
-            return Err(invalid_input("destination directory block is not allocator-owned"));
+    for block in &destination_blocks {
+        if !allocator
+            .is_owned(*block)
+            .map_err(|error| invalid_input(error.to_string()))?
+        {
+            return Err(invalid_input(
+                "destination directory block is not allocator-owned",
+            ));
         }
     }
 
@@ -104,15 +123,24 @@ pub fn rename_overwrite_directory_journaled(
     }
     validate_acyclic(&desired_entries, &inodes)?;
 
-    for block in &destination_inode.blocks {
-        allocator.free(*block).map_err(|e| invalid_input(e.to_string()))?;
+    for block in destination_blocks {
+        allocator
+            .free(block)
+            .map_err(|error| invalid_input(error.to_string()))?;
     }
     inodes.retain(|inode| inode.id != destination_target);
     store_create_metadata_journaled(device, superblock, &allocator, &inodes, &desired_entries)
 }
 
-fn validate_acyclic(entries: &[PersistedDirectoryEntry], inodes: &[PersistedInode]) -> io::Result<()> {
-    let directories: BTreeSet<u64> = inodes.iter().filter(|i| i.kind == InodeKind::Directory).map(|i| i.id).collect();
+fn validate_acyclic(
+    entries: &[PersistedDirectoryEntry],
+    inodes: &[PersistedInode],
+) -> io::Result<()> {
+    let directories: BTreeSet<u64> = inodes
+        .iter()
+        .filter(|inode| inode.kind == InodeKind::Directory)
+        .map(|inode| inode.id)
+        .collect();
     let mut parent_of = BTreeMap::new();
     for entry in entries {
         if directories.contains(&entry.target) {
@@ -124,7 +152,9 @@ fn validate_acyclic(entries: &[PersistedDirectoryEntry], inodes: &[PersistedInod
         let mut current = directory;
         while let Some(parent) = parent_of.get(&current).copied() {
             if !seen.insert(current) {
-                return Err(invalid_input("directory rename-overwrite would create a cycle"));
+                return Err(invalid_input(
+                    "directory rename-overwrite would create a cycle",
+                ));
             }
             current = parent;
         }
@@ -132,29 +162,48 @@ fn validate_acyclic(entries: &[PersistedDirectoryEntry], inodes: &[PersistedInod
     Ok(())
 }
 
-fn find_entry(entries: &[PersistedDirectoryEntry], parent: u64, name: &str, label: &str) -> io::Result<usize> {
-    entries.iter().position(|entry| entry.parent == parent && entry.name == name)
-        .ok_or_else(|| invalid_input(format!("directory rename-overwrite {label} entry does not exist")))
-}
-
-fn validate_parent(inodes: &[PersistedInode], id: u64) -> io::Result<()> {
-    validate_directory(inodes, id, "parent")
+fn find_entry(
+    entries: &[PersistedDirectoryEntry],
+    parent: u64,
+    name: &str,
+    label: &str,
+) -> io::Result<usize> {
+    entries
+        .iter()
+        .position(|entry| entry.parent == parent && entry.name == name)
+        .ok_or_else(|| {
+            invalid_input(format!(
+                "directory rename-overwrite {label} entry does not exist"
+            ))
+        })
 }
 
 fn validate_directory(inodes: &[PersistedInode], id: u64, label: &str) -> io::Result<()> {
-    let inode = inodes.iter().find(|inode| inode.id == id)
-        .ok_or_else(|| invalid_input(format!("directory rename-overwrite {label} inode does not exist")))?;
+    let inode = inodes
+        .iter()
+        .find(|inode| inode.id == id)
+        .ok_or_else(|| {
+            invalid_input(format!(
+                "directory rename-overwrite {label} inode does not exist"
+            ))
+        })?;
     if inode.kind != InodeKind::Directory {
-        return Err(invalid_input(format!("directory rename-overwrite {label} must be a directory")));
+        return Err(invalid_input(format!(
+            "directory rename-overwrite {label} must be a directory"
+        )));
     }
     Ok(())
 }
 
 fn split_path<'a>(path: &'a str, label: &str) -> io::Result<(&'a str, &'a str)> {
     if !path.starts_with('/') || path == "/" {
-        return Err(invalid_input(format!("{label} must name a non-root absolute path")));
+        return Err(invalid_input(format!(
+            "{label} must name a non-root absolute path"
+        )));
     }
-    let (parent, name) = path.rsplit_once('/').ok_or_else(|| invalid_input(format!("{label} lacks a final component")))?;
+    let (parent, name) = path
+        .rsplit_once('/')
+        .ok_or_else(|| invalid_input(format!("{label} lacks a final component")))?;
     if name.is_empty() {
         return Err(invalid_input(format!("{label} final component is empty")));
     }
