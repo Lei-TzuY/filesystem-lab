@@ -2,6 +2,7 @@ use std::io;
 
 use crate::block::BlockDevice;
 use crate::format::Superblock;
+use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 use crate::rename_overwrite_tx::{
@@ -11,7 +12,9 @@ use crate::rename_overwrite_tx::{
 
 /// Atomically renames one regular file over an existing singly linked regular file by pathname.
 ///
-/// Source and destination parent pathnames follow the repository-wide bounded symbolic-link rules.
+/// Any older committed WAL is recovered and checkpointed before source and destination parent
+/// pathname resolution so endpoint selection is derived from recovered namespace state. Source and
+/// destination parent pathnames then follow the repository-wide bounded symbolic-link rules.
 /// Neither final component is followed. The replaced destination inode and its data ownership are
 /// released atomically with namespace publication by the existing rename-overwrite WAL transaction.
 ///
@@ -33,8 +36,9 @@ pub fn rename_overwrite_file_at_path_journaled(
 
 /// Atomically renames one regular file over one alias of a multiply linked regular file by pathname.
 ///
-/// Only the selected destination namespace entry is replaced; the destination inode and its other
-/// aliases remain alive. Final components are never followed.
+/// Any older committed WAL is recovered and checkpointed before parent pathname resolution. Only
+/// the selected destination namespace entry is replaced; the destination inode and its other aliases
+/// remain alive. Final components are never followed.
 ///
 /// # Errors
 /// Returns `InvalidInput` for malformed absolute paths and propagates parent-resolution,
@@ -54,9 +58,10 @@ pub fn rename_overwrite_linked_file_at_path_journaled(
 
 /// Atomically renames one symbolic link over an existing singly linked symbolic link by pathname.
 ///
-/// Only parent pathnames follow bounded symbolic-link traversal; final components are deliberately
-/// not followed, so the link inodes themselves participate in replacement even when their targets
-/// are dangling. The destination symlink inode and its payload block are released atomically with
+/// Any older committed WAL is recovered and checkpointed before parent pathname resolution. Only
+/// parent pathnames follow bounded symbolic-link traversal; final components are deliberately not
+/// followed, so the link inodes themselves participate in replacement even when their targets are
+/// dangling. The destination symlink inode and its payload block are released atomically with
 /// namespace publication while the source inode and payload survive under the destination name.
 ///
 /// # Errors
@@ -78,9 +83,10 @@ pub fn rename_overwrite_symlink_at_path_journaled(
 
 /// Atomically renames one symbolic link over one alias of a multiply linked symbolic link.
 ///
-/// Parent pathnames follow bounded symbolic-link traversal while final components are never
-/// followed. Only the selected destination alias is replaced; the destination symlink inode,
-/// payload block, allocator ownership, and every other alias remain alive.
+/// Any older committed WAL is recovered and checkpointed before parent pathname resolution. Parent
+/// pathnames then follow bounded symbolic-link traversal while final components are never followed.
+/// Only the selected destination alias is replaced; the destination symlink inode, payload block,
+/// allocator ownership, and every other alias remain alive.
 ///
 /// # Errors
 /// Returns `InvalidInput` for malformed paths, non-symlink endpoints, same-inode aliases, or a
@@ -107,6 +113,7 @@ fn resolve_rename_overwrite_parents<'a>(
 ) -> io::Result<(u64, &'a str, u64, &'a str)> {
     let (old_parent_path, old_name) = split_path(source, "rename-overwrite source")?;
     let (new_parent_path, new_name) = split_path(destination, "rename-overwrite destination")?;
+    recover_journal_and_checkpoint(device, *superblock)?;
     let old_parent = resolve_path_following_symlinks(device, superblock, old_parent_path)?;
     let new_parent = resolve_path_following_symlinks(device, superblock, new_parent_path)?;
     Ok((old_parent, old_name, new_parent, new_name))
