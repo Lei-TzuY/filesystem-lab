@@ -93,7 +93,7 @@ fn assert_created(
 
     for (index, image) in expected.iter().enumerate() {
         let actual = read_file_range_at_path(device, superblock, path, index, 0, BLOCK_SIZE).unwrap();
-        assert_eq!(actual.as_slice(), image);
+        assert_eq!(actual.as_slice(), image.as_slice());
     }
 }
 
@@ -117,7 +117,10 @@ fn creates_initialized_multi_block_file_through_symlinked_parent() {
     .unwrap();
 
     let allocator_after = load_allocator(&mut device, &superblock).unwrap();
-    assert_eq!(allocator_after.owned_count(), allocator_before.owned_count() + data.len());
+    assert_eq!(
+        allocator_after.allocated_blocks(),
+        allocator_before.allocated_blocks() + u64::try_from(data.len()).unwrap()
+    );
     assert_eq!(
         load_inode_table(&mut device, &superblock).unwrap().len(),
         inodes_before.len() + 1
@@ -202,8 +205,10 @@ fn every_multi_block_create_crash_point_recovers_old_or_complete_new_file() {
         } else {
             assert_eq!(recovery.committed_transactions, 1);
             assert_eq!(
-                load_allocator(&mut device, &superblock).unwrap().owned_count(),
-                allocator_before.owned_count() + data.len()
+                load_allocator(&mut device, &superblock)
+                    .unwrap()
+                    .allocated_blocks(),
+                allocator_before.allocated_blocks() + u64::try_from(data.len()).unwrap()
             );
             assert_eq!(
                 load_inode_table(&mut device, &superblock).unwrap().len(),
