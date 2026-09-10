@@ -10,15 +10,16 @@ use crate::recovery::RecoveryReport;
 use crate::symlink::validate_symlink_inode;
 use crate::unlink_tx::store_unlink_metadata_journaled;
 
-/// Removes one final namespace reference to a persisted one-block symbolic link.
+/// Removes one final namespace reference to a persisted symbolic link.
 ///
-/// The operation validates the target payload before mutation, releases exactly the target block,
-/// removes the symlink inode and selected namespace entry, and publishes allocation, inode, and
-/// directory metadata through one bounded WAL transaction.
+/// The operation validates the complete target payload before mutation, verifies allocator
+/// ownership for every target block, releases every block referenced by the symlink inode, removes
+/// the inode and selected namespace entry, and publishes allocation, inode, and directory metadata
+/// through one bounded WAL transaction.
 ///
 /// # Errors
 /// Returns `InvalidInput` when the selected entry is missing, targets a non-symlink inode, has more
-/// than one namespace reference, or the symlink block is not allocator-owned. Corrupt symlink
+/// than one namespace reference, or any symlink block is not allocator-owned. Corrupt symlink
 /// payloads return `InvalidData`. Durable metadata, WAL, recovery, checkpoint, and device errors are
 /// propagated.
 pub fn unlink_symlink_journaled(
@@ -56,17 +57,22 @@ pub fn unlink_symlink_journaled(
         ));
     }
     validate_symlink_inode(device, inode)?;
-    let block = inode.blocks[0];
-    if !allocator
-        .is_owned(block)
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?
-    {
-        return Err(invalid_input("symlink target block is not allocator-owned"));
+
+    for block in &inode.blocks {
+        if !allocator
+            .is_owned(*block)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?
+        {
+            return Err(invalid_input("symlink target block is not allocator-owned"));
+        }
+    }
+    let blocks = inode.blocks.clone();
+    for block in blocks {
+        allocator
+            .free(block)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
     }
 
-    allocator
-        .free(block)
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
     inodes.remove(inode_index);
     entries.remove(entry_index);
 
