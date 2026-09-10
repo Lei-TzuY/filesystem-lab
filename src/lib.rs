@@ -45,6 +45,7 @@ pub mod journal_region;
 pub mod metadata_tx;
 pub mod path_append;
 pub mod path_clone_append;
+pub mod path_clone_create;
 pub mod path_clone_insert;
 pub mod path_clone_replace;
 pub mod path_clone_splice;
