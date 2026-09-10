@@ -10,7 +10,7 @@ The source and destination must be distinct regular-file inodes. Source images a
 
 The source mapping and data remain unchanged. Destination block count and the relative ordering of all unaffected destination blocks are preserved. The operation does not provide shared-block or reflink semantics.
 
-`clone_file_blocks_replace_at_path_journaled` exposes the same primitive through absolute pathname resolution. Both source and destination follow intermediate and final symbolic links under the existing bounded expansion rules before the resolved inode IDs are passed to the inode-level operation. The pathname layer does not introduce a second durability mechanism or any new on-disk state.
+`clone_file_blocks_replace_at_path_journaled` exposes the same primitive through absolute pathname resolution. Before either pathname is resolved, any older committed WAL is recovered and checkpointed so source and destination inode selection cannot observe a partially replayed namespace. Both paths then follow intermediate and final symbolic links under the existing bounded expansion rules before the resolved inode IDs are passed to the inode-level operation. The pathname layer does not introduce a second durability mechanism or any new on-disk state.
 
 ## Crash contract
 
@@ -28,7 +28,7 @@ After successful recovery:
 - the journal is empty; and
 - a second recovery/checkpoint is a no-op.
 
-The pathname crash matrix additionally verifies that symlink traversal never changes namespace state and that every interrupted operation recovers either the complete pre-operation allocator/inode image or the complete post-operation image, never a mixed state.
+The pathname crash matrix additionally verifies that symlink traversal never changes namespace state and that every interrupted operation recovers either the complete pre-operation allocator/inode image or the complete post-operation image, never a mixed state. A dedicated recovery-boundary matrix also interrupts creation of a final source symlink after durable commit but before complete home replay, then calls pathname clone-replace without an external recovery step. The pathname entry point must recover and checkpoint that older WAL before resolving either endpoint, after which replacement data, allocator accounting, released-block ownership, inode references, fsck, journal clearing, and second-recovery idempotence are all revalidated.
 
 ## Format scope
 
