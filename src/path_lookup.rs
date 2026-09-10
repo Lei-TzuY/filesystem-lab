@@ -73,18 +73,21 @@ pub fn read_symlink_at_path(
 
 /// Reads one bounded byte range from the regular file named by an absolute pathname.
 ///
-/// Path resolution follows symbolic links, including the final component, using the same bounded
-/// expansion rules as [`resolve_path_following_symlinks`]. The resolved inode is then passed to the
-/// existing inode-ID-based [`read_file_range`] implementation, so allocator ownership checks and
-/// format-v5 block-range bounds stay centralized in one data-path primitive.
+/// Any older committed WAL is recovered and checkpointed before pathname resolution so the target
+/// inode and symlink chain are derived from recovered namespace state. Path resolution then follows
+/// symbolic links, including the final component, using the same bounded expansion rules as
+/// [`resolve_path_following_symlinks`]. The resolved inode is passed to the existing inode-ID-based
+/// [`read_file_range`] implementation, so allocator ownership checks and format-v5 block-range bounds
+/// stay centralized in one data-path primitive.
 ///
 /// Format v5 has no persisted byte length. This operation therefore exposes only byte ranges inside
 /// logical blocks already referenced by the resolved regular-file inode; it does not define EOF,
 /// sparse-hole, allocation, or extension semantics.
 ///
 /// # Errors
-/// Propagates pathname lookup errors and all [`read_file_range`] validation errors, including a
-/// resolved non-file inode, invalid offsets/ranges, and allocator ownership disagreement.
+/// Propagates recovery/checkpoint failures, pathname lookup errors, and all [`read_file_range`]
+/// validation errors, including a resolved non-file inode, invalid offsets/ranges, and allocator
+/// ownership disagreement.
 pub fn read_file_range_at_path(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -93,6 +96,7 @@ pub fn read_file_range_at_path(
     start_offset: usize,
     len: usize,
 ) -> io::Result<Vec<u8>> {
+    recover_journal_and_checkpoint(device, *superblock)?;
     let inode_id = resolve_path_following_symlinks(device, superblock, path)?;
     read_file_range(
         device,
