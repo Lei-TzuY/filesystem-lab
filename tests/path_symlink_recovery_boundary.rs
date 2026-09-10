@@ -14,8 +14,12 @@ use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
 use filesystem_lab::journal::JournalEntry;
 use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::journal_region::load_journal_image;
-use filesystem_lab::path_lookup::{read_symlink_at_path, resolve_path_without_following_final_symlink};
-use filesystem_lab::path_symlink::{create_symlink_at_path_journaled, unlink_symlink_at_path_journaled};
+use filesystem_lab::path_lookup::{
+    read_symlink_at_path, resolve_path_without_following_final_symlink,
+};
+use filesystem_lab::path_symlink::{
+    create_symlink_at_path_journaled, unlink_symlink_at_path_journaled,
+};
 use filesystem_lab::recovery::RecoveryReport;
 use filesystem_lab::symlink::create_symlink_journaled;
 use support::CrashDevice;
@@ -23,11 +27,19 @@ use support::CrashDevice;
 const JOURNAL_BLOCKS: u64 = 10;
 
 fn inode(id: u64, kind: InodeKind) -> PersistedInode {
-    PersistedInode { id, kind, blocks: Vec::new() }
+    PersistedInode {
+        id,
+        kind,
+        blocks: Vec::new(),
+    }
 }
 
 fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
-    PersistedDirectoryEntry { parent, target, name: name.to_owned() }
+    PersistedDirectoryEntry {
+        parent,
+        target,
+        name: name.to_owned(),
+    }
 }
 
 fn setup() -> (CrashDevice, Superblock) {
@@ -36,7 +48,10 @@ fn setup() -> (CrashDevice, Superblock) {
     store_inode_table(
         &mut device,
         &superblock,
-        &[inode(1, InodeKind::Directory), inode(2, InodeKind::Directory)],
+        &[
+            inode(1, InodeKind::Directory),
+            inode(2, InodeKind::Directory),
+        ],
     )
     .unwrap();
     store_directory_table(&mut device, &superblock, &[entry(1, 2, "dir")]).unwrap();
@@ -53,7 +68,9 @@ fn setup_with_victim() -> (CrashDevice, Superblock) {
 }
 
 fn has_commit(entries: &[JournalEntry]) -> bool {
-    entries.iter().any(|entry| matches!(entry, JournalEntry::Commit { .. }))
+    entries
+        .iter()
+        .any(|entry| matches!(entry, JournalEntry::Commit { .. }))
 }
 
 fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
@@ -63,7 +80,10 @@ fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
     let mut seen = HashSet::new();
     for inode in &inodes {
         for block in &inode.blocks {
-            assert!(seen.insert(*block), "duplicate physical block reference {block}");
+            assert!(
+                seen.insert(*block),
+                "duplicate physical block reference {block}"
+            );
             assert!(allocator.is_owned(*block).unwrap());
         }
     }
@@ -79,7 +99,9 @@ fn create_symlink_recovers_committed_parent_symlink_before_resolution() {
 
     for crash_at in 0..operations {
         let (mut device, superblock) = setup();
-        let allocated_before = load_allocator(&mut device, &superblock).unwrap().allocated_blocks();
+        let allocated_before = load_allocator(&mut device, &superblock)
+            .unwrap()
+            .allocated_blocks();
         let inode_count_before = load_inode_table(&mut device, &superblock).unwrap().len();
 
         device.arm(Some(crash_at));
@@ -92,18 +114,34 @@ fn create_symlink_recovers_committed_parent_symlink_before_resolution() {
         }
         committed_crash_states += 1;
 
-        create_symlink_at_path_journaled(&mut device, &superblock, "/dir_alias/new_link", "/target")
-            .unwrap();
+        create_symlink_at_path_journaled(
+            &mut device,
+            &superblock,
+            "/dir_alias/new_link",
+            "/target",
+        )
+        .unwrap();
 
-        assert_eq!(read_symlink_at_path(&mut device, &superblock, "/dir/new_link").unwrap(), "/target");
+        assert_eq!(
+            read_symlink_at_path(&mut device, &superblock, "/dir/new_link").unwrap(),
+            "/target"
+        );
         let allocator_after = load_allocator(&mut device, &superblock).unwrap();
         assert_eq!(allocator_after.allocated_blocks(), allocated_before + 2);
-        assert_eq!(load_inode_table(&mut device, &superblock).unwrap().len(), inode_count_before + 2);
+        assert_eq!(
+            load_inode_table(&mut device, &superblock).unwrap().len(),
+            inode_count_before + 2
+        );
         assert_unique_ownership(&mut device, &superblock);
         check_device(&mut device).unwrap();
         recover_journal_and_checkpoint(&mut device, superblock).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
-        assert_eq!(recover_journal_and_checkpoint(&mut device, superblock).unwrap(), RecoveryReport::default());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
+            RecoveryReport::default()
+        );
     }
 
     assert!(committed_crash_states > 0);
@@ -119,7 +157,9 @@ fn unlink_symlink_recovers_committed_parent_symlink_before_resolution() {
 
     for crash_at in 0..operations {
         let (mut device, superblock) = setup_with_victim();
-        let allocated_before = load_allocator(&mut device, &superblock).unwrap().allocated_blocks();
+        let allocated_before = load_allocator(&mut device, &superblock)
+            .unwrap()
+            .allocated_blocks();
         let inode_count_before = load_inode_table(&mut device, &superblock).unwrap().len();
 
         device.arm(Some(crash_at));
@@ -134,15 +174,28 @@ fn unlink_symlink_recovers_committed_parent_symlink_before_resolution() {
 
         unlink_symlink_at_path_journaled(&mut device, &superblock, "/dir_alias/victim").unwrap();
 
-        assert!(resolve_path_without_following_final_symlink(&mut device, &superblock, "/dir/victim").is_err());
+        assert!(resolve_path_without_following_final_symlink(
+            &mut device,
+            &superblock,
+            "/dir/victim"
+        )
+        .is_err());
         let allocator_after = load_allocator(&mut device, &superblock).unwrap();
         assert_eq!(allocator_after.allocated_blocks(), allocated_before);
-        assert_eq!(load_inode_table(&mut device, &superblock).unwrap().len(), inode_count_before);
+        assert_eq!(
+            load_inode_table(&mut device, &superblock).unwrap().len(),
+            inode_count_before
+        );
         assert_unique_ownership(&mut device, &superblock);
         check_device(&mut device).unwrap();
         recover_journal_and_checkpoint(&mut device, superblock).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
-        assert_eq!(recover_journal_and_checkpoint(&mut device, superblock).unwrap(), RecoveryReport::default());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
+            RecoveryReport::default()
+        );
     }
 
     assert!(committed_crash_states > 0);
