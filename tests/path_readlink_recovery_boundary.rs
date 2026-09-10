@@ -87,7 +87,9 @@ fn readlink_recovers_committed_final_symlink_before_no_follow_resolution() {
         let allocated_before = load_allocator(&mut device, &superblock)
             .unwrap()
             .allocated_blocks();
-        let inode_count_before = load_inode_table(&mut device, &superblock).unwrap().len();
+        let inode_count_before = load_inode_table(&mut device, &superblock)
+            .unwrap()
+            .len();
 
         device.arm(Some(crash_at));
         if create_symlink_journaled(&mut device, &superblock, 1, "file_alias", "/file").is_ok() {
