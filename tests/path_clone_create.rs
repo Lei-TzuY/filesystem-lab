@@ -15,8 +15,12 @@ use filesystem_lab::inode_codec::PersistedInode;
 use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
 use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::journal_region::load_journal_image;
-use filesystem_lab::path_clone_create::clone_file_blocks_to_path_journaled;
-use filesystem_lab::path_create::create_file_with_blocks_at_path_journaled;
+use filesystem_lab::path_clone_create::{
+    clone_file_blocks_to_path_journaled, clone_file_to_path_journaled,
+};
+use filesystem_lab::path_create::{
+    create_empty_file_at_path_journaled, create_file_with_blocks_at_path_journaled,
+};
 use filesystem_lab::path_lookup::read_file_range_at_path;
 use filesystem_lab::path_metadata::metadata_at_path;
 use filesystem_lab::recovery::RecoveryReport;
@@ -165,6 +169,60 @@ fn clones_source_block_range_into_fresh_path_with_independent_blocks() {
 }
 
 #[test]
+fn clones_entire_regular_file_into_fresh_path() {
+    let (mut device, superblock, source) = setup();
+    let allocator_before = load_allocator(&mut device, &superblock).unwrap();
+    let source_blocks_before = source_blocks(&mut device, &superblock);
+
+    clone_file_to_path_journaled(
+        &mut device,
+        &superblock,
+        "/src_alias/source",
+        "/dst_alias/cloned",
+    )
+    .unwrap();
+
+    assert_eq!(
+        load_allocator(&mut device, &superblock)
+            .unwrap()
+            .allocated_blocks(),
+        allocator_before.allocated_blocks() + source.len() as u64
+    );
+    assert_eq!(
+        source_blocks(&mut device, &superblock),
+        source_blocks_before
+    );
+    assert_clone(&mut device, &superblock, &source, &source_blocks_before);
+    assert_unique_ownership(&mut device, &superblock);
+    check_device(&mut device).unwrap();
+}
+
+#[test]
+fn clones_empty_regular_file_without_allocating_data_blocks() {
+    let (mut device, superblock, _) = setup();
+    create_empty_file_at_path_journaled(&mut device, &superblock, "/src/empty").unwrap();
+    let allocator_before = load_allocator(&mut device, &superblock).unwrap();
+    let inode_count_before = load_inode_table(&mut device, &superblock).unwrap().len();
+
+    clone_file_to_path_journaled(&mut device, &superblock, "/src/empty", "/dst_alias/cloned")
+        .unwrap();
+
+    let metadata = metadata_at_path(&mut device, &superblock, "/dst/cloned").unwrap();
+    assert_eq!(metadata.kind, InodeKind::File);
+    assert_eq!(metadata.logical_blocks, 0);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap().len(),
+        inode_count_before + 1
+    );
+    assert_unique_ownership(&mut device, &superblock);
+    check_device(&mut device).unwrap();
+}
+
+#[test]
 fn rejects_empty_or_out_of_range_clone_before_destination_creation() {
     let (mut device, superblock, _) = setup();
     for (first, count) in [(0, 0), (3, 1)] {
@@ -268,6 +326,88 @@ fn every_clone_create_crash_point_recovers_absent_or_complete_destination() {
                 &source[1..],
                 &source_blocks_before,
             );
+        }
+
+        assert_unique_ownership(&mut device, &superblock);
+        check_device(&mut device).unwrap();
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
+            RecoveryReport::default()
+        );
+    }
+}
+
+#[test]
+fn every_whole_file_clone_crash_point_recovers_absent_or_complete_destination() {
+    let (mut probe, superblock, _) = setup();
+    probe.arm(None);
+    clone_file_to_path_journaled(
+        &mut probe,
+        &superblock,
+        "/src_alias/source",
+        "/dst_alias/cloned",
+    )
+    .unwrap();
+    let operations = probe.operations();
+
+    for crash_at in 0..operations {
+        let (mut device, superblock, source) = setup();
+        let allocator_before = load_allocator(&mut device, &superblock).unwrap();
+        let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
+        let entries_before = load_directory_table(&mut device, &superblock).unwrap();
+        let source_blocks_before = source_blocks(&mut device, &superblock);
+
+        device.arm(Some(crash_at));
+        assert_eq!(
+            clone_file_to_path_journaled(
+                &mut device,
+                &superblock,
+                "/src_alias/source",
+                "/dst_alias/cloned",
+            )
+            .unwrap_err()
+            .kind(),
+            io::ErrorKind::Other,
+            "crash point {crash_at} must interrupt pathname whole-file clone"
+        );
+        device.reboot();
+        let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
+
+        assert_eq!(
+            source_blocks(&mut device, &superblock),
+            source_blocks_before
+        );
+        if recovery.committed_transactions == 0 {
+            assert_eq!(
+                load_allocator(&mut device, &superblock).unwrap(),
+                allocator_before
+            );
+            assert_eq!(
+                load_inode_table(&mut device, &superblock).unwrap(),
+                inodes_before
+            );
+            assert_eq!(
+                load_directory_table(&mut device, &superblock).unwrap(),
+                entries_before
+            );
+            assert_eq!(
+                metadata_at_path(&mut device, &superblock, "/dst/cloned")
+                    .unwrap_err()
+                    .kind(),
+                io::ErrorKind::NotFound
+            );
+        } else {
+            assert_eq!(recovery.committed_transactions, 1);
+            assert_eq!(
+                load_allocator(&mut device, &superblock)
+                    .unwrap()
+                    .allocated_blocks(),
+                allocator_before.allocated_blocks() + source.len() as u64
+            );
+            assert_clone(&mut device, &superblock, &source, &source_blocks_before);
         }
 
         assert_unique_ownership(&mut device, &superblock);
