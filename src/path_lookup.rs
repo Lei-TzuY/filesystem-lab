@@ -147,8 +147,10 @@ pub fn write_file_range_at_path_journaled(
 
 /// Atomically truncates the regular file named by an absolute pathname to an exact block count.
 ///
-/// Path resolution follows intermediate and final symbolic links with the same bounded expansion
-/// rules as [`resolve_path_following_symlinks`]. The resolved inode is delegated directly to
+/// Any older committed WAL is recovered and checkpointed before pathname resolution so target
+/// selection cannot observe a partially replayed namespace. Path resolution then follows
+/// intermediate and final symbolic links with the same bounded expansion rules as
+/// [`resolve_path_following_symlinks`]. The resolved inode is delegated directly to
 /// [`truncate_file_to_blocks_journaled`], so allocator ownership validation and the allocation+inode
 /// WAL transaction remain centralized in the existing truncate primitive.
 ///
@@ -157,15 +159,16 @@ pub fn write_file_range_at_path_journaled(
 /// holes, or define partial-block EOF semantics.
 ///
 /// # Errors
-/// Propagates pathname lookup errors and all [`truncate_file_to_blocks_journaled`] validation or
-/// durable I/O errors, including a resolved non-file inode, growth attempts, ownership disagreement,
-/// and insufficient journal capacity.
+/// Propagates recovery/checkpoint failures, pathname lookup errors, and all
+/// [`truncate_file_to_blocks_journaled`] validation or durable I/O errors, including a resolved
+/// non-file inode, growth attempts, ownership disagreement, and insufficient journal capacity.
 pub fn truncate_file_at_path_to_blocks_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
     path: &str,
     target_blocks: usize,
 ) -> io::Result<(Vec<u64>, RecoveryReport)> {
+    recover_journal_and_checkpoint(device, *superblock)?;
     let inode_id = resolve_path_following_symlinks(device, superblock, path)?;
     truncate_file_to_blocks_journaled(device, superblock, inode_id, target_blocks)
 }
