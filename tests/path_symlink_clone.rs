@@ -50,7 +50,10 @@ fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
     let mut seen = HashSet::new();
     for inode in load_inode_table(device, superblock).unwrap() {
         for block in inode.blocks {
-            assert!(seen.insert(block), "duplicate physical block reference {block}");
+            assert!(
+                seen.insert(block),
+                "duplicate physical block reference {block}"
+            );
             assert!(allocator.is_owned(block).unwrap());
         }
     }
@@ -60,15 +63,26 @@ fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
 fn clones_multiblock_symlink_target_into_fresh_storage() {
     let (mut device, superblock, target) = setup();
     let source_blocks = inode_blocks(&mut device, &superblock, "/source");
-    assert!(source_blocks.len() > 1, "fixture must exercise multi-block SYM2");
+    assert!(
+        source_blocks.len() > 1,
+        "fixture must exercise multi-block SYM2"
+    );
 
     clone_symlink_at_path_journaled(&mut device, &superblock, "/source", "/clone").unwrap();
 
-    assert_eq!(read_symlink_at_path(&mut device, &superblock, "/source").unwrap(), target);
-    assert_eq!(read_symlink_at_path(&mut device, &superblock, "/clone").unwrap(), target);
+    assert_eq!(
+        read_symlink_at_path(&mut device, &superblock, "/source").unwrap(),
+        target
+    );
+    assert_eq!(
+        read_symlink_at_path(&mut device, &superblock, "/clone").unwrap(),
+        target
+    );
     let clone_blocks = inode_blocks(&mut device, &superblock, "/clone");
     assert_eq!(clone_blocks.len(), source_blocks.len());
-    assert!(source_blocks.iter().all(|block| !clone_blocks.contains(block)));
+    assert!(source_blocks
+        .iter()
+        .all(|block| !clone_blocks.contains(block)));
     assert_unique_ownership(&mut device, &superblock);
     check_device(&mut device).unwrap();
 }
@@ -115,7 +129,9 @@ fn every_symlink_clone_crash_point_recovers_absent_or_complete_destination() {
             );
             let clone_blocks = inode_blocks(&mut device, &superblock, "/clone");
             assert_eq!(clone_blocks.len(), source_blocks.len());
-            assert!(source_blocks.iter().all(|block| !clone_blocks.contains(block)));
+            assert!(source_blocks
+                .iter()
+                .all(|block| !clone_blocks.contains(block)));
             assert_eq!(
                 load_allocator(&mut device, &superblock)
                     .unwrap()
