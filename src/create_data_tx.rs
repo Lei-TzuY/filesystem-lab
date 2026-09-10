@@ -34,32 +34,80 @@ pub fn store_create_with_data_journaled(
     data_block: u64,
     data: &[u8; BLOCK_SIZE],
 ) -> io::Result<RecoveryReport> {
+    store_create_with_blocks_journaled(
+        device,
+        superblock,
+        allocator,
+        inodes,
+        entries,
+        &[(data_block, *data)],
+    )
+}
+
+/// Persists create metadata plus multiple initialized file-data blocks in one bounded WAL transaction.
+///
+/// Every supplied data block must already be allocator-owned, must appear exactly once across the
+/// desired inode table, and must be unique within `data_blocks`. Allocation, inode, directory, and
+/// every changed data-block image are published under one commit, so recovery can expose only the
+/// complete pre-create state or the complete initialized file.
+///
+/// This helper deliberately performs no allocation itself. Callers choose the desired blocks and
+/// inode mapping before publication, which keeps first-fit policy and pathname validation outside the
+/// transaction-image layer. Journal capacity remains a hard pre-publication bound.
+///
+/// # Errors
+/// Returns `InvalidInput` for geometry disagreement, empty or duplicate data-block sets, allocator
+/// ownership disagreement, invalid desired inode references, or insufficient journal capacity.
+/// Metadata encoding, journal, recovery, checkpoint, and device I/O failures are propagated.
+pub fn store_create_with_blocks_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    allocator: &BlockAllocator,
+    inodes: &[PersistedInode],
+    entries: &[PersistedDirectoryEntry],
+    data_blocks: &[(u64, [u8; BLOCK_SIZE])],
+) -> io::Result<RecoveryReport> {
     if device.block_count() != superblock.total_blocks {
         return Err(invalid_input(
             "atomic create-with-data device geometry does not match superblock",
         ));
     }
-    allocator
-        .validate()
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
-    let owned = allocator
-        .is_owned(data_block)
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
-    if !owned {
+    if data_blocks.is_empty() {
         return Err(invalid_input(
-            "atomic create-with-data block is not allocator-owned",
+            "atomic create-with-data requires at least one data block",
         ));
     }
 
-    let references = inodes
-        .iter()
-        .flat_map(|inode| inode.blocks.iter())
-        .filter(|block| **block == data_block)
-        .count();
-    if references != 1 {
-        return Err(invalid_input(
-            "atomic create-with-data block must have exactly one inode owner",
-        ));
+    allocator
+        .validate()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+
+    let mut unique_blocks = std::collections::HashSet::with_capacity(data_blocks.len());
+    for (data_block, _) in data_blocks {
+        if !unique_blocks.insert(*data_block) {
+            return Err(invalid_input(
+                "atomic create-with-data blocks must be unique",
+            ));
+        }
+        let owned = allocator
+            .is_owned(*data_block)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+        if !owned {
+            return Err(invalid_input(
+                "atomic create-with-data block is not allocator-owned",
+            ));
+        }
+
+        let references = inodes
+            .iter()
+            .flat_map(|inode| inode.blocks.iter())
+            .filter(|block| **block == *data_block)
+            .count();
+        if references != 1 {
+            return Err(invalid_input(
+                "atomic create-with-data block must have exactly one inode owner",
+            ));
+        }
     }
 
     let mut capture = CaptureDevice::new(superblock.total_blocks);
@@ -90,10 +138,12 @@ pub fn store_create_with_data_journaled(
         "atomic create-with-data image rendered outside allocation, inode, and directory regions",
     )?;
 
-    let mut current = [0_u8; BLOCK_SIZE];
-    device.read_block(data_block, &mut current)?;
-    if current != *data {
-        changed.push((data_block, *data));
+    for (data_block, data) in data_blocks {
+        let mut current = [0_u8; BLOCK_SIZE];
+        device.read_block(*data_block, &mut current)?;
+        if current != *data {
+            changed.push((*data_block, *data));
+        }
     }
     if changed.is_empty() {
         return Ok(RecoveryReport::default());
