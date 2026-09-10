@@ -67,6 +67,7 @@ pub fn read_symlink_at_path(
     superblock: &Superblock,
     path: &str,
 ) -> io::Result<String> {
+    recover_journal_and_checkpoint(device, *superblock)?;
     let inode_id = resolve_path_without_following_final_symlink(device, superblock, path)?;
     read_symlink(device, superblock, inode_id)
 }
