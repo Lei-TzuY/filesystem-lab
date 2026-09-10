@@ -44,17 +44,12 @@ pub fn grow_file_at_path_to_blocks_journaled(
 
     let additional = target_blocks - metadata.logical_blocks;
     let mut zero_blocks = Vec::new();
-    zero_blocks.try_reserve_exact(additional).map_err(|_| {
-        invalid_input("pathname zero-growth block count exceeds staging capacity")
-    })?;
+    zero_blocks
+        .try_reserve_exact(additional)
+        .map_err(|_| invalid_input("pathname zero-growth block count exceeds staging capacity"))?;
     zero_blocks.resize(additional, [0_u8; BLOCK_SIZE]);
 
-    append_file_blocks_journaled(
-        device,
-        superblock,
-        metadata.inode_id,
-        &zero_blocks,
-    )
+    append_file_blocks_journaled(device, superblock, metadata.inode_id, &zero_blocks)
 }
 
 fn invalid_input(message: &'static str) -> io::Error {
