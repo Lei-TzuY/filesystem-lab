@@ -192,12 +192,7 @@ fn clones_entire_regular_file_into_fresh_path() {
         source_blocks(&mut device, &superblock),
         source_blocks_before
     );
-    assert_clone(
-        &mut device,
-        &superblock,
-        &source,
-        &source_blocks_before,
-    );
+    assert_clone(&mut device, &superblock, &source, &source_blocks_before);
     assert_unique_ownership(&mut device, &superblock);
     check_device(&mut device).unwrap();
 }
@@ -209,13 +204,8 @@ fn clones_empty_regular_file_without_allocating_data_blocks() {
     let allocator_before = load_allocator(&mut device, &superblock).unwrap();
     let inode_count_before = load_inode_table(&mut device, &superblock).unwrap().len();
 
-    clone_file_to_path_journaled(
-        &mut device,
-        &superblock,
-        "/src/empty",
-        "/dst_alias/cloned",
-    )
-    .unwrap();
+    clone_file_to_path_journaled(&mut device, &superblock, "/src/empty", "/dst_alias/cloned")
+        .unwrap();
 
     let metadata = metadata_at_path(&mut device, &superblock, "/dst/cloned").unwrap();
     assert_eq!(metadata.kind, InodeKind::File);
@@ -417,12 +407,7 @@ fn every_whole_file_clone_crash_point_recovers_absent_or_complete_destination() 
                     .allocated_blocks(),
                 allocator_before.allocated_blocks() + source.len() as u64
             );
-            assert_clone(
-                &mut device,
-                &superblock,
-                &source,
-                &source_blocks_before,
-            );
+            assert_clone(&mut device, &superblock, &source, &source_blocks_before);
         }
 
         assert_unique_ownership(&mut device, &superblock);
