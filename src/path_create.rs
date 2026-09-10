@@ -3,9 +3,7 @@ use std::io;
 
 use crate::allocation_disk::load_allocator;
 use crate::block::{BlockDevice, BLOCK_SIZE};
-use crate::create_data_tx::{
-    store_create_with_blocks_journaled, store_create_with_data_journaled,
-};
+use crate::create_data_tx::{store_create_with_blocks_journaled, store_create_with_data_journaled};
 use crate::create_tx::store_create_metadata_journaled;
 use crate::directory_codec::{encode_directory_entry, PersistedDirectoryEntry};
 use crate::directory_table::load_directory_table;
