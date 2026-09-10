@@ -13,7 +13,7 @@ Both return `PathMetadata` with:
 
 The reference count is derived from the directory table rather than stored separately, matching the existing format-v5 hard-link model. The root inode may legitimately report zero namespace references.
 
-Before either query resolves its pathname, it recovers and checkpoints any older committed WAL. The selected inode, any followed symbolic-link chain, and the derived namespace-reference count therefore come from recovered durable namespace state rather than a partially replayed home-write prefix. `symlink_metadata_at_path` preserves its final-component no-follow rule after that recovery boundary.
+Before either query resolves its pathname, it recovers and checkpoints any older committed WAL. The selected inode, any followed symbolic-link chain, and the derived namespace-reference count therefore come from recovered durable namespace state rather than a partially replayed home-write prefix. `symlink_metadata_at_path` preserves its final-component no-follow rule after that recovery boundary. Although these are logically read-only metadata queries, invoking one after an interrupted committed transaction may perform recovery home writes, flushes, and journal clearing before the query result is produced.
 
 Before returning metadata, the query loads the durable allocator and rejects a resolved inode that references a reserved metadata block or an allocator-free data block. This prevents a consumer from treating an allocator/inode disagreement as trustworthy metadata.
 
