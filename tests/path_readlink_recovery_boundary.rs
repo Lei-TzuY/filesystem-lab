@@ -99,10 +99,7 @@ fn readlink_recovers_committed_final_symlink_before_no_follow_resolution() {
         }
         committed_crash_states += 1;
 
-        assert_eq!(
-            read_symlink_at_path(&mut device, &superblock, "/file_alias").unwrap(),
-            "/file"
-        );
+        assert_eq!(read_symlink_at_path(&mut device, &superblock, "/file_alias").unwrap(), "/file");
 
         let allocator_after = load_allocator(&mut device, &superblock).unwrap();
         assert_eq!(allocator_after.allocated_blocks(), allocated_before + 1);
