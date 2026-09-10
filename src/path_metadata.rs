@@ -6,6 +6,7 @@ use crate::directory_table::load_directory_table;
 use crate::format::Superblock;
 use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
+use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::path_lookup::{
     resolve_path_following_symlinks, resolve_path_without_following_final_symlink,
 };
@@ -26,19 +27,23 @@ pub struct PathMetadata {
 /// Returns metadata for an absolute pathname, following the final symbolic link.
 ///
 /// This is the format-v5 analogue of `stat(2)`: intermediate and final symbolic links use the
-/// existing bounded pathname resolver. Before metadata is returned, every physical block referenced
-/// by the resolved inode is required to be a non-reserved allocator-owned data block.
+/// existing bounded pathname resolver. Before pathname resolution, any older committed WAL is
+/// recovered and checkpointed so the selected inode and reported namespace-reference count are
+/// derived from one recovered durable namespace state. Before metadata is returned, every physical
+/// block referenced by the resolved inode is required to be a non-reserved allocator-owned data
+/// block.
 ///
 /// # Errors
 ///
-/// Propagates bounded pathname lookup and persisted metadata decode errors. Returns `InvalidData`
-/// when the resolved inode is missing after lookup, references a reserved/free block, or a non-root
-/// inode has no durable namespace reference.
+/// Propagates recovery/checkpoint failures, bounded pathname lookup, and persisted metadata decode
+/// errors. Returns `InvalidData` when the resolved inode is missing after lookup, references a
+/// reserved/free block, or a non-root inode has no durable namespace reference.
 pub fn metadata_at_path(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
     path: &str,
 ) -> io::Result<PathMetadata> {
+    recover_journal_and_checkpoint(device, *superblock)?;
     let inode_id = resolve_path_following_symlinks(device, superblock, path)?;
     metadata_for_inode(device, superblock, inode_id)
 }
@@ -47,17 +52,20 @@ pub fn metadata_at_path(
 ///
 /// Intermediate symbolic links are still followed. A dangling final symlink is therefore
 /// inspectable, matching `lstat(2)`-style final-component semantics without claiming unsupported
-/// POSIX fields.
+/// POSIX fields. Any older committed WAL is recovered and checkpointed before resolution so both
+/// intermediate-parent selection and the final no-follow lookup observe recovered namespace state.
 ///
 /// # Errors
 ///
-/// Propagates bounded pathname lookup and persisted metadata decode errors. Returns `InvalidData`
-/// for allocator/inode/namespace disagreement detected while describing the resolved inode.
+/// Propagates recovery/checkpoint failures, bounded pathname lookup, and persisted metadata decode
+/// errors. Returns `InvalidData` for allocator/inode/namespace disagreement detected while
+/// describing the resolved inode.
 pub fn symlink_metadata_at_path(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
     path: &str,
 ) -> io::Result<PathMetadata> {
+    recover_journal_and_checkpoint(device, *superblock)?;
     let inode_id = resolve_path_without_following_final_symlink(device, superblock, path)?;
     metadata_for_inode(device, superblock, inode_id)
 }
