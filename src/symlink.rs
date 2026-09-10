@@ -207,10 +207,7 @@ pub(crate) fn validate_symlink_inode(
     read_symlink_inode(device, inode).map(|_| ())
 }
 
-fn read_symlink_inode(
-    device: &mut impl BlockDevice,
-    inode: &PersistedInode,
-) -> io::Result<String> {
+fn read_symlink_inode(device: &mut impl BlockDevice, inode: &PersistedInode) -> io::Result<String> {
     if inode.blocks.is_empty() {
         return Err(invalid_data(
             "symbolic link must reference at least one block",
@@ -227,17 +224,17 @@ fn read_symlink_inode(
         images.push(image);
     }
 
-    match images[0][..4] {
-        SYMLINK_V1_MAGIC => {
-            if images.len() != 1 {
-                return Err(invalid_data(
-                    "SYM1 symbolic link must reference exactly one block",
-                ));
-            }
-            decode_v1_target(&images[0])
+    if images[0][..4] == SYMLINK_V1_MAGIC {
+        if images.len() != 1 {
+            return Err(invalid_data(
+                "SYM1 symbolic link must reference exactly one block",
+            ));
         }
-        SYMLINK_V2_MAGIC => decode_v2_target(&images),
-        _ => Err(invalid_data("invalid symlink payload magic")),
+        decode_v1_target(&images[0])
+    } else if images[0][..4] == SYMLINK_V2_MAGIC {
+        decode_v2_target(&images)
+    } else {
+        Err(invalid_data("invalid symlink payload magic"))
     }
 }
 
@@ -272,11 +269,9 @@ fn encode_target_blocks(target: &str) -> io::Result<Vec<[u8; BLOCK_SIZE]>> {
     bytes[4..6].copy_from_slice(&SYMLINK_V2_VERSION.to_le_bytes());
     bytes[SYMLINK_V2_LEN_OFFSET..SYMLINK_V2_LEN_OFFSET + 4]
         .copy_from_slice(&total_len.to_le_bytes());
-    bytes[SYMLINK_V2_HEADER_LEN..SYMLINK_V2_HEADER_LEN + target.len()]
-        .copy_from_slice(target);
+    bytes[SYMLINK_V2_HEADER_LEN..SYMLINK_V2_HEADER_LEN + target.len()].copy_from_slice(target);
     let crc = target_crc(target);
-    bytes[SYMLINK_V2_CRC_OFFSET..SYMLINK_V2_CRC_OFFSET + 4]
-        .copy_from_slice(&crc.to_le_bytes());
+    bytes[SYMLINK_V2_CRC_OFFSET..SYMLINK_V2_CRC_OFFSET + 4].copy_from_slice(&crc.to_le_bytes());
 
     Ok(bytes
         .chunks_exact(BLOCK_SIZE)
@@ -295,11 +290,9 @@ fn encode_v1_target(target: &[u8]) -> io::Result<[u8; BLOCK_SIZE]> {
     image[..4].copy_from_slice(&SYMLINK_V1_MAGIC);
     image[4..6].copy_from_slice(&SYMLINK_V1_VERSION.to_le_bytes());
     image[6..8].copy_from_slice(&len.to_le_bytes());
-    image[SYMLINK_V1_HEADER_LEN..SYMLINK_V1_HEADER_LEN + target.len()]
-        .copy_from_slice(target);
+    image[SYMLINK_V1_HEADER_LEN..SYMLINK_V1_HEADER_LEN + target.len()].copy_from_slice(target);
     let crc = v1_symlink_crc(&image);
-    image[SYMLINK_V1_CRC_OFFSET..SYMLINK_V1_CRC_OFFSET + 4]
-        .copy_from_slice(&crc.to_le_bytes());
+    image[SYMLINK_V1_CRC_OFFSET..SYMLINK_V1_CRC_OFFSET + 4].copy_from_slice(&crc.to_le_bytes());
     Ok(image)
 }
 
@@ -346,9 +339,7 @@ fn decode_v2_target(images: &[[u8; BLOCK_SIZE]]) -> io::Result<String> {
     ]))
     .map_err(|_| invalid_data("multi-block symlink target length is invalid"))?;
     if len <= SYMLINK_V1_MAX_TARGET_LEN || len > MAX_SYMLINK_TARGET_LEN {
-        return Err(invalid_data(
-            "invalid multi-block symlink target length",
-        ));
+        return Err(invalid_data("invalid multi-block symlink target length"));
     }
     let encoded_len = SYMLINK_V2_HEADER_LEN
         .checked_add(len)
@@ -371,9 +362,7 @@ fn decode_v2_target(images: &[[u8; BLOCK_SIZE]]) -> io::Result<String> {
     let target = &bytes[SYMLINK_V2_HEADER_LEN..encoded_len];
     let stored_crc = u32::from_le_bytes([first[12], first[13], first[14], first[15]]);
     if stored_crc != target_crc(target) {
-        return Err(invalid_data(
-            "multi-block symlink target checksum mismatch",
-        ));
+        return Err(invalid_data("multi-block symlink target checksum mismatch"));
     }
     decode_utf8(target)
 }
