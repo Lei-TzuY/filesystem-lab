@@ -193,7 +193,7 @@ fn rejects_empty_or_out_of_range_clone_before_destination_creation() {
 
 #[test]
 fn every_clone_create_crash_point_recovers_absent_or_complete_destination() {
-    let (mut probe, superblock, source) = setup();
+    let (mut probe, superblock, _) = setup();
     probe.arm(None);
     clone_file_blocks_to_path_journaled(
         &mut probe,
