@@ -8,6 +8,7 @@ use crate::file_range_read::read_file_range;
 use crate::format::Superblock;
 use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
+use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::recovery::RecoveryReport;
 use crate::symlink::read_symlink;
 use crate::truncate_tx::truncate_file_to_blocks_journaled;
@@ -105,19 +106,21 @@ pub fn read_file_range_at_path(
 
 /// Atomically writes one bounded byte range to the regular file named by an absolute pathname.
 ///
-/// Path resolution follows symbolic links, including the final component, using the same bounded
-/// expansion rules as [`resolve_path_following_symlinks`]. The resolved inode is then passed directly
-/// to [`write_file_range_journaled`], keeping regular-file kind, range, allocator ownership, WAL
+/// Any older committed WAL is recovered and checkpointed before pathname resolution so lookup never
+/// derives the target inode from a partially replayed namespace. Path resolution then follows
+/// symbolic links, including the final component, using the same bounded expansion rules as
+/// [`resolve_path_following_symlinks`]. The resolved inode is passed directly to
+/// [`write_file_range_journaled`], keeping regular-file kind, range, allocator ownership, WAL
 /// publication, recovery, and journal-capacity validation centralized in the existing mutation path.
 ///
 /// This operation only overwrites bytes inside logical blocks already referenced by the resolved
 /// regular-file inode. It does not allocate blocks, extend the file, define persisted EOF semantics,
-/// or mutate allocator, inode, or namespace metadata.
+/// or mutate allocator, inode, or namespace metadata. Filesystem format remains v5.
 ///
 /// # Errors
-/// Propagates pathname lookup errors and all [`write_file_range_journaled`] validation or durable I/O
-/// errors, including a resolved non-file inode, empty/out-of-range writes, ownership disagreement,
-/// and insufficient journal capacity.
+/// Propagates recovery/checkpoint failures, pathname lookup errors, and all
+/// [`write_file_range_journaled`] validation or durable I/O errors, including a resolved non-file
+/// inode, empty/out-of-range writes, ownership disagreement, and insufficient journal capacity.
 pub fn write_file_range_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -126,6 +129,7 @@ pub fn write_file_range_at_path_journaled(
     start_offset: usize,
     data: &[u8],
 ) -> io::Result<RecoveryReport> {
+    recover_journal_and_checkpoint(device, *superblock)?;
     let inode_id = resolve_path_following_symlinks(device, superblock, path)?;
     write_file_range_journaled(
         device,
