@@ -103,7 +103,9 @@ fn pathname_range_read_recovers_committed_symlink_before_resolution() {
         let inode_count_before = load_inode_table(&mut device, &superblock).unwrap().len();
 
         device.arm(Some(crash_at));
-        if create_symlink_journaled(&mut device, &superblock, 1, "file_alias", "/dir/file").is_ok() {
+        if create_symlink_journaled(&mut device, &superblock, 1, "file_alias", "/dir/file")
+            .is_ok()
+        {
             continue;
         }
         device.reboot();
