@@ -69,10 +69,8 @@ fn setup() -> (CrashDevice, Superblock, Vec<u64>) {
         ],
     )
     .unwrap();
-    for (index, block) in blocks.iter().copied().enumerate() {
-        device
-            .write_block(block, &[0x10 + index as u8; BLOCK_SIZE])
-            .unwrap();
+    for (block, fill) in blocks.iter().copied().zip([0x10_u8, 0x11, 0x12]) {
+        device.write_block(block, &[fill; BLOCK_SIZE]).unwrap();
     }
     device.flush().unwrap();
     check_device(&mut device).unwrap();
