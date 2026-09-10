@@ -60,6 +60,10 @@ fn setup() -> (CrashDevice, Superblock) {
     (device, superblock)
 }
 
+fn read_byte(device: &mut CrashDevice, superblock: &Superblock, index: usize) -> u8 {
+    read_file_range_at_path(device, superblock, "/file", index, 0, 1).unwrap()[0]
+}
+
 fn assert_unique_file_ownership(device: &mut CrashDevice, superblock: &Superblock) {
     let allocator = load_allocator(device, superblock).unwrap();
     allocator.validate().unwrap();
@@ -67,7 +71,10 @@ fn assert_unique_file_ownership(device: &mut CrashDevice, superblock: &Superbloc
     let mut seen = HashSet::new();
     for inode in inodes.iter().filter(|inode| inode.kind == InodeKind::File) {
         for block in &inode.blocks {
-            assert!(seen.insert(*block), "duplicate physical block reference {block}");
+            assert!(
+                seen.insert(*block),
+                "duplicate physical block reference {block}"
+            );
             assert!(allocator.is_owned(*block).unwrap());
         }
     }
@@ -91,30 +98,25 @@ fn grows_empty_file_to_exact_zero_filled_block_count() {
     let file = inodes.iter().find(|inode| inode.id == 2).unwrap();
     assert_eq!(file.blocks, allocated);
     for index in 0..3 {
-        assert_eq!(
-            read_file_range_at_path(&mut device, &superblock, "/file", index, 0, 1).unwrap(),
-            vec![0]
-        );
+        assert_eq!(read_byte(&mut device, &superblock, index), 0);
     }
     assert_unique_file_ownership(&mut device, &superblock);
     check_device(&mut device).unwrap();
 }
 
 #[test]
-fn rejects_non_growth_and_non_file_targets_without_mutation() {
+fn rejects_equal_size_and_non_file_targets_without_mutation() {
     let (mut device, superblock) = setup();
     let allocator_before = load_allocator(&mut device, &superblock).unwrap();
     let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
     let directory_before = load_directory_table(&mut device, &superblock).unwrap();
 
-    for target in [0, 0] {
-        assert_eq!(
-            grow_file_at_path_to_blocks_journaled(&mut device, &superblock, "/file", target)
-                .unwrap_err()
-                .kind(),
-            io::ErrorKind::InvalidInput
-        );
-    }
+    assert_eq!(
+        grow_file_at_path_to_blocks_journaled(&mut device, &superblock, "/file", 0)
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::InvalidInput
+    );
     assert_eq!(
         grow_file_at_path_to_blocks_journaled(&mut device, &superblock, "/dir", 1)
             .unwrap_err()
@@ -122,8 +124,14 @@ fn rejects_non_growth_and_non_file_targets_without_mutation() {
         io::ErrorKind::InvalidInput
     );
 
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
     assert_eq!(
         load_directory_table(&mut device, &superblock).unwrap(),
         directory_before
@@ -168,13 +176,8 @@ fn every_zero_growth_crash_point_recovers_old_or_complete_new_state() {
                 allocator_after.allocated_blocks(),
                 allocator_before.allocated_blocks() + 2
             );
-            for index in 0..2 {
-                assert_eq!(
-                    read_file_range_at_path(&mut device, &superblock, "/file", index, 0, 1)
-                        .unwrap(),
-                    vec![0]
-                );
-            }
+            assert_eq!(read_byte(&mut device, &superblock, 0), 0);
+            assert_eq!(read_byte(&mut device, &superblock, 1), 0);
         }
 
         assert_eq!(
