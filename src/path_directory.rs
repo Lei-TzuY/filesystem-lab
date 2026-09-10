@@ -5,6 +5,7 @@ use crate::directory_table::load_directory_table;
 use crate::format::Superblock;
 use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
+use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::path_lookup::resolve_path_following_symlinks;
 
 /// One durable child entry returned by [`list_directory_at_path`].
@@ -17,25 +18,28 @@ pub struct PathDirectoryEntry {
 
 /// Lists the immediate children of one absolute directory pathname.
 ///
-/// Path resolution follows intermediate and final symbolic links using the existing bounded
-/// resolver. The resolved inode must be a persisted directory. Child entries are derived from the
-/// durable directory table and joined against the durable inode table so callers receive the exact
-/// child inode identity and kind without following child symlinks. Results are sorted by entry name
-/// for deterministic enumeration independent of directory-table record order.
+/// Before resolving the pathname, any older committed WAL transaction is recovered and checkpointed
+/// so directory selection and enumeration are derived from the recovered namespace. Path resolution
+/// then follows intermediate and final symbolic links using the existing bounded resolver. The
+/// resolved inode must be a persisted directory. Child entries are derived from the durable directory
+/// table and joined against the durable inode table so callers receive the exact child inode identity
+/// and kind without following child symlinks. Results are sorted by entry name for deterministic
+/// enumeration independent of directory-table record order.
 ///
 /// This is deliberately a read-only format-v5 namespace surface. It does not synthesize `.` or
 /// `..`, expose cookies/offsets, or claim POSIX readdir ordering semantics.
 ///
 /// # Errors
 ///
-/// Propagates bounded pathname lookup and persisted table decode errors. Returns `InvalidInput` when
-/// the resolved pathname is not a directory, and `InvalidData` when a durable directory entry names
-/// an inode that is absent from the inode table.
+/// Propagates recovery/checkpoint, bounded pathname lookup, and persisted table decode errors. Returns
+/// `InvalidInput` when the resolved pathname is not a directory, and `InvalidData` when a durable
+/// directory entry names an inode that is absent from the inode table.
 pub fn list_directory_at_path(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
     path: &str,
 ) -> io::Result<Vec<PathDirectoryEntry>> {
+    recover_journal_and_checkpoint(device, *superblock)?;
     let directory_inode_id = resolve_path_following_symlinks(device, superblock, path)?;
     let inodes = load_inode_table(device, superblock)?;
     let directory_inode = inodes
