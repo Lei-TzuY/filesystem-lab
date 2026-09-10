@@ -154,7 +154,9 @@ fn pathname_batch_overwrite_recovers_committed_symlink_before_resolution() {
 
         let allocator = load_allocator(&mut device, &superblock).unwrap();
         assert_eq!(allocator.allocated_blocks(), allocated_before + 1);
-        assert!(blocks.iter().all(|block| allocator.is_owned(*block).unwrap()));
+        assert!(blocks
+            .iter()
+            .all(|block| allocator.is_owned(*block).unwrap()));
 
         let namespace = load_directory_table(&mut device, &superblock).unwrap();
         assert!(namespace
