@@ -68,14 +68,7 @@ fn setup() -> (CrashDevice, Superblock) {
 
 fn setup_with_source_symlink() -> (CrashDevice, Superblock) {
     let (mut device, superblock) = setup();
-    create_symlink_journaled(
-        &mut device,
-        &superblock,
-        1,
-        "source_link",
-        "/file",
-    )
-    .unwrap();
+    create_symlink_journaled(&mut device, &superblock, 1, "source_link", "/file").unwrap();
     recover_journal_and_checkpoint(&mut device, superblock).unwrap();
     check_device(&mut device).unwrap();
     (device, superblock)
@@ -129,13 +122,8 @@ fn regular_hard_link_recovers_committed_source_symlink_before_resolution() {
         }
         committed_crash_states += 1;
 
-        hard_link_file_at_path_journaled(
-            &mut device,
-            &superblock,
-            "/file_alias",
-            "/dir/linked",
-        )
-        .unwrap();
+        hard_link_file_at_path_journaled(&mut device, &superblock, "/file_alias", "/dir/linked")
+            .unwrap();
 
         assert_eq!(
             resolve_path_following_symlinks(&mut device, &superblock, "/file_alias").unwrap(),
@@ -177,14 +165,10 @@ fn symlink_hard_link_recovers_committed_destination_parent_symlink_before_resolu
 
     for crash_at in 0..operations {
         let (mut device, superblock) = setup_with_source_symlink();
-        let source_inode = resolve_path_without_following_final_symlink(
-            &mut device,
-            &superblock,
-            "/source_link",
-        )
-        .unwrap();
-        let source_target =
-            read_symlink_at_path(&mut device, &superblock, "/source_link").unwrap();
+        let source_inode =
+            resolve_path_without_following_final_symlink(&mut device, &superblock, "/source_link")
+                .unwrap();
+        let source_target = read_symlink_at_path(&mut device, &superblock, "/source_link").unwrap();
         let allocated_before = load_allocator(&mut device, &superblock)
             .unwrap()
             .allocated_blocks();
