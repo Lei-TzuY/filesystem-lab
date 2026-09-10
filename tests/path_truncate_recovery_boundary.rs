@@ -122,13 +122,9 @@ fn pathname_truncate_recovers_committed_symlink_before_resolution() {
         }
         committed_crash_states += 1;
 
-        let (released, report) = truncate_file_at_path_to_blocks_journaled(
-            &mut device,
-            &superblock,
-            "/file_alias",
-            1,
-        )
-        .unwrap();
+        let (released, report) =
+            truncate_file_at_path_to_blocks_journaled(&mut device, &superblock, "/file_alias", 1)
+                .unwrap();
         assert_eq!(released, blocks[1..]);
         assert_eq!(report.committed_transactions, 1);
 
