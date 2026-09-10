@@ -207,9 +207,14 @@ pub(crate) fn validate_symlink_inode(
     read_symlink_inode(device, inode).map(|_| ())
 }
 
-fn read_symlink_inode(device: &mut impl BlockDevice, inode: &PersistedInode) -> io::Result<String> {
+fn read_symlink_inode(
+    device: &mut impl BlockDevice,
+    inode: &PersistedInode,
+) -> io::Result<String> {
     if inode.blocks.is_empty() {
-        return Err(invalid_data("symbolic link must reference at least one block"));
+        return Err(invalid_data(
+            "symbolic link must reference at least one block",
+        ));
     }
     if inode.blocks.len() > MAX_SYMLINK_TARGET_BLOCKS {
         return Err(invalid_data("symbolic link exceeds bounded block limit"));
@@ -225,7 +230,9 @@ fn read_symlink_inode(device: &mut impl BlockDevice, inode: &PersistedInode) -> 
     match images[0][..4] {
         SYMLINK_V1_MAGIC => {
             if images.len() != 1 {
-                return Err(invalid_data("SYM1 symbolic link must reference exactly one block"));
+                return Err(invalid_data(
+                    "SYM1 symbolic link must reference exactly one block",
+                ));
             }
             decode_v1_target(&images[0])
         }
@@ -243,7 +250,9 @@ fn encode_target_blocks(target: &str) -> io::Result<Vec<[u8; BLOCK_SIZE]>> {
         return Ok(vec![encode_v1_target(target)?]);
     }
     if target.len() > MAX_SYMLINK_TARGET_LEN {
-        return Err(invalid_input("symlink target exceeds bounded multi-block limit"));
+        return Err(invalid_input(
+            "symlink target exceeds bounded multi-block limit",
+        ));
     }
 
     let total_len = u32::try_from(target.len())
@@ -253,7 +262,9 @@ fn encode_target_blocks(target: &str) -> io::Result<Vec<[u8; BLOCK_SIZE]>> {
         .ok_or_else(|| invalid_input("symlink target encoded length overflow"))?;
     let block_count = encoded_len.div_ceil(BLOCK_SIZE);
     if block_count > MAX_SYMLINK_TARGET_BLOCKS {
-        return Err(invalid_input("symlink target exceeds bounded multi-block limit"));
+        return Err(invalid_input(
+            "symlink target exceeds bounded multi-block limit",
+        ));
     }
 
     let mut bytes = vec![0_u8; block_count * BLOCK_SIZE];
@@ -261,9 +272,11 @@ fn encode_target_blocks(target: &str) -> io::Result<Vec<[u8; BLOCK_SIZE]>> {
     bytes[4..6].copy_from_slice(&SYMLINK_V2_VERSION.to_le_bytes());
     bytes[SYMLINK_V2_LEN_OFFSET..SYMLINK_V2_LEN_OFFSET + 4]
         .copy_from_slice(&total_len.to_le_bytes());
-    bytes[SYMLINK_V2_HEADER_LEN..SYMLINK_V2_HEADER_LEN + target.len()].copy_from_slice(target);
+    bytes[SYMLINK_V2_HEADER_LEN..SYMLINK_V2_HEADER_LEN + target.len()]
+        .copy_from_slice(target);
     let crc = target_crc(target);
-    bytes[SYMLINK_V2_CRC_OFFSET..SYMLINK_V2_CRC_OFFSET + 4].copy_from_slice(&crc.to_le_bytes());
+    bytes[SYMLINK_V2_CRC_OFFSET..SYMLINK_V2_CRC_OFFSET + 4]
+        .copy_from_slice(&crc.to_le_bytes());
 
     Ok(bytes
         .chunks_exact(BLOCK_SIZE)
@@ -282,9 +295,11 @@ fn encode_v1_target(target: &[u8]) -> io::Result<[u8; BLOCK_SIZE]> {
     image[..4].copy_from_slice(&SYMLINK_V1_MAGIC);
     image[4..6].copy_from_slice(&SYMLINK_V1_VERSION.to_le_bytes());
     image[6..8].copy_from_slice(&len.to_le_bytes());
-    image[SYMLINK_V1_HEADER_LEN..SYMLINK_V1_HEADER_LEN + target.len()].copy_from_slice(target);
+    image[SYMLINK_V1_HEADER_LEN..SYMLINK_V1_HEADER_LEN + target.len()]
+        .copy_from_slice(target);
     let crc = v1_symlink_crc(&image);
-    image[SYMLINK_V1_CRC_OFFSET..SYMLINK_V1_CRC_OFFSET + 4].copy_from_slice(&crc.to_le_bytes());
+    image[SYMLINK_V1_CRC_OFFSET..SYMLINK_V1_CRC_OFFSET + 4]
+        .copy_from_slice(&crc.to_le_bytes());
     Ok(image)
 }
 
@@ -307,7 +322,9 @@ fn decode_v1_target(image: &[u8; BLOCK_SIZE]) -> io::Result<String> {
         .iter()
         .any(|byte| *byte != 0)
     {
-        return Err(invalid_data("symlink target block has non-zero trailing bytes"));
+        return Err(invalid_data(
+            "symlink target block has non-zero trailing bytes",
+        ));
     }
     decode_utf8(&image[SYMLINK_V1_HEADER_LEN..SYMLINK_V1_HEADER_LEN + len])
 }
@@ -315,23 +332,31 @@ fn decode_v1_target(image: &[u8; BLOCK_SIZE]) -> io::Result<String> {
 fn decode_v2_target(images: &[[u8; BLOCK_SIZE]]) -> io::Result<String> {
     let first = &images[0];
     if u16::from_le_bytes([first[4], first[5]]) != SYMLINK_V2_VERSION {
-        return Err(invalid_data("unsupported multi-block symlink payload version"));
+        return Err(invalid_data(
+            "unsupported multi-block symlink payload version",
+        ));
     }
     if first[6..8].iter().any(|byte| *byte != 0) {
-        return Err(invalid_data("multi-block symlink reserved bytes are non-zero"));
+        return Err(invalid_data(
+            "multi-block symlink reserved bytes are non-zero",
+        ));
     }
     let len = usize::try_from(u32::from_le_bytes([
         first[8], first[9], first[10], first[11],
     ]))
     .map_err(|_| invalid_data("multi-block symlink target length is invalid"))?;
     if len <= SYMLINK_V1_MAX_TARGET_LEN || len > MAX_SYMLINK_TARGET_LEN {
-        return Err(invalid_data("invalid multi-block symlink target length"));
+        return Err(invalid_data(
+            "invalid multi-block symlink target length",
+        ));
     }
     let encoded_len = SYMLINK_V2_HEADER_LEN
         .checked_add(len)
         .ok_or_else(|| invalid_data("multi-block symlink encoded length overflow"))?;
     if encoded_len.div_ceil(BLOCK_SIZE) != images.len() {
-        return Err(invalid_data("multi-block symlink block count does not match target length"));
+        return Err(invalid_data(
+            "multi-block symlink block count does not match target length",
+        ));
     }
 
     let mut bytes = Vec::with_capacity(images.len() * BLOCK_SIZE);
@@ -339,14 +364,16 @@ fn decode_v2_target(images: &[[u8; BLOCK_SIZE]]) -> io::Result<String> {
         bytes.extend_from_slice(image);
     }
     if bytes[encoded_len..].iter().any(|byte| *byte != 0) {
-        return Err(invalid_data("multi-block symlink has non-zero trailing bytes"));
+        return Err(invalid_data(
+            "multi-block symlink has non-zero trailing bytes",
+        ));
     }
     let target = &bytes[SYMLINK_V2_HEADER_LEN..encoded_len];
-    let stored_crc = u32::from_le_bytes([
-        first[12], first[13], first[14], first[15],
-    ]);
+    let stored_crc = u32::from_le_bytes([first[12], first[13], first[14], first[15]]);
     if stored_crc != target_crc(target) {
-        return Err(invalid_data("multi-block symlink target checksum mismatch"));
+        return Err(invalid_data(
+            "multi-block symlink target checksum mismatch",
+        ));
     }
     decode_utf8(target)
 }
