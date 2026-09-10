@@ -114,15 +114,8 @@ fn pathname_range_write_recovers_committed_symlink_before_resolution() {
         .unwrap();
 
         assert_eq!(
-            read_file_range_at_path(
-                &mut device,
-                &superblock,
-                "/file",
-                0,
-                BLOCK_SIZE - 4,
-                4,
-            )
-            .unwrap(),
+            read_file_range_at_path(&mut device, &superblock, "/file", 0, BLOCK_SIZE - 4, 4,)
+                .unwrap(),
             vec![0xaa; 4]
         );
         let allocator_after = load_allocator(&mut device, &superblock).unwrap();
