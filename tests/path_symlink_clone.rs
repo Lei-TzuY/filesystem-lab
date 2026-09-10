@@ -7,7 +7,9 @@ use filesystem_lab::allocation_disk::load_allocator;
 use filesystem_lab::format::Superblock;
 use filesystem_lab::format_geometry::format_device_with_journal_blocks;
 use filesystem_lab::fsck::check_device;
-use filesystem_lab::inode_table::load_inode_table;
+use filesystem_lab::inode::InodeKind;
+use filesystem_lab::inode_codec::PersistedInode;
+use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
 use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::journal_region::load_journal_image;
 use filesystem_lab::path_lookup::{
@@ -28,6 +30,16 @@ fn long_target() -> String {
 fn setup() -> (CrashDevice, Superblock, String) {
     let mut device = CrashDevice::new(160);
     let superblock = format_device_with_journal_blocks(&mut device, JOURNAL_BLOCKS).unwrap();
+    store_inode_table(
+        &mut device,
+        &superblock,
+        &[PersistedInode {
+            id: 1,
+            kind: InodeKind::Directory,
+            blocks: Vec::new(),
+        }],
+    )
+    .unwrap();
     let target = long_target();
     create_symlink_at_path_journaled(&mut device, &superblock, "/source", &target).unwrap();
     check_device(&mut device).unwrap();
