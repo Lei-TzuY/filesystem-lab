@@ -55,18 +55,22 @@ pub fn resolve_path_without_following_final_symlink(
 
 /// Reads the persisted target of the symbolic link named by one absolute pathname.
 ///
-/// Intermediate symbolic links are followed, but the final component is resolved without following
-/// it. The final inode must itself be a symbolic link; its persisted `SYM1` payload is then validated
-/// by [`read_symlink`]. A dangling target is therefore readable, matching `readlink`-style semantics.
+/// Any older committed WAL is recovered and checkpointed before pathname resolution so the final
+/// no-follow inode selection and every intermediate symlink expansion are derived from recovered
+/// durable namespace state. Intermediate symbolic links are followed, but the final component is
+/// resolved without following it. The final inode must itself be a symbolic link; its persisted
+/// `SYM1` payload is then validated by [`read_symlink`]. A dangling target is therefore readable,
+/// matching `readlink`-style semantics.
 ///
 /// # Errors
-/// Propagates bounded pathname lookup errors and returns `InvalidInput` when the final inode is not
-/// a symbolic link. Corrupt symbolic-link payloads return `InvalidData`.
+/// Propagates recovery/checkpoint and bounded pathname lookup errors, and returns `InvalidInput` when
+/// the final inode is not a symbolic link. Corrupt symbolic-link payloads return `InvalidData`.
 pub fn read_symlink_at_path(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
     path: &str,
 ) -> io::Result<String> {
+    recover_journal_and_checkpoint(device, *superblock)?;
     let inode_id = resolve_path_without_following_final_symlink(device, superblock, path)?;
     read_symlink(device, superblock, inode_id)
 }
