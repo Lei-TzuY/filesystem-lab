@@ -80,7 +80,10 @@ fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
     let mut seen = HashSet::new();
     for inode in &inodes {
         for block in &inode.blocks {
-            assert!(seen.insert(*block), "duplicate physical block reference {block}");
+            assert!(
+                seen.insert(*block),
+                "duplicate physical block reference {block}"
+            );
             assert!(allocator.is_owned(*block).unwrap());
         }
     }
@@ -119,8 +122,9 @@ fn assert_clone(
         .all(|block| !original_source_blocks.contains(block)));
 
     for (index, image) in expected.iter().enumerate() {
-        let actual = read_file_range_at_path(device, superblock, "/dst/cloned", index, 0, BLOCK_SIZE)
-            .unwrap();
+        let actual =
+            read_file_range_at_path(device, superblock, "/dst/cloned", index, 0, BLOCK_SIZE)
+                .unwrap();
         assert_eq!(actual.as_slice(), image.as_slice());
     }
 }
@@ -142,8 +146,14 @@ fn clones_source_block_range_into_fresh_path_with_independent_blocks() {
     .unwrap();
 
     let allocator_after = load_allocator(&mut device, &superblock).unwrap();
-    assert_eq!(allocator_after.allocated_blocks(), allocator_before.allocated_blocks() + 2);
-    assert_eq!(source_blocks(&mut device, &superblock), source_blocks_before);
+    assert_eq!(
+        allocator_after.allocated_blocks(),
+        allocator_before.allocated_blocks() + 2
+    );
+    assert_eq!(
+        source_blocks(&mut device, &superblock),
+        source_blocks_before
+    );
     assert_clone(
         &mut device,
         &superblock,
@@ -221,11 +231,23 @@ fn every_clone_create_crash_point_recovers_absent_or_complete_destination() {
         device.reboot();
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
 
-        assert_eq!(source_blocks(&mut device, &superblock), source_blocks_before);
+        assert_eq!(
+            source_blocks(&mut device, &superblock),
+            source_blocks_before
+        );
         if recovery.committed_transactions == 0 {
-            assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-            assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
-            assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
+            assert_eq!(
+                load_allocator(&mut device, &superblock).unwrap(),
+                allocator_before
+            );
+            assert_eq!(
+                load_inode_table(&mut device, &superblock).unwrap(),
+                inodes_before
+            );
+            assert_eq!(
+                load_directory_table(&mut device, &superblock).unwrap(),
+                entries_before
+            );
             assert_eq!(
                 metadata_at_path(&mut device, &superblock, "/dst/cloned")
                     .unwrap_err()
