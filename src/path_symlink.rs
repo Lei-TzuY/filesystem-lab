@@ -3,7 +3,7 @@ use std::io;
 use crate::block::BlockDevice;
 use crate::format::Superblock;
 use crate::journal_checkpoint::recover_journal_and_checkpoint;
-use crate::path_lookup::resolve_path_following_symlinks;
+use crate::path_lookup::{read_symlink_at_path, resolve_path_following_symlinks};
 use crate::recovery::RecoveryReport;
 use crate::symlink::create_symlink_journaled;
 use crate::symlink_unlink::unlink_symlink_journaled;
@@ -30,6 +30,32 @@ pub fn create_symlink_at_path_journaled(
     recover_journal_and_checkpoint(device, *superblock)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
     create_symlink_journaled(device, superblock, parent, name, target)
+}
+
+/// Clones one symbolic link to a fresh destination pathname without following the source's final
+/// component.
+///
+/// The source is read with `readlink` semantics, so both legacy one-block `SYM1` and bounded
+/// multi-block `SYM2` payloads are validated and reconstructed before publication. The destination
+/// is then created through [`create_symlink_at_path_journaled`], giving it fresh inode/block
+/// ownership and the same allocator+inode+namespace+payload WAL atomicity as ordinary symlink
+/// creation. The source inode and its physical blocks are never shared or modified.
+///
+/// This operation intentionally preserves the target string, not the source's physical encoding:
+/// the destination encoder may choose the canonical representation for that target. Filesystem
+/// format remains v5 and no migration is required.
+///
+/// # Errors
+/// Propagates source `readlink` validation/corruption errors, destination path validation and
+/// collision errors, and all recovery/checkpoint or durable I/O failures from symlink creation.
+pub fn clone_symlink_at_path_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    source: &str,
+    destination: &str,
+) -> io::Result<(u64, RecoveryReport)> {
+    let target = read_symlink_at_path(device, superblock, source)?;
+    create_symlink_at_path_journaled(device, superblock, destination, &target)
 }
 
 /// Removes one final symbolic-link namespace entry addressed by an absolute pathname.
