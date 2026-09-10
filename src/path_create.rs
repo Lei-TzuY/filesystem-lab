@@ -3,7 +3,9 @@ use std::io;
 
 use crate::allocation_disk::load_allocator;
 use crate::block::{BlockDevice, BLOCK_SIZE};
-use crate::create_data_tx::store_create_with_data_journaled;
+use crate::create_data_tx::{
+    store_create_with_blocks_journaled, store_create_with_data_journaled,
+};
 use crate::create_tx::store_create_metadata_journaled;
 use crate::directory_codec::{encode_directory_entry, PersistedDirectoryEntry};
 use crate::directory_table::load_directory_table;
@@ -46,24 +48,12 @@ pub fn create_empty_file_at_path_journaled(
 
 /// Creates one durable regular file with exactly one initialized data block at an absolute pathname.
 ///
-/// Parent lookup follows the repository-wide bounded symbolic-link rules while the final destination
-/// component is never followed. A fresh data block is allocated and the allocator image, new inode,
-/// namespace entry, and complete initial block image are published in one WAL transaction.
-///
-/// After validating the pathname shape but before resolving its parent or loading mutable filesystem
-/// state, this operation recovers and checkpoints any prior durable journal image. The fresh create
-/// is therefore derived only from recovered allocator, inode, directory, and data state. This is the
-/// high-level retry boundary paired with the low-level journal replacement guard.
-///
-/// Format v5 persists logical blocks but not byte EOF, so this API deliberately creates exactly one
-/// logical block rather than implying a byte length smaller than `BLOCK_SIZE`.
+/// This remains the compatibility entry point for the original one-block create contract and
+/// delegates publication to the same bounded transaction used by multi-block creation.
 ///
 /// # Errors
 ///
-/// Returns `InvalidInput` for malformed destinations, a non-directory parent, namespace collision,
-/// invalid directory-entry name, exhausted inode identifiers, exhausted data space, or insufficient
-/// journal capacity. Returns `InvalidData` for duplicate persisted inode identifiers. Parent lookup,
-/// metadata decoding, WAL, recovery, checkpoint, and device I/O errors are propagated.
+/// Returns the same validation and durable I/O errors as [`create_file_with_blocks_at_path_journaled`].
 pub fn create_one_block_file_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -98,6 +88,80 @@ pub fn create_one_block_file_at_path_journaled(
 
     let report = store_create_with_data_journaled(
         device, superblock, &allocator, &inodes, &entries, data_block, data,
+    )?;
+    Ok((inode_id, report))
+}
+
+/// Creates one durable regular file with multiple initialized logical blocks at an absolute pathname.
+///
+/// `data` must contain at least one complete 4 KiB logical block. After pathname validation, any
+/// older committed WAL is recovered and checkpointed before parent resolution. The operation then
+/// allocates one distinct physical block per logical block, appends those references to one fresh
+/// regular-file inode in input order, and publishes allocation, inode, namespace, and every initial
+/// data image under one bounded WAL commit.
+///
+/// Recovery therefore exposes either no destination at all or the complete file with every initial
+/// block initialized. No prefix file is a valid committed outcome. Format v5 is unchanged: because
+/// it has no persisted byte EOF, the API accepts only complete logical blocks and does not imply
+/// sparse or partial-block length semantics.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` for an empty block list, malformed destination, non-directory parent,
+/// namespace collision, invalid entry name, inode-ID exhaustion, allocator exhaustion, or journal
+/// capacity exhaustion. Metadata corruption and durable device errors are propagated.
+pub fn create_file_with_blocks_at_path_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    destination: &str,
+    data: &[[u8; BLOCK_SIZE]],
+) -> io::Result<(u64, RecoveryReport)> {
+    if data.is_empty() {
+        return Err(invalid_input(
+            "multi-block file create requires at least one logical block",
+        ));
+    }
+
+    let (parent_path, name) = split_destination(destination)?;
+    recover_journal_and_checkpoint(device, *superblock)?;
+    let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
+
+    let mut allocator = load_allocator(device, superblock)?;
+    let mut inodes = load_inode_table(device, superblock)?;
+    let mut entries = load_directory_table(device, superblock)?;
+    validate_create_destination(parent, name, &inodes, &entries)?;
+    let inode_id = next_inode_id(&inodes)?;
+
+    let mut initialized = Vec::with_capacity(data.len());
+    let mut inode_blocks = Vec::with_capacity(data.len());
+    for image in data {
+        let block = allocator
+            .allocate()
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+        inode_blocks.push(block);
+        initialized.push((block, *image));
+    }
+
+    let new_entry = PersistedDirectoryEntry {
+        parent,
+        target: inode_id,
+        name: name.to_owned(),
+    };
+    encode_directory_entry(&new_entry)?;
+    inodes.push(PersistedInode {
+        id: inode_id,
+        kind: InodeKind::File,
+        blocks: inode_blocks,
+    });
+    entries.push(new_entry);
+
+    let report = store_create_with_blocks_journaled(
+        device,
+        superblock,
+        &allocator,
+        &inodes,
+        &entries,
+        &initialized,
     )?;
     Ok((inode_id, report))
 }
