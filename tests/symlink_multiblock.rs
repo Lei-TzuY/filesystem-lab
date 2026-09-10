@@ -39,10 +39,7 @@ fn setup() -> (CrashDevice, Superblock) {
     (device, superblock)
 }
 
-fn symlink_inode(
-    device: &mut CrashDevice,
-    superblock: &Superblock,
-) -> Option<PersistedInode> {
+fn symlink_inode(device: &mut CrashDevice, superblock: &Superblock) -> Option<PersistedInode> {
     load_inode_table(device, superblock)
         .ok()?
         .into_iter()
@@ -66,18 +63,11 @@ fn assert_new_state(device: &mut CrashDevice, superblock: &Superblock, target: &
     assert_eq!(entries[0].parent, 1);
     assert_eq!(entries[0].target, inode.id);
     assert_eq!(entries[0].name, "long-link");
-    assert_eq!(
-        read_symlink(device, superblock, inode.id).unwrap(),
-        target
-    );
+    assert_eq!(read_symlink(device, superblock, inode.id).unwrap(), target);
     check_device(device).unwrap();
 }
 
-fn assert_removed_state(
-    device: &mut CrashDevice,
-    superblock: &Superblock,
-    allocated_before: u64,
-) {
+fn assert_removed_state(device: &mut CrashDevice, superblock: &Superblock, allocated_before: u64) {
     assert_eq!(
         load_allocator(device, superblock)
             .unwrap()
