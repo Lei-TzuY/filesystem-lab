@@ -77,7 +77,7 @@ fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
 fn assert_post_query_invariants(
     device: &mut CrashDevice,
     superblock: Superblock,
-    allocated_before: usize,
+    allocated_before: u64,
     inode_count_before: usize,
 ) {
     let allocator_after = load_allocator(device, &superblock).unwrap();
