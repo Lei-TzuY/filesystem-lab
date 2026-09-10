@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::io;
 
 use filesystem_lab::allocation_disk::load_allocator;
-use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
+use filesystem_lab::block::BLOCK_SIZE;
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
 use filesystem_lab::directory_table::{load_directory_table, store_directory_table};
 use filesystem_lab::format::Superblock;
