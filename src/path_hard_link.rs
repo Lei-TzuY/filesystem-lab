@@ -3,6 +3,7 @@ use std::io;
 use crate::block::BlockDevice;
 use crate::format::Superblock;
 use crate::hard_link_tx::{hard_link_file_journaled, hard_link_symlink_journaled};
+use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::path_lookup::{
     resolve_path_following_symlinks, resolve_path_without_following_final_symlink,
 };
@@ -10,7 +11,9 @@ use crate::recovery::RecoveryReport;
 
 /// Creates one additional durable namespace reference to a regular file using pathnames.
 ///
-/// The source pathname is resolved with the repository-wide bounded symbolic-link expansion rules,
+/// Any older committed WAL is recovered and checkpointed before pathname resolution so source and
+/// destination-parent lookup never derive inode IDs from a partially replayed namespace. The source
+/// pathname is then resolved with the repository-wide bounded symbolic-link expansion rules,
 /// including the final component. The destination is split into a parent pathname and final
 /// basename; only the parent is resolved, so an existing final destination remains a collision.
 /// Publication is delegated to [`hard_link_file_journaled`], preserving its directory-only WAL
@@ -18,8 +21,9 @@ use crate::recovery::RecoveryReport;
 ///
 /// # Errors
 /// Returns `InvalidInput` when either pathname is not absolute, when the destination names the root
-/// or has an empty final component, or when the resolved source is not a regular file. Source or
-/// parent path-resolution errors and all [`hard_link_file_journaled`] durable I/O errors propagate.
+/// or has an empty final component, or when the resolved source is not a regular file. Recovery,
+/// checkpoint, source or parent path-resolution errors and all [`hard_link_file_journaled`] durable
+/// I/O errors propagate.
 pub fn hard_link_file_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -30,6 +34,7 @@ pub fn hard_link_file_at_path_journaled(
         return Err(invalid_input("hard-link source must be an absolute path"));
     }
 
+    recover_journal_and_checkpoint(device, *superblock)?;
     let target = resolve_path_following_symlinks(device, superblock, source)?;
     let (parent_path, name) = split_destination(destination)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
@@ -38,17 +43,19 @@ pub fn hard_link_file_at_path_journaled(
 
 /// Creates one additional durable namespace reference to a symbolic-link inode using pathnames.
 ///
-/// Intermediate source symlinks are followed, but the final source component is deliberately not
-/// followed. The final source inode must itself be a symbolic link. The destination parent is
-/// resolved with the normal bounded symlink-following rules while its final basename remains a
-/// collision-checked namespace key. Publication is delegated to [`hard_link_symlink_journaled`],
-/// which validates the persisted symlink payload before issuing the directory-only WAL update.
+/// Any older committed WAL is recovered and checkpointed before pathname resolution so source and
+/// destination-parent lookup observe one recovered namespace. Intermediate source symlinks are then
+/// followed, but the final source component is deliberately not followed. The final source inode
+/// must itself be a symbolic link. The destination parent is resolved with the normal bounded
+/// symlink-following rules while its final basename remains a collision-checked namespace key.
+/// Publication is delegated to [`hard_link_symlink_journaled`], which validates the persisted
+/// symlink payload before issuing the directory-only WAL update.
 ///
 /// # Errors
 /// Returns `InvalidInput` when either pathname is not absolute, when the destination names the root
-/// or has an empty final component, or when the final source inode is not a symbolic link. Source or
-/// parent path-resolution errors, symlink corruption, and all [`hard_link_symlink_journaled`] durable
-/// I/O errors propagate.
+/// or has an empty final component, or when the final source inode is not a symbolic link. Recovery,
+/// checkpoint, source or parent path-resolution errors, symlink corruption, and all
+/// [`hard_link_symlink_journaled`] durable I/O errors propagate.
 pub fn hard_link_symlink_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -59,6 +66,7 @@ pub fn hard_link_symlink_at_path_journaled(
         return Err(invalid_input("hard-link source must be an absolute path"));
     }
 
+    recover_journal_and_checkpoint(device, *superblock)?;
     let target = resolve_path_without_following_final_symlink(device, superblock, source)?;
     let (parent_path, name) = split_destination(destination)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
