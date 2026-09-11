@@ -124,7 +124,10 @@ fn rejects_repeated_trailing_separators_without_publication() {
         .kind(),
         io::ErrorKind::InvalidInput
     );
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), before);
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        before
+    );
     assert!(load_journal_image(&mut device, superblock)
         .unwrap()
         .is_empty());
