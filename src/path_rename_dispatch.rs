@@ -10,15 +10,16 @@ use crate::path_lookup::resolve_path_following_symlinks;
 use crate::path_rename::rename_at_path_journaled;
 use crate::path_rename_overwrite::rename_overwrite_at_path_journaled;
 use crate::recovery::RecoveryReport;
+use crate::rename_overwrite_nondirectory_tx::rename_overwrite_nondirectory_journaled;
 
 /// Performs one POSIX-like durable pathname rename.
 ///
 /// The operation recovers and checkpoints any older durable WAL before resolving source and
 /// destination parent paths. Parent components follow bounded symbolic-link traversal while final
 /// components remain unfollowed. If the destination does not exist, publication delegates to the
-/// ordinary durable pathname rename. If a different same-kind destination exists, publication
-/// delegates to the recovered pathname rename-overwrite dispatcher. If both names already refer to
-/// the same inode, the operation is a no-op, matching hard-link alias rename semantics.
+/// ordinary durable pathname rename. If a different destination exists, regular files and symbolic
+/// links may replace each other while directory replacement remains directory-only. If both names
+/// already refer to the same inode, the operation is a no-op, matching hard-link alias semantics.
 ///
 /// A single terminal slash expresses directory intent and repeated trailing separators are rejected.
 /// Directory intent is validated even for the same-inode no-op case. This dispatcher changes no
@@ -26,8 +27,9 @@ use crate::recovery::RecoveryReport;
 ///
 /// # Errors
 /// Returns `NotFound` when the source entry is absent. Returns `InvalidInput` for malformed paths,
-/// invalid directory intent, or endpoint combinations rejected by the delegated durable primitive.
-/// Recovery, checkpoint, pathname resolution, metadata decoding, and device I/O failures propagate.
+/// invalid directory intent, directory/non-directory replacement, or endpoint combinations rejected
+/// by the delegated durable primitive. Recovery, checkpoint, pathname resolution, metadata decoding,
+/// and device I/O failures propagate.
 pub fn rename_posix_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -65,11 +67,54 @@ pub fn rename_posix_at_path_journaled(
         return Ok(recovery);
     }
 
-    if destination_target.is_some() {
-        rename_overwrite_at_path_journaled(device, superblock, source, destination)
-    } else {
-        rename_at_path_journaled(device, superblock, source, destination)
+    let Some(destination_target) = destination_target else {
+        return rename_at_path_journaled(device, superblock, source, destination);
+    };
+
+    let inodes = load_inode_table(device, superblock)?;
+    let source_kind = inode_kind(&inodes, source_target, "rename source inode is missing")?;
+    let destination_kind = inode_kind(
+        &inodes,
+        destination_target,
+        "rename destination inode is missing",
+    )?;
+
+    if (source_directory_intent || destination_directory_intent)
+        && (source_kind != InodeKind::Directory || destination_kind != InodeKind::Directory)
+    {
+        return Err(invalid_input(
+            "trailing-slash rename requires directory endpoints",
+        ));
     }
+
+    match (source_kind, destination_kind) {
+        (InodeKind::Directory, InodeKind::Directory) => {
+            rename_overwrite_at_path_journaled(device, superblock, source, destination)
+        }
+        (InodeKind::Directory, _) | (_, InodeKind::Directory) => Err(invalid_input(
+            "rename cannot replace a directory with a non-directory endpoint",
+        )),
+        _ => rename_overwrite_nondirectory_journaled(
+            device,
+            superblock,
+            source_parent,
+            source_name,
+            destination_parent,
+            destination_name,
+        ),
+    }
+}
+
+fn inode_kind(
+    inodes: &[crate::inode_codec::PersistedInode],
+    inode_id: u64,
+    missing_message: &'static str,
+) -> io::Result<InodeKind> {
+    inodes
+        .iter()
+        .find(|inode| inode.id == inode_id)
+        .map(|inode| inode.kind)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, missing_message))
 }
 
 fn require_directory_inode(
