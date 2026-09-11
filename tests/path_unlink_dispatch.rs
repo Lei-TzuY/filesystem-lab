@@ -130,10 +130,7 @@ fn dispatches_by_final_inode_kind_and_namespace_reference_count() {
         match case {
             Case::FinalFile => {
                 assert!(after.1.iter().all(|inode| inode.id != 3));
-                assert_eq!(
-                    after.0.allocated_blocks() + 1,
-                    before.0.allocated_blocks()
-                );
+                assert_eq!(after.0.allocated_blocks() + 1, before.0.allocated_blocks());
             }
             Case::NonfinalFile => {
                 assert!(after.1.iter().any(|inode| inode.id == 3));
@@ -143,10 +140,7 @@ fn dispatches_by_final_inode_kind_and_namespace_reference_count() {
                 assert_eq!(after.0, before.0);
             }
             Case::FinalSymlink => {
-                assert_eq!(
-                    after.0.allocated_blocks() + 1,
-                    before.0.allocated_blocks()
-                );
+                assert_eq!(after.0.allocated_blocks() + 1, before.0.allocated_blocks());
             }
             Case::NonfinalSymlink => {
                 assert_eq!(after.0, before.0);
