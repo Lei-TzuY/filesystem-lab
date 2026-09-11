@@ -148,13 +148,8 @@ fn rejects_exchange_that_would_create_directory_cycle_before_wal() {
 fn every_trailing_slash_directory_exchange_crash_point_recovers_old_or_complete_new_state() {
     let (mut probe, superblock) = setup_siblings();
     probe.arm(None);
-    rename_exchange_directories_at_path_journaled(
-        &mut probe,
-        &superblock,
-        "/left/a/",
-        "/right/b/",
-    )
-    .unwrap();
+    rename_exchange_directories_at_path_journaled(&mut probe, &superblock, "/left/a/", "/right/b/")
+        .unwrap();
     let operations = probe.operations();
 
     for crash_at in 0..operations {
