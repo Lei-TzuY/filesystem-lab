@@ -61,7 +61,7 @@ pub fn unlink_at_path_journaled(
         .ok_or_else(|| invalid_input("unlink target inode is missing"))?;
 
     match (target_kind, reference_count) {
-        (InodeKind::File, 0) | (InodeKind::Symlink, 0) => {
+        (InodeKind::File | InodeKind::Symlink, 0) => {
             Err(invalid_input("unlink target has no namespace references"))
         }
         (InodeKind::File, 1) => unlink_file_journaled(device, superblock, parent, name),
