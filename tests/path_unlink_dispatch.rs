@@ -87,14 +87,8 @@ fn setup(case: Case) -> (CrashDevice, Superblock) {
             hard_link_file_journaled(&mut device, &superblock, 2, "file_alias", 3).unwrap();
         }
         Case::NonfinalSymlink => {
-            hard_link_symlink_journaled(
-                &mut device,
-                &superblock,
-                2,
-                "link_alias",
-                symlink_id,
-            )
-            .unwrap();
+            hard_link_symlink_journaled(&mut device, &superblock, 2, "link_alias", symlink_id)
+                .unwrap();
         }
         Case::FinalFile | Case::FinalSymlink => {}
     }
@@ -143,10 +137,9 @@ fn dispatches_by_final_inode_kind_and_namespace_reference_count() {
             }
             Case::NonfinalFile => {
                 assert!(after.1.iter().any(|inode| inode.id == 3));
-                assert!(after
-                    .2
-                    .iter()
-                    .any(|entry| entry.parent == 2 && entry.name == "file_alias" && entry.target == 3));
+                assert!(after.2.iter().any(|entry| {
+                    entry.parent == 2 && entry.name == "file_alias" && entry.target == 3
+                }));
                 assert_eq!(after.0, before.0);
             }
             Case::FinalSymlink => {
