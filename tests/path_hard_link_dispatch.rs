@@ -74,8 +74,7 @@ fn dispatches_regular_file_and_final_symlink_without_following_the_symlink() {
     let allocator_before = load_allocator(&mut device, &superblock).unwrap();
     let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
 
-    hard_link_at_path_journaled(&mut device, &superblock, "/file", "/dir_alias/file_link")
-        .unwrap();
+    hard_link_at_path_journaled(&mut device, &superblock, "/file", "/dir_alias/file_link").unwrap();
     hard_link_at_path_journaled(
         &mut device,
         &superblock,
@@ -166,14 +165,9 @@ fn every_regular_file_dispatch_crash_point_recovers_old_or_complete_new_state() 
 
         device.arm(Some(crash_at));
         assert_eq!(
-            hard_link_at_path_journaled(
-                &mut device,
-                &superblock,
-                "/file",
-                "/dir_alias/linked",
-            )
-            .unwrap_err()
-            .kind(),
+            hard_link_at_path_journaled(&mut device, &superblock, "/file", "/dir_alias/linked",)
+                .unwrap_err()
+                .kind(),
             io::ErrorKind::Other,
             "crash point {crash_at} must interrupt pathname hard-link dispatch"
         );
