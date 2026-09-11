@@ -19,11 +19,7 @@ use support::CrashDevice;
 
 const JOURNAL_BLOCKS: u64 = 8;
 
-type State = (
-    BlockAllocator,
-    Vec<PersistedInode>,
-    Vec<PersistedDirectoryEntry>,
-);
+type State = (BlockAllocator, Vec<PersistedInode>, Vec<PersistedDirectoryEntry>);
 
 fn snapshot(device: &mut CrashDevice, superblock: &Superblock) -> State {
     (
