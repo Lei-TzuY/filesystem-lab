@@ -61,13 +61,18 @@ fn setup_siblings() -> (CrashDevice, Superblock) {
 }
 
 #[test]
-fn exchanges_directories_across_parents_without_changing_ownership() {
+fn exchanges_trailing_slash_directories_without_changing_ownership() {
     let (mut device, superblock) = setup_siblings();
     let allocator_before = load_allocator(&mut device, &superblock).unwrap();
     let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
 
-    rename_exchange_directories_at_path_journaled(&mut device, &superblock, "/left/a", "/right/b")
-        .unwrap();
+    rename_exchange_directories_at_path_journaled(
+        &mut device,
+        &superblock,
+        "/left/a/",
+        "/right/b/",
+    )
+    .unwrap();
 
     assert_eq!(
         resolve_path_following_symlinks(&mut device, &superblock, "/left/a").unwrap(),
@@ -84,6 +89,32 @@ fn exchanges_directories_across_parents_without_changing_ownership() {
     assert_eq!(
         load_inode_table(&mut device, &superblock).unwrap(),
         inodes_before
+    );
+    check_device(&mut device).unwrap();
+}
+
+#[test]
+fn rejects_repeated_trailing_separators_before_wal() {
+    let (mut device, superblock) = setup_siblings();
+    let original = load_directory_table(&mut device, &superblock).unwrap();
+
+    assert_eq!(
+        rename_exchange_directories_at_path_journaled(
+            &mut device,
+            &superblock,
+            "/left/a//",
+            "/right/b/",
+        )
+        .unwrap_err()
+        .kind(),
+        io::ErrorKind::InvalidInput
+    );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        original
     );
     check_device(&mut device).unwrap();
 }
@@ -114,10 +145,10 @@ fn rejects_exchange_that_would_create_directory_cycle_before_wal() {
 }
 
 #[test]
-fn every_directory_exchange_crash_point_recovers_old_or_complete_new_state() {
+fn every_trailing_slash_directory_exchange_crash_point_recovers_old_or_complete_new_state() {
     let (mut probe, superblock) = setup_siblings();
     probe.arm(None);
-    rename_exchange_directories_at_path_journaled(&mut probe, &superblock, "/left/a", "/right/b")
+    rename_exchange_directories_at_path_journaled(&mut probe, &superblock, "/left/a/", "/right/b/")
         .unwrap();
     let operations = probe.operations();
 
@@ -131,8 +162,8 @@ fn every_directory_exchange_crash_point_recovers_old_or_complete_new_state() {
         assert!(rename_exchange_directories_at_path_journaled(
             &mut device,
             &superblock,
-            "/left/a",
-            "/right/b",
+            "/left/a/",
+            "/right/b/",
         )
         .is_err());
         device.reboot();
