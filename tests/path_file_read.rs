@@ -1,8 +1,12 @@
 use std::io;
 
 use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
+use filesystem_lab::format::Superblock;
 use filesystem_lab::format_geometry::format_device_with_journal_blocks;
 use filesystem_lab::fsck::check_device;
+use filesystem_lab::inode::InodeKind;
+use filesystem_lab::inode_codec::PersistedInode;
+use filesystem_lab::inode_table::store_inode_table;
 use filesystem_lab::path_create::{
     create_empty_file_at_path_journaled, create_file_with_blocks_at_path_journaled,
 };
@@ -49,10 +53,24 @@ impl BlockDevice for MemoryDevice {
     }
 }
 
+fn initialize_root(device: &mut MemoryDevice, superblock: &Superblock) {
+    store_inode_table(
+        device,
+        superblock,
+        &[PersistedInode {
+            id: 1,
+            kind: InodeKind::Directory,
+            blocks: Vec::new(),
+        }],
+    )
+    .unwrap();
+}
+
 #[test]
 fn reads_complete_logical_blocks_and_follows_final_symlink() {
     let mut device = MemoryDevice::new(96);
     let superblock = format_device_with_journal_blocks(&mut device, 8).unwrap();
+    initialize_root(&mut device, &superblock);
     let mut first = [0x11; BLOCK_SIZE];
     let mut second = [0x22; BLOCK_SIZE];
     first[0..4].copy_from_slice(b"head");
@@ -72,6 +90,7 @@ fn reads_complete_logical_blocks_and_follows_final_symlink() {
 fn zero_block_file_reads_empty_and_non_file_is_rejected() {
     let mut device = MemoryDevice::new(64);
     let superblock = format_device_with_journal_blocks(&mut device, 6).unwrap();
+    initialize_root(&mut device, &superblock);
     create_empty_file_at_path_journaled(&mut device, &superblock, "/empty").unwrap();
     create_symlink_at_path_journaled(&mut device, &superblock, "/link", "/missing").unwrap();
 
