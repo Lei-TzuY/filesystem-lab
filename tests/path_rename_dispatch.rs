@@ -86,8 +86,7 @@ fn moves_when_destination_is_absent() {
     let allocator_before = load_allocator(&mut device, &superblock).unwrap();
     let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
 
-    rename_posix_at_path_journaled(&mut device, &superblock, "/source", "/destination")
-        .unwrap();
+    rename_posix_at_path_journaled(&mut device, &superblock, "/source", "/destination").unwrap();
 
     assert_eq!(target_for(&mut device, &superblock, "source"), None);
     assert_eq!(target_for(&mut device, &superblock, "destination"), Some(2));
@@ -106,8 +105,7 @@ fn moves_when_destination_is_absent() {
 fn overwrites_existing_same_kind_destination() {
     let (mut device, superblock) = setup_with_destination();
 
-    rename_posix_at_path_journaled(&mut device, &superblock, "/source", "/destination")
-        .unwrap();
+    rename_posix_at_path_journaled(&mut device, &superblock, "/source", "/destination").unwrap();
 
     assert_eq!(target_for(&mut device, &superblock, "source"), None);
     assert_eq!(target_for(&mut device, &superblock, "destination"), Some(2));
@@ -137,7 +135,10 @@ fn same_inode_alias_is_a_no_op() {
         RecoveryReport::default()
     );
 
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), before);
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        before
+    );
     assert!(load_journal_image(&mut device, superblock)
         .unwrap()
         .is_empty());
@@ -177,8 +178,7 @@ fn alias_no_op_still_enforces_directory_intent() {
 fn every_absent_destination_crash_point_recovers_old_or_complete_new_state() {
     let (mut probe, superblock) = setup_without_destination();
     probe.arm(None);
-    rename_posix_at_path_journaled(&mut probe, &superblock, "/source", "/destination")
-        .unwrap();
+    rename_posix_at_path_journaled(&mut probe, &superblock, "/source", "/destination").unwrap();
     let operations = probe.operations();
 
     for crash_at in 0..operations {
@@ -188,15 +188,13 @@ fn every_absent_destination_crash_point_recovers_old_or_complete_new_state() {
         let entries_before = load_directory_table(&mut device, &superblock).unwrap();
 
         device.arm(Some(crash_at));
-        assert!(
-            rename_posix_at_path_journaled(
-                &mut device,
-                &superblock,
-                "/source",
-                "/destination",
-            )
-            .is_err()
-        );
+        assert!(rename_posix_at_path_journaled(
+            &mut device,
+            &superblock,
+            "/source",
+            "/destination",
+        )
+        .is_err());
         device.reboot();
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
 
@@ -233,8 +231,7 @@ fn every_absent_destination_crash_point_recovers_old_or_complete_new_state() {
 fn every_overwrite_crash_point_recovers_old_or_complete_new_state() {
     let (mut probe, superblock) = setup_with_destination();
     probe.arm(None);
-    rename_posix_at_path_journaled(&mut probe, &superblock, "/source", "/destination")
-        .unwrap();
+    rename_posix_at_path_journaled(&mut probe, &superblock, "/source", "/destination").unwrap();
     let operations = probe.operations();
 
     for crash_at in 0..operations {
@@ -244,15 +241,13 @@ fn every_overwrite_crash_point_recovers_old_or_complete_new_state() {
         let entries_before = load_directory_table(&mut device, &superblock).unwrap();
 
         device.arm(Some(crash_at));
-        assert!(
-            rename_posix_at_path_journaled(
-                &mut device,
-                &superblock,
-                "/source",
-                "/destination",
-            )
-            .is_err()
-        );
+        assert!(rename_posix_at_path_journaled(
+            &mut device,
+            &superblock,
+            "/source",
+            "/destination",
+        )
+        .is_err());
         device.reboot();
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
 
