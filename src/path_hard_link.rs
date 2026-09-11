@@ -79,6 +79,10 @@ pub fn hard_link_at_path_with_source_follow_journaled(
 ///
 /// This is the no-final-follow convenience surface for
 /// [`hard_link_at_path_with_source_follow_journaled`].
+///
+/// # Errors
+/// Propagates all recovery, checkpoint, pathname-resolution, metadata-validation, and durable
+/// hard-link I/O errors from [`hard_link_at_path_with_source_follow_journaled`].
 pub fn hard_link_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -98,6 +102,10 @@ pub fn hard_link_at_path_journaled(
 ///
 /// This is the bounded format-v5 analogue of `linkat(2)` with `AT_SYMLINK_FOLLOW` and the
 /// final-follow convenience surface for [`hard_link_at_path_with_source_follow_journaled`].
+///
+/// # Errors
+/// Propagates all recovery, checkpoint, pathname-resolution, metadata-validation, and durable
+/// hard-link I/O errors from [`hard_link_at_path_with_source_follow_journaled`].
 pub fn hard_link_following_source_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -118,7 +126,7 @@ pub fn hard_link_following_source_at_path_journaled(
 /// Any older committed WAL is recovered and checkpointed before pathname resolution so source and
 /// destination-parent lookup never derive inode IDs from a partially replayed namespace. The source
 /// pathname is then resolved with the repository-wide bounded symbolic-link expansion rules,
-/// including the final component. The destination is split into a parent pathname and final
+/// including the final component. The destination is split into a parent pathname plus final
 /// basename; only the parent is resolved, so an existing final destination remains a collision.
 /// Publication is delegated to [`hard_link_file_journaled`], preserving its directory-only WAL
 /// transaction and leaving allocator ownership plus the inode image unchanged.
