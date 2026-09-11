@@ -190,11 +190,9 @@ fn whole_file_replace_handles_empty_to_nonempty_and_nonempty_to_empty() {
     );
 
     replace_file_at_path_journaled(&mut device, &superblock, "/file", &[]).unwrap();
-    assert!(
-        read_file_blocks_at_path(&mut device, &superblock, "/file")
-            .unwrap()
-            .is_empty()
-    );
+    assert!(read_file_blocks_at_path(&mut device, &superblock, "/file")
+        .unwrap()
+        .is_empty());
     check_device(&mut device).unwrap();
 }
 
