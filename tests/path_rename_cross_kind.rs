@@ -19,7 +19,11 @@ use support::CrashDevice;
 
 const JOURNAL_BLOCKS: u64 = 8;
 
-type State = (BlockAllocator, Vec<PersistedInode>, Vec<PersistedDirectoryEntry>);
+type State = (
+    BlockAllocator,
+    Vec<PersistedInode>,
+    Vec<PersistedDirectoryEntry>,
+);
 
 fn snapshot(device: &mut CrashDevice, superblock: &Superblock) -> State {
     (
@@ -34,13 +38,9 @@ fn setup_file_over_symlink() -> (CrashDevice, Superblock, u64, u64) {
     let superblock = format_device_with_journal_blocks(&mut device, JOURNAL_BLOCKS).unwrap();
     let (source, _) =
         create_empty_file_at_path_journaled(&mut device, &superblock, "/source").unwrap();
-    let (destination, _) = create_symlink_at_path_journaled(
-        &mut device,
-        &superblock,
-        "/destination",
-        "/source",
-    )
-    .unwrap();
+    let (destination, _) =
+        create_symlink_at_path_journaled(&mut device, &superblock, "/destination", "/source")
+            .unwrap();
     check_device(&mut device).unwrap();
     (device, superblock, source, destination)
 }
@@ -76,8 +76,7 @@ fn symbolic_link_can_replace_regular_file() {
     let mut device = CrashDevice::new(96);
     let superblock = format_device_with_journal_blocks(&mut device, JOURNAL_BLOCKS).unwrap();
     let (source, _) =
-        create_symlink_at_path_journaled(&mut device, &superblock, "/source", "/missing")
-            .unwrap();
+        create_symlink_at_path_journaled(&mut device, &superblock, "/source", "/missing").unwrap();
     let (replaced, _) =
         create_empty_file_at_path_journaled(&mut device, &superblock, "/destination").unwrap();
 
