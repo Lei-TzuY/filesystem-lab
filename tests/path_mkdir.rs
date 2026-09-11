@@ -80,16 +80,16 @@ fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
 }
 
 #[test]
-fn creates_empty_directories_at_direct_and_symlinked_parent_paths() {
+fn creates_empty_directories_at_direct_symlinked_and_trailing_slash_paths() {
     let (mut device, superblock) = setup();
     let allocator_before = load_allocator(&mut device, &superblock).unwrap();
 
     let (root_dir, _) =
-        create_directory_at_path_journaled(&mut device, &superblock, "/new_root_dir").unwrap();
+        create_directory_at_path_journaled(&mut device, &superblock, "/new_root_dir/").unwrap();
     let (nested_dir, _) =
         create_directory_at_path_journaled(&mut device, &superblock, "/dir/new_nested").unwrap();
     let (alias_dir, _) =
-        create_directory_at_path_journaled(&mut device, &superblock, "/dir_alias/via_alias")
+        create_directory_at_path_journaled(&mut device, &superblock, "/dir_alias/via_alias/")
             .unwrap();
 
     for (path, inode_id) in [
@@ -122,7 +122,7 @@ fn rejects_invalid_destinations_collisions_and_non_directory_parent_before_publi
     let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
     let entries_before = load_directory_table(&mut device, &superblock).unwrap();
 
-    for path in ["relative", "/", "/dir/"] {
+    for path in ["relative", "/", "/dir//"] {
         assert_eq!(
             create_directory_at_path_journaled(&mut device, &superblock, path)
                 .unwrap_err()
@@ -137,13 +137,13 @@ fn rejects_invalid_destinations_collisions_and_non_directory_parent_before_publi
         io::ErrorKind::NotFound
     );
     assert_eq!(
-        create_directory_at_path_journaled(&mut device, &superblock, "/dir")
+        create_directory_at_path_journaled(&mut device, &superblock, "/dir/")
             .unwrap_err()
             .kind(),
         io::ErrorKind::InvalidInput
     );
     assert_eq!(
-        create_directory_at_path_journaled(&mut device, &superblock, "/fileparent/child")
+        create_directory_at_path_journaled(&mut device, &superblock, "/fileparent/child/")
             .unwrap_err()
             .kind(),
         io::ErrorKind::InvalidInput
@@ -167,10 +167,10 @@ fn rejects_invalid_destinations_collisions_and_non_directory_parent_before_publi
 }
 
 #[test]
-fn every_pathname_directory_create_crash_point_recovers_old_or_complete_new_state() {
+fn every_trailing_slash_directory_create_crash_point_recovers_old_or_complete_new_state() {
     let (mut probe, superblock) = setup();
     probe.arm(None);
-    create_directory_at_path_journaled(&mut probe, &superblock, "/dir_alias/new_dir").unwrap();
+    create_directory_at_path_journaled(&mut probe, &superblock, "/dir_alias/new_dir/").unwrap();
     let operations = probe.operations();
 
     for crash_at in 0..operations {
@@ -181,11 +181,11 @@ fn every_pathname_directory_create_crash_point_recovers_old_or_complete_new_stat
 
         device.arm(Some(crash_at));
         assert_eq!(
-            create_directory_at_path_journaled(&mut device, &superblock, "/dir_alias/new_dir")
+            create_directory_at_path_journaled(&mut device, &superblock, "/dir_alias/new_dir/")
                 .unwrap_err()
                 .kind(),
             io::ErrorKind::Other,
-            "crash point {crash_at} must interrupt pathname directory creation"
+            "crash point {crash_at} must interrupt trailing-slash directory creation"
         );
         device.reboot();
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
@@ -202,12 +202,12 @@ fn every_pathname_directory_create_crash_point_recovers_old_or_complete_new_stat
             assert_eq!(recovery.committed_transactions, 1);
             assert_eq!(inodes_after.len(), inodes_before.len() + 1);
             assert_eq!(entries_after.len(), entries_before.len() + 1);
-            let metadata = metadata_at_path(&mut device, &superblock, "/dir/new_dir").unwrap();
+            let metadata = metadata_at_path(&mut device, &superblock, "/dir/new_dir/").unwrap();
             assert_eq!(metadata.kind, InodeKind::Directory);
             assert_eq!(metadata.logical_blocks, 0);
             assert_eq!(metadata.namespace_references, 1);
             assert!(
-                list_directory_at_path(&mut device, &superblock, "/dir/new_dir")
+                list_directory_at_path(&mut device, &superblock, "/dir/new_dir/")
                     .unwrap()
                     .is_empty()
             );
