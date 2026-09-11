@@ -79,8 +79,14 @@ fn dispatches_regular_file_exchange() {
 
     assert_eq!(target_for(&mut device, &superblock, "left"), 3);
     assert_eq!(target_for(&mut device, &superblock, "right"), 2);
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
     check_device(&mut device).unwrap();
 }
 
@@ -88,17 +94,30 @@ fn dispatches_regular_file_exchange() {
 fn dispatches_final_symlink_exchange_without_following_targets() {
     let mut device = CrashDevice::new(96);
     let superblock = format_device_with_journal_blocks(&mut device, JOURNAL_BLOCKS).unwrap();
-    store_inode_table(&mut device, &superblock, &[inode(1, InodeKind::Directory)]).unwrap();
-    let (left, _) = create_symlink_journaled(&mut device, &superblock, 1, "left", "/missing/a").unwrap();
-    let (right, _) = create_symlink_journaled(&mut device, &superblock, 1, "right", "/missing/b").unwrap();
+    store_inode_table(
+        &mut device,
+        &superblock,
+        &[inode(1, InodeKind::Directory)],
+    )
+    .unwrap();
+    let (left, _) =
+        create_symlink_journaled(&mut device, &superblock, 1, "left", "/missing/a").unwrap();
+    let (right, _) =
+        create_symlink_journaled(&mut device, &superblock, 1, "right", "/missing/b").unwrap();
     recover_journal_and_checkpoint(&mut device, superblock).unwrap();
 
     rename_exchange_at_path_journaled(&mut device, &superblock, "/left", "/right").unwrap();
 
     assert_eq!(target_for(&mut device, &superblock, "left"), right);
     assert_eq!(target_for(&mut device, &superblock, "right"), left);
-    assert_eq!(read_symlink(&mut device, &superblock, left).unwrap(), "/missing/a");
-    assert_eq!(read_symlink(&mut device, &superblock, right).unwrap(), "/missing/b");
+    assert_eq!(
+        read_symlink(&mut device, &superblock, left).unwrap(),
+        "/missing/a"
+    );
+    assert_eq!(
+        read_symlink(&mut device, &superblock, right).unwrap(),
+        "/missing/b"
+    );
     check_device(&mut device).unwrap();
 }
 
@@ -125,8 +144,14 @@ fn dispatches_directory_exchange_with_terminal_slash_intent() {
 
     rename_exchange_at_path_journaled(&mut device, &superblock, "/left/", "/right/").unwrap();
 
-    assert_eq!(resolve_path_following_symlinks(&mut device, &superblock, "/left").unwrap(), 3);
-    assert_eq!(resolve_path_following_symlinks(&mut device, &superblock, "/right").unwrap(), 2);
+    assert_eq!(
+        resolve_path_following_symlinks(&mut device, &superblock, "/left").unwrap(),
+        3
+    );
+    assert_eq!(
+        resolve_path_following_symlinks(&mut device, &superblock, "/right").unwrap(),
+        2
+    );
     check_device(&mut device).unwrap();
 }
 
@@ -163,7 +188,9 @@ fn rejects_mixed_kinds_and_repeated_trailing_separator_before_wal() {
             .kind(),
         io::ErrorKind::InvalidInput
     );
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
     check_device(&mut device).unwrap();
 }
 
@@ -181,21 +208,38 @@ fn every_dispatched_file_exchange_crash_point_recovers_old_or_complete_new_state
         let entries_before = load_directory_table(&mut device, &superblock).unwrap();
 
         device.arm(Some(crash_at));
-        assert!(rename_exchange_at_path_journaled(&mut device, &superblock, "/left", "/right").is_err());
+        assert!(rename_exchange_at_path_journaled(
+            &mut device,
+            &superblock,
+            "/left",
+            "/right",
+        )
+        .is_err());
         device.reboot();
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
 
-        assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-        assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+        assert_eq!(
+            load_allocator(&mut device, &superblock).unwrap(),
+            allocator_before
+        );
+        assert_eq!(
+            load_inode_table(&mut device, &superblock).unwrap(),
+            inodes_before
+        );
         if recovery.committed_transactions == 0 {
-            assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
+            assert_eq!(
+                load_directory_table(&mut device, &superblock).unwrap(),
+                entries_before
+            );
         } else {
             assert_eq!(recovery.committed_transactions, 1);
             assert_eq!(target_for(&mut device, &superblock, "left"), 3);
             assert_eq!(target_for(&mut device, &superblock, "right"), 2);
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
