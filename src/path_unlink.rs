@@ -201,12 +201,14 @@ pub fn remove_directory_journaled(
 ///
 /// Intermediate components, including the parent itself, use bounded symlink expansion. The final
 /// component is intentionally not resolved, matching `rmdir`-style semantics: a final symlink is
-/// rejected instead of removing the directory it targets. After pathname-shape validation and
-/// before resolving the parent, any older durable journal is recovered and checkpointed so the
-/// removal is recomputed from recovered home state rather than a partial post-crash home prefix.
+/// rejected instead of removing the directory it targets. A single terminal slash is accepted for
+/// directory removal and preserves this final-component no-follow rule; repeated trailing separators
+/// remain invalid. After pathname-shape validation and before resolving the parent, any older durable
+/// journal is recovered and checkpointed so the removal is recomputed from recovered home state
+/// rather than a partial post-crash home prefix.
 ///
 /// # Errors
-/// Returns `InvalidInput` when the pathname is not absolute, names the root, has an empty final
+/// Returns `InvalidInput` when the pathname is not absolute, names the root, has an invalid final
 /// component, or names an unsupported/non-empty target. Parent-resolution errors and all recovery,
 /// checkpoint, and [`remove_directory_journaled`] durable I/O errors are propagated.
 pub fn remove_directory_at_path_journaled(
@@ -214,10 +216,24 @@ pub fn remove_directory_at_path_journaled(
     superblock: &Superblock,
     path: &str,
 ) -> io::Result<RecoveryReport> {
+    let path = strip_single_directory_trailing_slash(path)?;
     let (parent_path, name) = split_path(path)?;
     recover_journal_and_checkpoint(device, *superblock)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
     remove_directory_journaled(device, superblock, parent, name)
+}
+
+fn strip_single_directory_trailing_slash(path: &str) -> io::Result<&str> {
+    if path == "/" || !path.ends_with('/') {
+        return Ok(path);
+    }
+    let stripped = &path[..path.len() - 1];
+    if stripped.ends_with('/') {
+        return Err(invalid_input(
+            "directory remove path contains repeated trailing separators",
+        ));
+    }
+    Ok(stripped)
 }
 
 fn split_path(path: &str) -> io::Result<(&str, &str)> {
@@ -250,6 +266,25 @@ mod tests {
     fn split_preserves_root_and_nested_parent_paths() {
         assert_eq!(split_path("/file").unwrap(), ("/", "file"));
         assert_eq!(split_path("/dir/sub/file").unwrap(), ("/dir/sub", "file"));
+    }
+
+    #[test]
+    fn directory_trailing_slash_normalization_accepts_one_separator_only() {
+        assert_eq!(
+            strip_single_directory_trailing_slash("/dir/").unwrap(),
+            "/dir"
+        );
+        assert_eq!(
+            strip_single_directory_trailing_slash("/dir").unwrap(),
+            "/dir"
+        );
+        assert_eq!(strip_single_directory_trailing_slash("/").unwrap(), "/");
+        assert_eq!(
+            strip_single_directory_trailing_slash("/dir//")
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
+        );
     }
 
     #[test]
