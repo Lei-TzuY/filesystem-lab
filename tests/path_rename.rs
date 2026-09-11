@@ -220,11 +220,10 @@ fn every_trailing_slash_directory_rename_crash_point_recovers_old_or_complete_ne
             assert_eq!(entries_after, entries_before);
         } else {
             assert_eq!(recovery.committed_transactions, 1);
-            assert!(
-                resolve_path_following_symlinks(&mut device, &superblock, "/src/dir").is_err()
-            );
+            assert!(resolve_path_following_symlinks(&mut device, &superblock, "/src/dir").is_err());
             assert_eq!(
-                resolve_path_following_symlinks(&mut device, &superblock, "/dst/moved_dir/").unwrap(),
+                resolve_path_following_symlinks(&mut device, &superblock, "/dst/moved_dir/")
+                    .unwrap(),
                 5
             );
             assert_eq!(entries_after.len(), entries_before.len());
