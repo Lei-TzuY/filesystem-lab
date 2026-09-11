@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::io;
 
 use crate::block::BlockDevice;
+use crate::directory_codec::PersistedDirectoryEntry;
 use crate::directory_table::load_directory_table;
 use crate::file_data::write_file_range_journaled;
 use crate::file_range_read::read_file_range;
@@ -19,14 +20,14 @@ pub const MAX_SYMLINK_EXPANSIONS: usize = 40;
 ///
 /// Symlink targets may be absolute or relative. Relative targets are interpreted against the
 /// directory containing the symlink, while any unconsumed suffix of the original path is preserved.
-/// `.` and `..` are deliberately rejected rather than normalized so this helper has one explicit,
-/// bounded traversal contract.
+/// `.` keeps traversal in the current directory. `..` resolves the unique persisted parent of the
+/// current directory, while attempts to walk above inode 1 remain at the root.
 ///
 /// # Errors
 /// Returns `InvalidInput` for a non-absolute or malformed path and for traversal through a
 /// non-directory inode, `NotFound` for a missing namespace component, `InvalidData` for dangling
-/// inode references or excessive symlink expansion, and propagates persisted metadata or symlink
-/// payload corruption.
+/// inode references, invalid/ambiguous directory parentage, or excessive symlink expansion, and
+/// propagates persisted metadata or symlink payload corruption.
 pub fn resolve_path_following_symlinks(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -40,7 +41,8 @@ pub fn resolve_path_following_symlinks(
 /// This is the lookup primitive needed by `readlink`-style operations: if the final namespace entry
 /// names a symbolic-link inode, the inode itself is returned even when its target is dangling.
 /// Intermediate symlinks retain the same bounded expansion and validation contract as
-/// [`resolve_path_following_symlinks`].
+/// [`resolve_path_following_symlinks`]. Dot components are resolved before final-component
+/// no-follow selection, so a symlink followed by `.` or `..` is still an intermediate component.
 ///
 /// # Errors
 /// Returns the same path and consistency errors as [`resolve_path_following_symlinks`], except that
@@ -56,8 +58,8 @@ pub fn resolve_path_without_following_final_symlink(
 /// Reads the persisted target of the symbolic link named by one absolute pathname.
 ///
 /// Intermediate symbolic links are followed, but the final component is resolved without following
-/// it. The final inode must itself be a symbolic link; its persisted `SYM1` payload is then validated
-/// by [`read_symlink`]. A dangling target is therefore readable, matching `readlink`-style semantics.
+/// it. The final inode must itself be a symbolic link; its persisted payload is then validated by
+/// [`read_symlink`]. A dangling target is therefore readable, matching `readlink`-style semantics.
 ///
 /// # Errors
 /// Propagates bounded pathname lookup errors and returns `InvalidInput` when the final inode is not
@@ -200,6 +202,14 @@ fn resolve_path(
             return Err(invalid_input("path traversal requires a directory inode"));
         }
 
+        if component == "." {
+            continue;
+        }
+        if component == ".." {
+            current = parent_directory(&inodes, &entries, current)?;
+            continue;
+        }
+
         let entry = entries
             .iter()
             .find(|entry| entry.parent == current && entry.name == component)
@@ -236,6 +246,42 @@ fn resolve_path(
     Ok(current)
 }
 
+fn parent_directory(
+    inodes: &[crate::inode_codec::PersistedInode],
+    entries: &[PersistedDirectoryEntry],
+    directory: u64,
+) -> io::Result<u64> {
+    if directory == 1 {
+        return Ok(1);
+    }
+
+    let mut parents = entries
+        .iter()
+        .filter(|entry| entry.target == directory)
+        .map(|entry| entry.parent);
+    let parent = parents.next().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "directory has no persisted parent namespace entry",
+        )
+    })?;
+    if parents.next().is_some() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "directory has ambiguous persisted parent namespace entries",
+        ));
+    }
+
+    let parent_inode = require_inode(inodes, parent)?;
+    if parent_inode.kind != InodeKind::Directory {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "directory parent namespace entry does not reference a directory",
+        ));
+    }
+    Ok(parent)
+}
+
 fn parse_components(path: &str) -> io::Result<VecDeque<String>> {
     if path == "/" {
         return Ok(VecDeque::new());
@@ -266,8 +312,8 @@ fn parse_component_sequence(sequence: &str) -> io::Result<VecDeque<String>> {
     }
     let mut components = VecDeque::new();
     for component in sequence.split('/') {
-        if component.is_empty() || component == "." || component == ".." {
-            return Err(invalid_input("path contains an unsupported component"));
+        if component.is_empty() {
+            return Err(invalid_input("path contains an empty component"));
         }
         components.push_back(component.to_owned());
     }
