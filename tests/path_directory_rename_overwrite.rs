@@ -69,9 +69,7 @@ fn setup() -> (CrashDevice, Superblock) {
 }
 
 fn assert_new_state(device: &mut CrashDevice, superblock: &Superblock) {
-    assert!(
-        resolve_path_following_symlinks(device, superblock, "/src_parent/source").is_err()
-    );
+    assert!(resolve_path_following_symlinks(device, superblock, "/src_parent/source").is_err());
     assert_eq!(
         resolve_path_following_symlinks(device, superblock, "/dst_parent/target").unwrap(),
         4
