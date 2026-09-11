@@ -13,8 +13,8 @@ use filesystem_lab::inode_codec::PersistedInode;
 use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
 use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::journal_region::load_journal_image;
-use filesystem_lab::path_directory_rename_overwrite::rename_overwrite_directory_at_path_journaled;
 use filesystem_lab::path_lookup::resolve_path_following_symlinks;
+use filesystem_lab::path_rename_overwrite::rename_overwrite_at_path_journaled;
 use filesystem_lab::recovery::RecoveryReport;
 use support::CrashDevice;
 
@@ -85,11 +85,11 @@ fn assert_new_state(device: &mut CrashDevice, superblock: &Superblock) {
 }
 
 #[test]
-fn overwrites_empty_directory_with_terminal_slashes_and_preserves_source_subtree() {
+fn dispatch_overwrites_empty_directory_with_terminal_slashes() {
     let (mut device, superblock) = setup();
     let allocator_before = load_allocator(&mut device, &superblock).unwrap();
 
-    rename_overwrite_directory_at_path_journaled(
+    rename_overwrite_at_path_journaled(
         &mut device,
         &superblock,
         "/src_parent/source/",
@@ -109,12 +109,12 @@ fn overwrites_empty_directory_with_terminal_slashes_and_preserves_source_subtree
 }
 
 #[test]
-fn rejects_repeated_trailing_separators_without_publication() {
+fn dispatch_rejects_repeated_trailing_separators_without_publication() {
     let (mut device, superblock) = setup();
     let before = load_directory_table(&mut device, &superblock).unwrap();
 
     assert_eq!(
-        rename_overwrite_directory_at_path_journaled(
+        rename_overwrite_at_path_journaled(
             &mut device,
             &superblock,
             "/src_parent/source//",
@@ -134,14 +134,14 @@ fn rejects_repeated_trailing_separators_without_publication() {
 }
 
 #[test]
-fn rejects_nonempty_destination_and_cycle_without_publication() {
+fn dispatch_rejects_nonempty_destination_without_publication() {
     let (mut device, superblock) = setup();
     let mut entries = load_directory_table(&mut device, &superblock).unwrap();
     entries.push(entry(5, 6, "occupant"));
     store_directory_table(&mut device, &superblock, &entries).unwrap();
     let before = load_directory_table(&mut device, &superblock).unwrap();
     assert_eq!(
-        rename_overwrite_directory_at_path_journaled(
+        rename_overwrite_at_path_journaled(
             &mut device,
             &superblock,
             "/src_parent/source/",
@@ -161,10 +161,10 @@ fn rejects_nonempty_destination_and_cycle_without_publication() {
 }
 
 #[test]
-fn every_directory_overwrite_crash_point_recovers_old_or_complete_new_state() {
+fn every_dispatch_directory_overwrite_crash_point_recovers_old_or_complete_new_state() {
     let (mut probe, superblock) = setup();
     probe.arm(None);
-    rename_overwrite_directory_at_path_journaled(
+    rename_overwrite_at_path_journaled(
         &mut probe,
         &superblock,
         "/src_parent/source/",
@@ -181,7 +181,7 @@ fn every_directory_overwrite_crash_point_recovers_old_or_complete_new_state() {
         let entries_before = load_directory_table(&mut device, &superblock).unwrap();
         device.arm(Some(crash_at));
         assert_eq!(
-            rename_overwrite_directory_at_path_journaled(
+            rename_overwrite_at_path_journaled(
                 &mut device,
                 &superblock,
                 "/src_parent/source/",
