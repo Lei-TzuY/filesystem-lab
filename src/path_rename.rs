@@ -126,14 +126,19 @@ pub fn rename_exchange_symlinks_at_path_journaled(
 /// Atomically exchanges two existing directory namespace entries addressed by pathnames.
 ///
 /// Parent portions follow bounded symbolic-link traversal while final components remain unfollowed.
+/// A single terminal slash is accepted on either operand as directory intent and is stripped before
+/// splitting the pathname. Repeated trailing separators remain invalid. Because only parent paths
+/// are followed, a terminal slash never turns a final symbolic link into its target; the durable
+/// primitive still requires both named final entries themselves to be directories.
+///
 /// Any older durable WAL is recovered and checkpointed before parent resolution. Publication is
 /// delegated to [`rename_exchange_directories_journaled`], which preserves inode and allocator
 /// images and rejects any candidate namespace that would introduce a directory cycle.
 ///
 /// # Errors
 /// Returns `InvalidInput` when either pathname is not absolute, names the root, has an empty final
-/// component, either final target is not a directory, or the exchange would create a directory
-/// cycle. Parent-resolution errors and all recovery, checkpoint,
+/// component, contains repeated trailing separators, either final target is not a directory, or the
+/// exchange would create a directory cycle. Parent-resolution errors and all recovery, checkpoint,
 /// [`rename_exchange_directories_journaled`] durable I/O errors are propagated.
 pub fn rename_exchange_directories_at_path_journaled(
     device: &mut impl BlockDevice,
@@ -141,6 +146,8 @@ pub fn rename_exchange_directories_at_path_journaled(
     first: &str,
     second: &str,
 ) -> io::Result<RecoveryReport> {
+    let (first, _) = normalize_directory_intent(first, "first directory exchange path")?;
+    let (second, _) = normalize_directory_intent(second, "second directory exchange path")?;
     let (first_parent, first_name, second_parent, second_name) =
         resolve_exchange_parents(device, superblock, first, second)?;
 
