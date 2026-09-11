@@ -10,6 +10,7 @@ use crate::format::Superblock;
 use crate::fsck::check_device;
 use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
+use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::recovery::RecoveryReport;
 
 /// Replaces one existing non-directory destination with another non-directory source.
@@ -100,6 +101,7 @@ pub(crate) fn rename_overwrite_nondirectory_journaled(
 
     if destination_references > 1 {
         let report = store_directory_table_journaled(device, superblock, &desired_entries)?;
+        recover_journal_and_checkpoint(device, *superblock)?;
         return Ok(report);
     }
 
