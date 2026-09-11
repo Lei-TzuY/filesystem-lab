@@ -179,6 +179,41 @@ fn follows_symlink_targets_containing_dot_components() {
 }
 
 #[test]
+fn trailing_slash_requires_directory_and_follows_final_symlinks() {
+    let (mut device, superblock) = setup();
+    let (dir_alias, _) =
+        create_symlink_journaled(&mut device, &superblock, 1, "dir_alias", "/dir").unwrap();
+    create_symlink_journaled(&mut device, &superblock, 1, "target_slash", "dir/").unwrap();
+    create_symlink_journaled(&mut device, &superblock, 1, "file_alias", "/dir/file").unwrap();
+
+    assert_eq!(
+        resolve_path_following_symlinks(&mut device, &superblock, "/dir/").unwrap(),
+        2
+    );
+    assert_eq!(
+        resolve_path_following_symlinks(&mut device, &superblock, "/dir_alias/").unwrap(),
+        2
+    );
+    assert_eq!(
+        resolve_path_without_following_final_symlink(&mut device, &superblock, "/dir_alias/")
+            .unwrap(),
+        2
+    );
+    assert_ne!(dir_alias, 2);
+    assert_eq!(
+        resolve_path_following_symlinks(&mut device, &superblock, "/target_slash").unwrap(),
+        2
+    );
+
+    for path in ["/dir/file/", "/file_alias/"] {
+        let error = resolve_path_following_symlinks(&mut device, &superblock, path).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+        assert!(error.to_string().contains("trailing slash requires a directory"));
+    }
+    check_device(&mut device).unwrap();
+}
+
+#[test]
 fn resolves_final_symlink_without_following_and_reads_opaque_target() {
     let (mut device, superblock) = setup();
     let (link_inode, _) =
@@ -313,7 +348,7 @@ fn dot_dot_rejects_ambiguous_directory_parentage() {
 fn rejects_ambiguous_or_non_absolute_paths() {
     let (mut device, superblock) = setup();
 
-    for path in ["dir/file", "/dir//file", "/dir/"] {
+    for path in ["dir/file", "/dir//file", "/dir//"] {
         assert_eq!(
             resolve_path_following_symlinks(&mut device, &superblock, path)
                 .unwrap_err()
