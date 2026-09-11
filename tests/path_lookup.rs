@@ -113,6 +113,28 @@ fn resolves_root_and_ordinary_absolute_paths() {
 }
 
 #[test]
+fn resolves_dot_and_dot_dot_components_with_root_clamping() {
+    let (mut device, superblock) = setup();
+
+    for path in ["/./dir/file", "/dir/./file", "/dir/../dir/file", "/../../dir/file"] {
+        assert_eq!(
+            resolve_path_following_symlinks(&mut device, &superblock, path).unwrap(),
+            3,
+            "path {path:?} should resolve to the file"
+        );
+    }
+
+    assert_eq!(
+        resolve_path_following_symlinks(&mut device, &superblock, "/dir/..").unwrap(),
+        1
+    );
+    assert_eq!(
+        resolve_path_following_symlinks(&mut device, &superblock, "/..").unwrap(),
+        1
+    );
+}
+
+#[test]
 fn follows_relative_and_absolute_symlink_targets_with_suffixes() {
     let (mut device, superblock) = setup();
     create_symlink_journaled(&mut device, &superblock, 1, "rel", "dir/file").unwrap();
@@ -129,6 +151,23 @@ fn follows_relative_and_absolute_symlink_targets_with_suffixes() {
     );
     assert_eq!(
         resolve_path_following_symlinks(&mut device, &superblock, "/dir/local").unwrap(),
+        3
+    );
+    check_device(&mut device).unwrap();
+}
+
+#[test]
+fn follows_symlink_targets_containing_dot_components() {
+    let (mut device, superblock) = setup();
+    create_symlink_journaled(&mut device, &superblock, 2, "up", "../dir/file").unwrap();
+    create_symlink_journaled(&mut device, &superblock, 1, "absolute", "/dir/./file").unwrap();
+
+    assert_eq!(
+        resolve_path_following_symlinks(&mut device, &superblock, "/dir/up").unwrap(),
+        3
+    );
+    assert_eq!(
+        resolve_path_following_symlinks(&mut device, &superblock, "/absolute").unwrap(),
         3
     );
     check_device(&mut device).unwrap();
@@ -157,6 +196,32 @@ fn resolves_final_symlink_without_following_and_reads_opaque_target() {
         io::ErrorKind::NotFound
     );
     check_device(&mut device).unwrap();
+}
+
+#[test]
+fn no_follow_final_semantics_survive_dot_components() {
+    let (mut device, superblock) = setup();
+    let (link_inode, _) =
+        create_symlink_journaled(&mut device, &superblock, 2, "target_link", "file").unwrap();
+
+    assert_eq!(
+        resolve_path_without_following_final_symlink(
+            &mut device,
+            &superblock,
+            "/dir/./target_link"
+        )
+        .unwrap(),
+        link_inode
+    );
+    assert_eq!(
+        resolve_path_without_following_final_symlink(
+            &mut device,
+            &superblock,
+            "/dir/../dir/target_link"
+        )
+        .unwrap(),
+        link_inode
+    );
 }
 
 #[test]
@@ -221,16 +286,29 @@ fn pathname_readlink_rejects_intermediate_symlink_loops() {
 }
 
 #[test]
+fn dot_dot_rejects_ambiguous_directory_parentage() {
+    let (mut device, superblock) = setup();
+    store_directory_table(
+        &mut device,
+        &superblock,
+        &[
+            entry(1, 2, "dir"),
+            entry(2, 3, "file"),
+            entry(1, 2, "dir_alias"),
+        ],
+    )
+    .unwrap();
+
+    let error = resolve_path_following_symlinks(&mut device, &superblock, "/dir/..").unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("ambiguous persisted parent"));
+}
+
+#[test]
 fn rejects_ambiguous_or_non_absolute_paths() {
     let (mut device, superblock) = setup();
 
-    for path in [
-        "dir/file",
-        "/dir/./file",
-        "/dir/../file",
-        "/dir//file",
-        "/dir/",
-    ] {
+    for path in ["dir/file", "/dir//file", "/dir/"] {
         assert_eq!(
             resolve_path_following_symlinks(&mut device, &superblock, path)
                 .unwrap_err()
