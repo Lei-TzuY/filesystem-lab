@@ -49,7 +49,10 @@ pub fn unlink_at_path_journaled(
         .find(|entry| entry.parent == parent && entry.name == name)
         .ok_or_else(|| invalid_input("unlink entry is missing"))?;
     let target = entry.target;
-    let reference_count = entries.iter().filter(|entry| entry.target == target).count();
+    let reference_count = entries
+        .iter()
+        .filter(|entry| entry.target == target)
+        .count();
 
     let target_kind = load_inode_table(device, superblock)?
         .iter()
