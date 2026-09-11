@@ -94,12 +94,7 @@ fn dispatches_regular_file_exchange() {
 fn dispatches_final_symlink_exchange_without_following_targets() {
     let mut device = CrashDevice::new(96);
     let superblock = format_device_with_journal_blocks(&mut device, JOURNAL_BLOCKS).unwrap();
-    store_inode_table(
-        &mut device,
-        &superblock,
-        &[inode(1, InodeKind::Directory)],
-    )
-    .unwrap();
+    store_inode_table(&mut device, &superblock, &[inode(1, InodeKind::Directory)]).unwrap();
     let (left, _) =
         create_symlink_journaled(&mut device, &superblock, 1, "left", "/missing/a").unwrap();
     let (right, _) =
@@ -208,13 +203,10 @@ fn every_dispatched_file_exchange_crash_point_recovers_old_or_complete_new_state
         let entries_before = load_directory_table(&mut device, &superblock).unwrap();
 
         device.arm(Some(crash_at));
-        assert!(rename_exchange_at_path_journaled(
-            &mut device,
-            &superblock,
-            "/left",
-            "/right",
-        )
-        .is_err());
+        assert!(
+            rename_exchange_at_path_journaled(&mut device, &superblock, "/left", "/right",)
+                .is_err()
+        );
         device.reboot();
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
 
