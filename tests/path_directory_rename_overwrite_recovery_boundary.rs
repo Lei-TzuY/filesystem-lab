@@ -74,7 +74,7 @@ fn setup() -> (CrashDevice, Superblock) {
 fn create_source_alias(
     device: &mut CrashDevice,
     superblock: &Superblock,
-) -> io::Result<RecoveryReport> {
+) -> io::Result<(u64, RecoveryReport)> {
     create_symlink_journaled(device, superblock, 1, "src_alias", "/src_parent")
 }
 
