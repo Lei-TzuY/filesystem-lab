@@ -69,6 +69,7 @@ pub mod path_replace;
 pub mod path_symlink;
 pub mod path_transfer;
 pub mod path_unlink;
+pub mod path_unlink_dispatch;
 pub mod path_zero_range;
 pub mod recovery;
 pub mod rename_exchange_tx;
