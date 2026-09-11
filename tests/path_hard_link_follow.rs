@@ -141,13 +141,8 @@ fn rejects_final_source_symlink_that_resolves_to_directory_before_publication() 
 fn every_following_dispatch_crash_point_recovers_old_or_complete_new_state() {
     let (mut probe, superblock) = setup();
     probe.arm(None);
-    hard_link_following_source_at_path_journaled(
-        &mut probe,
-        &superblock,
-        "/file_alias",
-        "/linked",
-    )
-    .unwrap();
+    hard_link_following_source_at_path_journaled(&mut probe, &superblock, "/file_alias", "/linked")
+        .unwrap();
     let operations = probe.operations();
 
     for crash_at in 0..operations {
