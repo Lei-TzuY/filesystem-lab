@@ -1,0 +1,93 @@
+use std::io;
+
+use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
+use filesystem_lab::format_geometry::format_device_with_journal_blocks;
+use filesystem_lab::fsck::check_device;
+use filesystem_lab::path_create::{
+    create_empty_file_at_path_journaled, create_file_with_blocks_at_path_journaled,
+};
+use filesystem_lab::path_file_read::read_file_blocks_at_path;
+use filesystem_lab::path_symlink::create_symlink_at_path_journaled;
+
+struct MemoryDevice {
+    blocks: Vec<[u8; BLOCK_SIZE]>,
+}
+
+impl MemoryDevice {
+    fn new(blocks: usize) -> Self {
+        Self {
+            blocks: vec![[0; BLOCK_SIZE]; blocks],
+        }
+    }
+
+    fn block_index(&self, block: u64) -> io::Result<usize> {
+        usize::try_from(block)
+            .ok()
+            .filter(|index| *index < self.blocks.len())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "invalid block"))
+    }
+}
+
+impl BlockDevice for MemoryDevice {
+    fn block_count(&self) -> u64 {
+        u64::try_from(self.blocks.len()).expect("test device block count fits in u64")
+    }
+
+    fn read_block(&mut self, block: u64, buf: &mut [u8; BLOCK_SIZE]) -> io::Result<()> {
+        *buf = self.blocks[self.block_index(block)?];
+        Ok(())
+    }
+
+    fn write_block(&mut self, block: u64, buf: &[u8; BLOCK_SIZE]) -> io::Result<()> {
+        let index = self.block_index(block)?;
+        self.blocks[index] = *buf;
+        Ok(())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn reads_complete_logical_blocks_and_follows_final_symlink() {
+    let mut device = MemoryDevice::new(96);
+    let superblock = format_device_with_journal_blocks(&mut device, 8).unwrap();
+    let mut first = [0x11; BLOCK_SIZE];
+    let mut second = [0x22; BLOCK_SIZE];
+    first[0..4].copy_from_slice(b"head");
+    second[BLOCK_SIZE - 4..].copy_from_slice(b"tail");
+    create_file_with_blocks_at_path_journaled(&mut device, &superblock, "/file", &[first, second])
+        .unwrap();
+    create_symlink_at_path_journaled(&mut device, &superblock, "/alias", "/file").unwrap();
+
+    let data = read_file_blocks_at_path(&mut device, &superblock, "/alias").unwrap();
+    assert_eq!(data.len(), 2 * BLOCK_SIZE);
+    assert_eq!(&data[..4], b"head");
+    assert_eq!(&data[data.len() - 4..], b"tail");
+    check_device(&mut device).unwrap();
+}
+
+#[test]
+fn zero_block_file_reads_empty_and_non_file_is_rejected() {
+    let mut device = MemoryDevice::new(64);
+    let superblock = format_device_with_journal_blocks(&mut device, 6).unwrap();
+    create_empty_file_at_path_journaled(&mut device, &superblock, "/empty").unwrap();
+    create_symlink_at_path_journaled(&mut device, &superblock, "/link", "/missing").unwrap();
+
+    assert!(read_file_blocks_at_path(&mut device, &superblock, "/empty")
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        read_file_blocks_at_path(&mut device, &superblock, "/")
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        read_file_blocks_at_path(&mut device, &superblock, "/link")
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::NotFound
+    );
+}
