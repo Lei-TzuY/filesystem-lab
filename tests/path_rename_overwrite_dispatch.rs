@@ -125,13 +125,8 @@ fn dispatch_preserves_multiply_linked_symlink_destination() {
     )
     .unwrap();
 
-    rename_overwrite_at_path_journaled(
-        &mut device,
-        &superblock,
-        "/src/source",
-        "/dst/target",
-    )
-    .unwrap();
+    rename_overwrite_at_path_journaled(&mut device, &superblock, "/src/source", "/dst/target")
+        .unwrap();
 
     assert_eq!(
         resolve_path_without_following_final_symlink(&mut device, &superblock, "/dst/target")
@@ -158,13 +153,8 @@ fn dispatch_preserves_multiply_linked_symlink_destination() {
 fn every_dispatch_symlink_overwrite_crash_point_recovers_old_or_complete_new_state() {
     let (mut probe, superblock, _, _, _, _) = setup();
     probe.arm(None);
-    rename_overwrite_at_path_journaled(
-        &mut probe,
-        &superblock,
-        "/src/source",
-        "/dst/target",
-    )
-    .unwrap();
+    rename_overwrite_at_path_journaled(&mut probe, &superblock, "/src/source", "/dst/target")
+        .unwrap();
     let operations = probe.operations();
     assert!(operations >= 6);
 
