@@ -48,13 +48,19 @@ fn setup() -> (CrashDevice, Superblock) {
             inode(2, InodeKind::Directory),
             inode(3, InodeKind::Directory),
             inode(4, InodeKind::File),
+            inode(5, InodeKind::Directory),
         ],
     )
     .unwrap();
     store_directory_table(
         &mut device,
         &superblock,
-        &[entry(1, 2, "src"), entry(1, 3, "dst"), entry(2, 4, "file")],
+        &[
+            entry(1, 2, "src"),
+            entry(1, 3, "dst"),
+            entry(2, 4, "file"),
+            entry(2, 5, "dir"),
+        ],
     )
     .unwrap();
     create_symlink_journaled(&mut device, &superblock, 1, "src_alias", "/src").unwrap();
@@ -94,7 +100,37 @@ fn renames_entry_through_source_and_destination_parent_symlinks() {
 }
 
 #[test]
-fn rejects_invalid_paths_and_destination_collision_before_publication() {
+fn trailing_slash_renames_directory_with_directory_only_intent() {
+    let (mut device, superblock) = setup();
+    let allocator_before = load_allocator(&mut device, &superblock).unwrap();
+    let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
+
+    rename_at_path_journaled(
+        &mut device,
+        &superblock,
+        "/src_alias/dir/",
+        "/dst_alias/moved_dir/",
+    )
+    .unwrap();
+
+    assert!(resolve_path_following_symlinks(&mut device, &superblock, "/src/dir").is_err());
+    assert_eq!(
+        resolve_path_following_symlinks(&mut device, &superblock, "/dst/moved_dir/").unwrap(),
+        5
+    );
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
+    check_device(&mut device).unwrap();
+}
+
+#[test]
+fn rejects_invalid_paths_file_directory_intent_and_destination_collision_before_publication() {
     let (mut device, superblock) = setup();
     let allocator_before = load_allocator(&mut device, &superblock).unwrap();
     let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
@@ -104,9 +140,11 @@ fn rejects_invalid_paths_and_destination_collision_before_publication() {
         ("src/file", "/dst/moved"),
         ("/src/file", "dst/moved"),
         ("/", "/dst/moved"),
-        ("/src/", "/dst/moved"),
         ("/src/file", "/"),
-        ("/src/file", "/dst/"),
+        ("/src/file/", "/dst/moved"),
+        ("/src/file", "/dst/moved/"),
+        ("/src/dir//", "/dst/moved"),
+        ("/src/dir", "/dst/moved//"),
         ("/src/file", "/dst_alias"),
     ] {
         assert_eq!(
@@ -135,14 +173,14 @@ fn rejects_invalid_paths_and_destination_collision_before_publication() {
 }
 
 #[test]
-fn every_pathname_rename_crash_point_recovers_old_or_complete_new_state() {
+fn every_trailing_slash_directory_rename_crash_point_recovers_old_or_complete_new_state() {
     let (mut probe, superblock) = setup();
     probe.arm(None);
     rename_at_path_journaled(
         &mut probe,
         &superblock,
-        "/src_alias/file",
-        "/dst_alias/moved",
+        "/src_alias/dir/",
+        "/dst_alias/moved_dir/",
     )
     .unwrap();
     let operations = probe.operations();
@@ -158,13 +196,13 @@ fn every_pathname_rename_crash_point_recovers_old_or_complete_new_state() {
             rename_at_path_journaled(
                 &mut device,
                 &superblock,
-                "/src_alias/file",
-                "/dst_alias/moved",
+                "/src_alias/dir/",
+                "/dst_alias/moved_dir/",
             )
             .unwrap_err()
             .kind(),
             io::ErrorKind::Other,
-            "crash point {crash_at} must interrupt pathname rename"
+            "crash point {crash_at} must interrupt trailing-slash directory rename"
         );
         device.reboot();
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
@@ -182,12 +220,11 @@ fn every_pathname_rename_crash_point_recovers_old_or_complete_new_state() {
             assert_eq!(entries_after, entries_before);
         } else {
             assert_eq!(recovery.committed_transactions, 1);
-            assert!(
-                resolve_path_following_symlinks(&mut device, &superblock, "/src/file").is_err()
-            );
+            assert!(resolve_path_following_symlinks(&mut device, &superblock, "/src/dir").is_err());
             assert_eq!(
-                resolve_path_following_symlinks(&mut device, &superblock, "/dst/moved").unwrap(),
-                4
+                resolve_path_following_symlinks(&mut device, &superblock, "/dst/moved_dir/")
+                    .unwrap(),
+                5
             );
             assert_eq!(entries_after.len(), entries_before.len());
         }

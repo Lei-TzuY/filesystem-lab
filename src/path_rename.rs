@@ -1,7 +1,10 @@
 use std::io;
 
 use crate::block::BlockDevice;
+use crate::directory_table::load_directory_table;
 use crate::format::Superblock;
+use crate::inode::InodeKind;
+use crate::inode_table::load_inode_table;
 use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
@@ -16,6 +19,9 @@ use crate::rename_tx::rename_entry_journaled;
 /// Only the source and destination parent pathnames are resolved through the repository-wide
 /// bounded symbolic-link traversal rules. Neither final component is followed, so renaming a
 /// symbolic link moves the link inode itself and an existing destination remains a collision.
+/// A single terminal slash on either pathname expresses directory-only intent: it is stripped before
+/// splitting, repeated trailing separators remain invalid, and the named source entry must be a
+/// directory inode. Final symlinks are therefore never followed merely because a slash was present.
 ///
 /// After validating both pathname shapes but before resolving either parent, the operation recovers
 /// and checkpoints any older durable journal image. The rename is therefore derived only from fully
@@ -24,8 +30,9 @@ use crate::rename_tx::rename_entry_journaled;
 /// directory-cycle validation.
 ///
 /// # Errors
-/// Returns `InvalidInput` when either pathname is not absolute, names the root, or has an empty
-/// final component. Parent-resolution errors and all recovery, checkpoint,
+/// Returns `InvalidInput` when either pathname is not absolute, names the root, has an invalid final
+/// component, contains repeated trailing separators, or uses terminal-slash directory intent for a
+/// non-directory source entry. Parent-resolution errors and all recovery, checkpoint,
 /// [`rename_entry_journaled`] validation, and durable I/O errors are propagated.
 pub fn rename_at_path_journaled(
     device: &mut impl BlockDevice,
@@ -33,12 +40,19 @@ pub fn rename_at_path_journaled(
     source: &str,
     destination: &str,
 ) -> io::Result<RecoveryReport> {
+    let (source, source_directory_intent) = normalize_directory_intent(source, "rename source")?;
+    let (destination, destination_directory_intent) =
+        normalize_directory_intent(destination, "rename destination")?;
     let (old_parent_path, old_name) = split_path(source, "rename source")?;
     let (new_parent_path, new_name) = split_path(destination, "rename destination")?;
 
     recover_journal_and_checkpoint(device, *superblock)?;
     let old_parent = resolve_path_following_symlinks(device, superblock, old_parent_path)?;
     let new_parent = resolve_path_following_symlinks(device, superblock, new_parent_path)?;
+
+    if source_directory_intent || destination_directory_intent {
+        require_directory_entry(device, superblock, old_parent, old_name)?;
+    }
 
     rename_entry_journaled(
         device, superblock, old_parent, old_name, new_parent, new_name,
@@ -155,6 +169,47 @@ fn resolve_exchange_parents<'a>(
     Ok((first_parent, first_name, second_parent, second_name))
 }
 
+fn normalize_directory_intent<'a>(path: &'a str, label: &str) -> io::Result<(&'a str, bool)> {
+    if path == "/" || !path.ends_with('/') {
+        return Ok((path, false));
+    }
+
+    let stripped = &path[..path.len() - 1];
+    if stripped.ends_with('/') {
+        return Err(invalid_input(format!(
+            "{label} contains repeated trailing separators"
+        )));
+    }
+    Ok((stripped, true))
+}
+
+fn require_directory_entry(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    parent: u64,
+    name: &str,
+) -> io::Result<()> {
+    let entries = load_directory_table(device, superblock)?;
+    let target = entries
+        .iter()
+        .find(|entry| entry.parent == parent && entry.name == name)
+        .map(|entry| entry.target)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "rename source does not exist"))?;
+    let inodes = load_inode_table(device, superblock)?;
+    let inode = inodes
+        .iter()
+        .find(|inode| inode.id == target)
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "rename source inode is missing")
+        })?;
+    if inode.kind != InodeKind::Directory {
+        return Err(invalid_input(
+            "trailing-slash rename requires a directory source entry",
+        ));
+    }
+    Ok(())
+}
+
 fn split_path<'a>(path: &'a str, label: &str) -> io::Result<(&'a str, &'a str)> {
     if !path.starts_with('/') {
         return Err(invalid_input(format!("{label} must be an absolute path")));
@@ -187,6 +242,28 @@ mod tests {
         assert_eq!(
             split_path("/dir/sub/file", "source").unwrap(),
             ("/dir/sub", "file")
+        );
+    }
+
+    #[test]
+    fn directory_intent_normalization_accepts_one_separator_only() {
+        assert_eq!(
+            normalize_directory_intent("/dir/", "source").unwrap(),
+            ("/dir", true)
+        );
+        assert_eq!(
+            normalize_directory_intent("/dir", "source").unwrap(),
+            ("/dir", false)
+        );
+        assert_eq!(
+            normalize_directory_intent("/", "source").unwrap(),
+            ("/", false)
+        );
+        assert_eq!(
+            normalize_directory_intent("/dir//", "source")
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
         );
     }
 
