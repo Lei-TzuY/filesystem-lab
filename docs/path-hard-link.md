@@ -1,13 +1,14 @@
 # Pathname hard links
 
-Format v5 exposes four bounded pathname hard-link surfaces:
+Format v5 exposes one explicit source-follow policy dispatcher plus four convenience pathname hard-link surfaces:
 
-- `hard_link_at_path_journaled` is the POSIX-like `link` default: it follows intermediate source symbolic links but does **not** follow the final source component, then dispatches by persisted inode kind to regular-file or symbolic-link hard-link publication.
-- `hard_link_following_source_at_path_journaled` is the bounded `linkat(..., AT_SYMLINK_FOLLOW)` analogue: it follows the complete source pathname, including the final symbolic link, then dispatches from the resolved inode kind. A final symlink to a regular file therefore creates an alias of the regular file rather than of the symlink inode.
+- `hard_link_at_path_with_source_follow_journaled` accepts `HardLinkSourceFollow::{NoFollowFinal, FollowFinal}` so callers that model `link`/`linkat` semantics can select final-source behavior without choosing an inode-kind-specific API.
+- `hard_link_at_path_journaled` is the POSIX-like `link` convenience surface: it follows intermediate source symbolic links but does **not** follow the final source component.
+- `hard_link_following_source_at_path_journaled` is the bounded `linkat(..., AT_SYMLINK_FOLLOW)` convenience surface: it follows the complete source pathname, including the final symbolic link. A final symlink to a regular file therefore creates an alias of the regular file rather than of the symlink inode.
 - `hard_link_file_at_path_journaled` adds one durable namespace alias to an existing regular file and follows the final source symbolic link.
 - `hard_link_symlink_at_path_journaled` adds one durable namespace alias to the final symbolic-link inode itself.
 
-Before resolving either source or destination parent, all pathname hard-link APIs recover and checkpoint any older committed WAL. This prevents endpoint selection from observing a partially replayed namespace after reboot. The default dispatcher selects the final source inode without following a final symlink. The final-follow dispatcher instead uses the bounded full-path resolver, then loads the persisted resolved inode kind. Both dispatch to the existing regular-file or symbolic-link primitive, and both reject directory sources so directory-parent and cycle invariants remain unchanged. The destination is split into parent path plus basename; only the parent path is resolved, so the final destination name is never followed and any existing entry is a collision.
+Before resolving either source or destination parent, the policy dispatcher recovers and checkpoints any older committed WAL. `NoFollowFinal` selects the final source inode without following a final symlink; `FollowFinal` uses the bounded full-path resolver. The persisted selected inode kind then dispatches to the existing regular-file or symbolic-link primitive. Both policies reject directory sources so directory-parent and cycle invariants remain unchanged. The destination is split into parent path plus basename; only the parent path is resolved, so the final destination name is never followed and any existing entry is a collision. The two generic convenience surfaces delegate to this single policy dispatcher, keeping recovery ordering and endpoint selection identical.
 
 Publication remains delegated to the existing directory-only WAL primitives: `hard_link_file_journaled` for regular files and `hard_link_symlink_journaled` for symbolic links. The symlink primitive additionally validates the persisted one-block `SYM1` payload before WAL publication.
 
