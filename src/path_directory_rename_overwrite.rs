@@ -17,21 +17,27 @@ use crate::recovery::RecoveryReport;
 
 /// Resolves both parent paths and atomically moves a directory over an existing empty directory.
 ///
+/// A single terminal slash on either pathname is accepted as directory intent and stripped before
+/// splitting the final component. Repeated trailing separators remain invalid. Final components are
+/// never followed, so a terminal slash does not turn a symbolic link into its target directory.
 /// Any older committed WAL is recovered and checkpointed before parent pathname resolution so both
 /// endpoint parents are selected from recovered namespace state rather than a partially replayed
 /// home-write prefix.
 ///
 /// # Errors
 ///
-/// Returns an error for malformed paths, lookup failures, invalid directory endpoint state,
-/// cycle-producing replacements, inconsistent metadata, recovery/checkpoint failures, or
-/// journal/device failures.
+/// Returns an error for malformed paths, repeated trailing separators, lookup failures, invalid
+/// directory endpoint state, cycle-producing replacements, inconsistent metadata,
+/// recovery/checkpoint failures, or journal/device failures.
 pub fn rename_overwrite_directory_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
     source: &str,
     destination: &str,
 ) -> io::Result<RecoveryReport> {
+    let source = normalize_directory_path(source, "directory rename-overwrite source")?;
+    let destination =
+        normalize_directory_path(destination, "directory rename-overwrite destination")?;
     let (old_parent_path, old_name) = split_path(source, "directory rename-overwrite source")?;
     let (new_parent_path, new_name) =
         split_path(destination, "directory rename-overwrite destination")?;
@@ -216,6 +222,19 @@ fn validate_directory(inodes: &[PersistedInode], id: u64, label: &str) -> io::Re
         )));
     }
     Ok(())
+}
+
+fn normalize_directory_path<'a>(path: &'a str, label: &str) -> io::Result<&'a str> {
+    if path == "/" || !path.ends_with('/') {
+        return Ok(path);
+    }
+    let stripped = &path[..path.len() - 1];
+    if stripped.ends_with('/') {
+        return Err(invalid_input(format!(
+            "{label} contains repeated trailing separators"
+        )));
+    }
+    Ok(stripped)
 }
 
 fn split_path<'a>(path: &'a str, label: &str) -> io::Result<(&'a str, &'a str)> {

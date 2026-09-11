@@ -85,15 +85,15 @@ fn assert_new_state(device: &mut CrashDevice, superblock: &Superblock) {
 }
 
 #[test]
-fn overwrites_empty_directory_and_preserves_source_subtree() {
+fn overwrites_empty_directory_with_terminal_slashes_and_preserves_source_subtree() {
     let (mut device, superblock) = setup();
     let allocator_before = load_allocator(&mut device, &superblock).unwrap();
 
     rename_overwrite_directory_at_path_journaled(
         &mut device,
         &superblock,
-        "/src_parent/source",
-        "/dst_parent/target",
+        "/src_parent/source/",
+        "/dst_parent/target/",
     )
     .unwrap();
 
@@ -109,6 +109,31 @@ fn overwrites_empty_directory_and_preserves_source_subtree() {
 }
 
 #[test]
+fn rejects_repeated_trailing_separators_without_publication() {
+    let (mut device, superblock) = setup();
+    let before = load_directory_table(&mut device, &superblock).unwrap();
+
+    assert_eq!(
+        rename_overwrite_directory_at_path_journaled(
+            &mut device,
+            &superblock,
+            "/src_parent/source//",
+            "/dst_parent/target/",
+        )
+        .unwrap_err()
+        .kind(),
+        io::ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        before
+    );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
 fn rejects_nonempty_destination_and_cycle_without_publication() {
     let (mut device, superblock) = setup();
     let mut entries = load_directory_table(&mut device, &superblock).unwrap();
@@ -119,8 +144,8 @@ fn rejects_nonempty_destination_and_cycle_without_publication() {
         rename_overwrite_directory_at_path_journaled(
             &mut device,
             &superblock,
-            "/src_parent/source",
-            "/dst_parent/target",
+            "/src_parent/source/",
+            "/dst_parent/target/",
         )
         .unwrap_err()
         .kind(),
@@ -142,8 +167,8 @@ fn every_directory_overwrite_crash_point_recovers_old_or_complete_new_state() {
     rename_overwrite_directory_at_path_journaled(
         &mut probe,
         &superblock,
-        "/src_parent/source",
-        "/dst_parent/target",
+        "/src_parent/source/",
+        "/dst_parent/target/",
     )
     .unwrap();
     let operations = probe.operations();
@@ -159,8 +184,8 @@ fn every_directory_overwrite_crash_point_recovers_old_or_complete_new_state() {
             rename_overwrite_directory_at_path_journaled(
                 &mut device,
                 &superblock,
-                "/src_parent/source",
-                "/dst_parent/target",
+                "/src_parent/source/",
+                "/dst_parent/target/",
             )
             .unwrap_err()
             .kind(),
