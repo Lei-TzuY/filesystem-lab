@@ -167,9 +167,11 @@ pub fn create_file_with_blocks_at_path_journaled(
 /// Creates one durable empty directory at an absolute pathname.
 ///
 /// The destination parent is resolved with the existing bounded symbolic-link rules. The final
-/// component is not resolved: it becomes one new durable directory entry naming a freshly assigned
-/// directory inode. Format v5 represents an empty directory with no child entries and no data
-/// blocks, so allocator ownership is preserved exactly.
+/// component is not resolved and becomes one new durable directory entry naming a freshly assigned
+/// directory inode. A single terminal slash is accepted for directory creation and carries the same
+/// directory-only intent as pathname lookup; repeated trailing separators remain invalid. Format v5
+/// represents an empty directory with no child entries and no data blocks, so allocator ownership is
+/// preserved exactly.
 ///
 /// Before reading persistent allocator, inode, or namespace state, pathname create recovers and
 /// checkpoints any older durable journal image. Recovery therefore establishes the state from which
@@ -190,6 +192,7 @@ pub fn create_directory_at_path_journaled(
     superblock: &Superblock,
     destination: &str,
 ) -> io::Result<(u64, RecoveryReport)> {
+    let destination = strip_single_directory_trailing_slash(destination)?;
     create_blockless_inode_at_path_journaled(device, superblock, destination, InodeKind::Directory)
 }
 
@@ -265,6 +268,19 @@ fn next_inode_id(inodes: &[PersistedInode]) -> io::Result<u64> {
         .ok_or_else(|| invalid_input("no fresh inode identifier is available"))
 }
 
+fn strip_single_directory_trailing_slash(path: &str) -> io::Result<&str> {
+    if path == "/" || !path.ends_with('/') {
+        return Ok(path);
+    }
+    let stripped = &path[..path.len() - 1];
+    if stripped.ends_with('/') {
+        return Err(invalid_input(
+            "directory create destination contains repeated trailing separators",
+        ));
+    }
+    Ok(stripped)
+}
+
 fn split_destination(path: &str) -> io::Result<(&str, &str)> {
     if !path.starts_with('/') {
         return Err(invalid_input("create destination must be an absolute path"));
@@ -301,6 +317,25 @@ mod tests {
         assert_eq!(
             split_destination("/dir/sub/file").unwrap(),
             ("/dir/sub", "file")
+        );
+    }
+
+    #[test]
+    fn directory_trailing_slash_normalization_accepts_one_separator_only() {
+        assert_eq!(
+            strip_single_directory_trailing_slash("/dir/").unwrap(),
+            "/dir"
+        );
+        assert_eq!(
+            strip_single_directory_trailing_slash("/dir").unwrap(),
+            "/dir"
+        );
+        assert_eq!(strip_single_directory_trailing_slash("/").unwrap(), "/");
+        assert_eq!(
+            strip_single_directory_trailing_slash("/dir//")
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
         );
     }
 
