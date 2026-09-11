@@ -116,6 +116,10 @@ fn reports_root_and_regular_file_metadata_without_inventing_byte_length() {
             namespace_references: 2,
         }
     );
+    assert_eq!(
+        metadata_at_path(&mut device, &superblock, "/./file").unwrap(),
+        metadata_at_path(&mut device, &superblock, "/file").unwrap()
+    );
 }
 
 #[test]
@@ -190,7 +194,7 @@ fn rejects_allocator_ownership_disagreement_before_reporting_metadata() {
 fn preserves_existing_bounded_path_validation() {
     let (mut device, superblock, _, _) = setup();
 
-    for path in ["file", "/file/", "/./file", "/missing"] {
+    for path in ["file", "/file/", "/missing", "/missing//child"] {
         assert!(metadata_at_path(&mut device, &superblock, path).is_err());
         assert!(symlink_metadata_at_path(&mut device, &superblock, path).is_err());
     }
