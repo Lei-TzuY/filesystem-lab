@@ -8,6 +8,19 @@ For a non-empty file the implementation delegates to the existing journaled rang
 
 A zero-block file accepts only an empty slice. After recovery/checkpoint this is a no-op and publishes no new file-data transaction. Any other length mismatch is rejected before the range-write transaction is invoked.
 
-This API deliberately does not define byte-level EOF. It cannot grow or shrink a file, allocate blocks, create sparse holes, or encode a partial final logical block. Those semantics are not representable in the current inode schema.
+## Whole-file block replacement with resizing
+
+`replace_file_at_path_journaled()` replaces the complete persisted logical-block sequence while allowing the block count to change, including transitions to or from an empty file. Path resolution has the same recovery-before-lookup and final-symlink-follow behavior as the fixed-size whole-file write.
+
+The wrapper chooses exactly one existing crash-consistent transaction from recovered inode state:
+
+- empty to empty: no-op after recovery/checkpoint;
+- empty to non-empty: atomic multi-block append;
+- non-empty to empty: truncate-to-zero;
+- non-empty to non-empty: variable-length range replacement spanning the complete current block list.
+
+The operation never implements a resize as multiple independently durable mutations. Each state-changing branch is a single existing WAL transaction, so allocator ownership, inode block-list changes, data publication, recovery, checkpointing, and journal-capacity validation remain centralized in their established primitives.
+
+This capability remains block-granular. Format v5 still has no persisted byte EOF, so neither whole-file API claims partial-final-block, sparse-hole, extent, or byte-length semantics.
 
 No superblock, allocation image, inode record, directory entry, journal record, or data-block encoding changes. The filesystem remains **format v5** and requires no migration.
