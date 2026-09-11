@@ -133,24 +133,18 @@ fn pathname_directory_rename_overwrite_recovers_committed_parent_symlink_before_
         )
         .unwrap();
 
-        assert!(resolve_path_following_symlinks(
-            &mut device,
-            &superblock,
-            "/src_parent/source",
-        )
-        .is_err());
+        assert!(
+            resolve_path_following_symlinks(&mut device, &superblock, "/src_parent/source",)
+                .is_err()
+        );
         assert_eq!(
             resolve_path_following_symlinks(&mut device, &superblock, "/dst_parent/target")
                 .unwrap(),
             4
         );
         assert_eq!(
-            resolve_path_following_symlinks(
-                &mut device,
-                &superblock,
-                "/dst_parent/target/child",
-            )
-            .unwrap(),
+            resolve_path_following_symlinks(&mut device, &superblock, "/dst_parent/target/child",)
+                .unwrap(),
             6
         );
         assert_eq!(
