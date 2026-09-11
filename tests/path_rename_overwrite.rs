@@ -80,7 +80,9 @@ fn dispatch_overwrites_singly_linked_file_through_parent_symlinks() {
         "/dst_alias/target",
     )
     .unwrap();
-    assert!(resolve_path_following_symlinks(&mut device, &superblock, "/src/source").is_err());
+    assert!(
+        resolve_path_following_symlinks(&mut device, &superblock, "/src/source").is_err()
+    );
     assert_eq!(
         resolve_path_following_symlinks(&mut device, &superblock, "/dst/target").unwrap(),
         4
@@ -136,6 +138,7 @@ fn dispatch_rejects_malformed_and_mixed_kind_paths_without_publication() {
         ("/", "/dst/target"),
         ("/src/source", "/"),
         ("/src/source/", "/dst/target"),
+        ("/src/source", "/dst"),
     ] {
         assert_eq!(
             rename_overwrite_at_path_journaled(&mut device, &superblock, source, destination)
