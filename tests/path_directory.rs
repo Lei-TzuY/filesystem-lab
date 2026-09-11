@@ -156,6 +156,14 @@ fn resolves_nested_and_final_symlink_directory_paths() {
         list_directory_at_path(&mut device, &superblock, "/dir-link").unwrap(),
         expected
     );
+    assert_eq!(
+        list_directory_at_path(&mut device, &superblock, "/./dir").unwrap(),
+        expected
+    );
+    assert_eq!(
+        list_directory_at_path(&mut device, &superblock, "/dir/nested/..").unwrap(),
+        expected
+    );
 }
 
 #[test]
@@ -173,7 +181,7 @@ fn rejects_non_directory_and_preserves_bounded_path_validation() {
     let error = list_directory_at_path(&mut device, &superblock, "/file").unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
 
-    for path in ["dir", "/dir/", "/./dir", "/missing"] {
+    for path in ["dir", "/dir/", "/dir//nested", "/missing"] {
         assert!(list_directory_at_path(&mut device, &superblock, path).is_err());
     }
 }
