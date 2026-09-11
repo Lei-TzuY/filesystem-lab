@@ -21,13 +21,16 @@ pub const MAX_SYMLINK_EXPANSIONS: usize = 40;
 /// Symlink targets may be absolute or relative. Relative targets are interpreted against the
 /// directory containing the symlink, while any unconsumed suffix of the original path is preserved.
 /// `.` keeps traversal in the current directory. `..` resolves the unique persisted parent of the
-/// current directory, while attempts to walk above inode 1 remain at the root.
+/// current directory, while attempts to walk above inode 1 remain at the root. A single trailing
+/// slash requires the final resolved inode to be a directory and therefore forces a final symbolic
+/// link to be followed.
 ///
 /// # Errors
-/// Returns `InvalidInput` for a non-absolute or malformed path and for traversal through a
-/// non-directory inode, `NotFound` for a missing namespace component, `InvalidData` for dangling
-/// inode references, invalid/ambiguous directory parentage, or excessive symlink expansion, and
-/// propagates persisted metadata or symlink payload corruption.
+/// Returns `InvalidInput` for a non-absolute or malformed path, traversal through a non-directory
+/// inode, or a trailing slash whose final target is not a directory; `NotFound` for a missing
+/// namespace component; `InvalidData` for dangling inode references, invalid/ambiguous directory
+/// parentage, or excessive symlink expansion; and propagates persisted metadata or symlink payload
+/// corruption.
 pub fn resolve_path_following_symlinks(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -43,10 +46,11 @@ pub fn resolve_path_following_symlinks(
 /// Intermediate symlinks retain the same bounded expansion and validation contract as
 /// [`resolve_path_following_symlinks`]. Dot components are resolved before final-component
 /// no-follow selection, so a symlink followed by `.` or `..` is still an intermediate component.
+/// Likewise, a trailing slash requires directory traversal and therefore follows a final symlink.
 ///
 /// # Errors
 /// Returns the same path and consistency errors as [`resolve_path_following_symlinks`], except that
-/// the final symbolic-link payload is not read merely to resolve its inode.
+/// an ordinary final symbolic-link payload is not read merely to resolve its inode.
 pub fn resolve_path_without_following_final_symlink(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -60,6 +64,7 @@ pub fn resolve_path_without_following_final_symlink(
 /// Intermediate symbolic links are followed, but the final component is resolved without following
 /// it. The final inode must itself be a symbolic link; its persisted payload is then validated by
 /// [`read_symlink`]. A dangling target is therefore readable, matching `readlink`-style semantics.
+/// A trailing slash forces directory semantics and consequently cannot name the symlink itself.
 ///
 /// # Errors
 /// Propagates bounded pathname lookup errors and returns `InvalidInput` when the final inode is not
@@ -188,6 +193,7 @@ fn resolve_path(
 
     let inodes = load_inode_table(device, superblock)?;
     let entries = load_directory_table(device, superblock)?;
+    let mut require_directory_at_end = path != "/" && path.ends_with('/');
     let mut pending = parse_components(path)?;
     let mut current = 1_u64;
     let mut symlink_expansions = 0_usize;
@@ -217,7 +223,7 @@ fn resolve_path(
         let target_inode = require_inode(&inodes, entry.target)?;
 
         if target_inode.kind == InodeKind::Symlink {
-            if pending.is_empty() && !follow_final_symlink {
+            if pending.is_empty() && !follow_final_symlink && !require_directory_at_end {
                 return Ok(target_inode.id);
             }
 
@@ -231,9 +237,14 @@ fn resolve_path(
 
             let target = read_symlink(device, superblock, target_inode.id)?;
             let target_is_absolute = target.starts_with('/');
+            let target_requires_directory = target != "/" && target.ends_with('/');
+            let had_suffix = !pending.is_empty();
             let mut expanded = parse_target_components(&target)?;
             expanded.append(&mut pending);
             pending = expanded;
+            if target_requires_directory && !had_suffix {
+                require_directory_at_end = true;
+            }
             if target_is_absolute {
                 current = 1;
             }
@@ -243,6 +254,10 @@ fn resolve_path(
         current = target_inode.id;
     }
 
+    let resolved_inode = require_inode(&inodes, current)?;
+    if require_directory_at_end && resolved_inode.kind != InodeKind::Directory {
+        return Err(invalid_input("trailing slash requires a directory inode"));
+    }
     Ok(current)
 }
 
@@ -286,12 +301,10 @@ fn parse_components(path: &str) -> io::Result<VecDeque<String>> {
     if path == "/" {
         return Ok(VecDeque::new());
     }
-    if path.ends_with('/') {
-        return Err(invalid_input("non-root path must not end with '/'"));
-    }
     let body = path
         .strip_prefix('/')
         .ok_or_else(|| invalid_input("path must be absolute"))?;
+    let body = body.strip_suffix('/').unwrap_or(body);
     parse_component_sequence(body)
 }
 
@@ -300,9 +313,7 @@ fn parse_target_components(target: &str) -> io::Result<VecDeque<String>> {
         return Ok(VecDeque::new());
     }
     let body = target.strip_prefix('/').unwrap_or(target);
-    if target.ends_with('/') {
-        return Err(invalid_input("symlink target must not end with '/'"));
-    }
+    let body = body.strip_suffix('/').unwrap_or(body);
     parse_component_sequence(body)
 }
 
