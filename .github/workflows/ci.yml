@@ -5,26 +5,17 @@ on:
     branches: [main]
   pull_request:
 
-permissions:
-  contents: write
-
 jobs:
   rust:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Capture Clippy diagnostic
-        run: |
-          cargo clippy --all-targets --all-features -- -D warnings > clippy.log 2>&1 || true
-          git config user.name "LeiZ"
-          git config user.email "52287354+Lei-TzuY@users.noreply.github.com"
-          git add clippy.log
-          git commit -m "Capture Clippy diagnostic"
-          git push origin HEAD:${{ github.head_ref }}
       - name: Format
         run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Test
+        run: cargo test --all-targets --all-features
