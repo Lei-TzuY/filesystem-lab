@@ -20,11 +20,8 @@ use support::CrashDevice;
 
 const JOURNAL_BLOCKS: u64 = 10;
 const ORIGINAL: [[u8; BLOCK_SIZE]; 2] = [[0x11; BLOCK_SIZE], [0x22; BLOCK_SIZE]];
-const REPLACEMENT: [[u8; BLOCK_SIZE]; 3] = [
-    [0xa1; BLOCK_SIZE],
-    [0xb2; BLOCK_SIZE],
-    [0xc3; BLOCK_SIZE],
-];
+const REPLACEMENT: [[u8; BLOCK_SIZE]; 3] =
+    [[0xa1; BLOCK_SIZE], [0xb2; BLOCK_SIZE], [0xc3; BLOCK_SIZE]];
 
 fn setup() -> (CrashDevice, Superblock) {
     let mut device = CrashDevice::new(128);
