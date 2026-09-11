@@ -75,6 +75,7 @@ pub mod path_unlink_dispatch;
 pub mod path_zero_range;
 pub mod recovery;
 pub mod rename_exchange_tx;
+mod rename_overwrite_nondirectory_tx;
 pub mod rename_overwrite_tx;
 pub mod rename_tx;
 pub mod symlink;
