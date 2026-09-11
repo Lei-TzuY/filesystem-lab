@@ -11,7 +11,9 @@ use filesystem_lab::path_create::{
     create_empty_file_at_path_journaled, create_file_with_blocks_at_path_journaled,
 };
 use filesystem_lab::path_file_read::read_file_blocks_at_path;
-use filesystem_lab::path_file_write::write_file_blocks_at_path_journaled;
+use filesystem_lab::path_file_write::{
+    replace_file_at_path_journaled, write_file_blocks_at_path_journaled,
+};
 use filesystem_lab::path_symlink::create_symlink_at_path_journaled;
 
 struct MemoryDevice {
@@ -141,6 +143,67 @@ fn zero_block_file_accepts_only_empty_data_and_non_file_is_rejected() {
     );
     assert_eq!(
         write_file_blocks_at_path_journaled(&mut device, &superblock, "/", &[])
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::InvalidInput
+    );
+    check_device(&mut device).unwrap();
+}
+
+#[test]
+fn replaces_complete_file_with_different_block_count_through_final_symlink() {
+    let mut device = MemoryDevice::new(128);
+    let superblock = format_device_with_journal_blocks(&mut device, 10).unwrap();
+    initialize_root(&mut device, &superblock);
+    create_file_with_blocks_at_path_journaled(
+        &mut device,
+        &superblock,
+        "/file",
+        &[[0x11; BLOCK_SIZE], [0x22; BLOCK_SIZE]],
+    )
+    .unwrap();
+    create_symlink_at_path_journaled(&mut device, &superblock, "/alias", "/file").unwrap();
+
+    let replacement = [[0xa1; BLOCK_SIZE], [0xb2; BLOCK_SIZE], [0xc3; BLOCK_SIZE]];
+    replace_file_at_path_journaled(&mut device, &superblock, "/alias", &replacement).unwrap();
+
+    let read_back = read_file_blocks_at_path(&mut device, &superblock, "/file").unwrap();
+    assert_eq!(read_back.len(), 3 * BLOCK_SIZE);
+    assert_eq!(&read_back[..BLOCK_SIZE], &replacement[0]);
+    assert_eq!(&read_back[BLOCK_SIZE..2 * BLOCK_SIZE], &replacement[1]);
+    assert_eq!(&read_back[2 * BLOCK_SIZE..], &replacement[2]);
+    check_device(&mut device).unwrap();
+}
+
+#[test]
+fn whole_file_replace_handles_empty_to_nonempty_and_nonempty_to_empty() {
+    let mut device = MemoryDevice::new(128);
+    let superblock = format_device_with_journal_blocks(&mut device, 10).unwrap();
+    initialize_root(&mut device, &superblock);
+    create_empty_file_at_path_journaled(&mut device, &superblock, "/file").unwrap();
+
+    let replacement = [[0x7a; BLOCK_SIZE], [0x8b; BLOCK_SIZE]];
+    replace_file_at_path_journaled(&mut device, &superblock, "/file", &replacement).unwrap();
+    assert_eq!(
+        read_file_blocks_at_path(&mut device, &superblock, "/file").unwrap(),
+        replacement.concat()
+    );
+
+    replace_file_at_path_journaled(&mut device, &superblock, "/file", &[]).unwrap();
+    assert!(read_file_blocks_at_path(&mut device, &superblock, "/file")
+        .unwrap()
+        .is_empty());
+    check_device(&mut device).unwrap();
+}
+
+#[test]
+fn whole_file_replace_rejects_directory_without_mutation() {
+    let mut device = MemoryDevice::new(64);
+    let superblock = format_device_with_journal_blocks(&mut device, 6).unwrap();
+    initialize_root(&mut device, &superblock);
+
+    assert_eq!(
+        replace_file_at_path_journaled(&mut device, &superblock, "/", &[[0x55; BLOCK_SIZE]])
             .unwrap_err()
             .kind(),
         io::ErrorKind::InvalidInput
