@@ -11,15 +11,21 @@ use crate::fsck::check_device;
 use crate::inode::InodeKind;
 use crate::inode_codec::PersistedInode;
 use crate::inode_table::load_inode_table;
+use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 
 /// Resolves both parent paths and atomically moves a directory over an existing empty directory.
 ///
+/// Any older committed WAL is recovered and checkpointed before parent pathname resolution so both
+/// endpoint parents are selected from recovered namespace state rather than a partially replayed
+/// home-write prefix.
+///
 /// # Errors
 ///
 /// Returns an error for malformed paths, lookup failures, invalid directory endpoint state,
-/// cycle-producing replacements, inconsistent metadata, or journal/device failures.
+/// cycle-producing replacements, inconsistent metadata, recovery/checkpoint failures, or
+/// journal/device failures.
 pub fn rename_overwrite_directory_at_path_journaled(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -29,6 +35,7 @@ pub fn rename_overwrite_directory_at_path_journaled(
     let (old_parent_path, old_name) = split_path(source, "directory rename-overwrite source")?;
     let (new_parent_path, new_name) =
         split_path(destination, "directory rename-overwrite destination")?;
+    recover_journal_and_checkpoint(device, *superblock)?;
     let old_parent = resolve_path_following_symlinks(device, superblock, old_parent_path)?;
     let new_parent = resolve_path_following_symlinks(device, superblock, new_parent_path)?;
     rename_overwrite_directory_journaled(
