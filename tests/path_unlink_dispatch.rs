@@ -125,7 +125,7 @@ fn dispatches_by_final_inode_kind_and_namespace_reference_count() {
         assert!(after
             .2
             .iter()
-            .all(|entry| !(entry.parent == 2 && entry.name == &case.path()[5..])));
+            .all(|entry| !(entry.parent == 2 && entry.name == case.path()[5..])));
 
         match case {
             Case::FinalFile => {
