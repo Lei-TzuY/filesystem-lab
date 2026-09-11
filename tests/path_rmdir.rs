@@ -88,12 +88,12 @@ fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
 }
 
 #[test]
-fn removes_empty_directories_through_direct_and_symlinked_parents() {
+fn removes_empty_directories_through_direct_symlinked_and_trailing_slash_paths() {
     let (mut device, superblock) = setup();
     let allocator_before = load_allocator(&mut device, &superblock).unwrap();
 
-    remove_directory_at_path_journaled(&mut device, &superblock, "/parent/empty").unwrap();
-    remove_directory_at_path_journaled(&mut device, &superblock, "/alias/empty2").unwrap();
+    remove_directory_at_path_journaled(&mut device, &superblock, "/parent/empty/").unwrap();
+    remove_directory_at_path_journaled(&mut device, &superblock, "/alias/empty2/").unwrap();
 
     let inodes = load_inode_table(&mut device, &superblock).unwrap();
     assert!(!inodes.iter().any(|inode| inode.id == 3 || inode.id == 6));
@@ -116,7 +116,7 @@ fn rejects_root_nonempty_non_directory_final_symlink_and_malformed_paths() {
     let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
     let entries_before = load_directory_table(&mut device, &superblock).unwrap();
 
-    for path in ["relative", "/", "/parent/"] {
+    for path in ["relative", "/", "/parent//"] {
         assert_eq!(
             remove_directory_at_path_journaled(&mut device, &superblock, path)
                 .unwrap_err()
@@ -124,7 +124,11 @@ fn rejects_root_nonempty_non_directory_final_symlink_and_malformed_paths() {
             io::ErrorKind::InvalidInput
         );
     }
-    for path in ["/parent/nonempty", "/parent/nonempty/child", "/final_link"] {
+    for path in [
+        "/parent/nonempty/",
+        "/parent/nonempty/child/",
+        "/final_link/",
+    ] {
         assert_eq!(
             remove_directory_at_path_journaled(&mut device, &superblock, path)
                 .unwrap_err()
@@ -151,10 +155,10 @@ fn rejects_root_nonempty_non_directory_final_symlink_and_malformed_paths() {
 }
 
 #[test]
-fn every_pathname_directory_remove_crash_point_recovers_old_or_complete_new_state() {
+fn every_trailing_slash_directory_remove_crash_point_recovers_old_or_complete_new_state() {
     let (mut probe, superblock) = setup();
     probe.arm(None);
-    remove_directory_at_path_journaled(&mut probe, &superblock, "/alias/empty").unwrap();
+    remove_directory_at_path_journaled(&mut probe, &superblock, "/alias/empty/").unwrap();
     let operations = probe.operations();
 
     for crash_at in 0..operations {
@@ -165,11 +169,11 @@ fn every_pathname_directory_remove_crash_point_recovers_old_or_complete_new_stat
 
         device.arm(Some(crash_at));
         assert_eq!(
-            remove_directory_at_path_journaled(&mut device, &superblock, "/alias/empty")
+            remove_directory_at_path_journaled(&mut device, &superblock, "/alias/empty/")
                 .unwrap_err()
                 .kind(),
             io::ErrorKind::Other,
-            "crash point {crash_at} must interrupt pathname directory removal"
+            "crash point {crash_at} must interrupt trailing-slash directory removal"
         );
         device.reboot();
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
