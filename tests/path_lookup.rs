@@ -116,7 +116,12 @@ fn resolves_root_and_ordinary_absolute_paths() {
 fn resolves_dot_and_dot_dot_components_with_root_clamping() {
     let (mut device, superblock) = setup();
 
-    for path in ["/./dir/file", "/dir/./file", "/dir/../dir/file", "/../../dir/file"] {
+    for path in [
+        "/./dir/file",
+        "/dir/./file",
+        "/dir/../dir/file",
+        "/../../dir/file",
+    ] {
         assert_eq!(
             resolve_path_following_symlinks(&mut device, &superblock, path).unwrap(),
             3,
