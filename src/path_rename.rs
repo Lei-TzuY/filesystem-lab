@@ -199,7 +199,9 @@ fn require_directory_entry(
     let inode = inodes
         .iter()
         .find(|inode| inode.id == target)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "rename source inode is missing"))?;
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "rename source inode is missing")
+        })?;
     if inode.kind != InodeKind::Directory {
         return Err(invalid_input(
             "trailing-slash rename requires a directory source entry",
