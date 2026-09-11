@@ -208,7 +208,9 @@ fn trailing_slash_requires_directory_and_follows_final_symlinks() {
     for path in ["/dir/file/", "/file_alias/"] {
         let error = resolve_path_following_symlinks(&mut device, &superblock, path).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
-        assert!(error.to_string().contains("trailing slash requires a directory"));
+        assert!(error
+            .to_string()
+            .contains("trailing slash requires a directory"));
     }
     check_device(&mut device).unwrap();
 }
