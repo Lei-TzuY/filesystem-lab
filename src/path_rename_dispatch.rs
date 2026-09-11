@@ -81,7 +81,9 @@ fn require_directory_inode(
     let inode = inodes
         .iter()
         .find(|inode| inode.id == inode_id)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "rename source inode is missing"))?;
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "rename source inode is missing")
+        })?;
     if inode.kind != InodeKind::Directory {
         return Err(invalid_input(
             "trailing-slash rename requires directory endpoints",
