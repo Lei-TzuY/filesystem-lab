@@ -67,12 +67,9 @@ fn setup() -> (CrashDevice, Superblock) {
 #[test]
 fn follows_final_source_symlink_and_links_resolved_regular_file() {
     let (mut device, superblock) = setup();
-    let symlink_inode = resolve_path_without_following_final_symlink(
-        &mut device,
-        &superblock,
-        "/file_alias",
-    )
-    .unwrap();
+    let symlink_inode =
+        resolve_path_without_following_final_symlink(&mut device, &superblock, "/file_alias")
+            .unwrap();
     let allocator_before = load_allocator(&mut device, &superblock).unwrap();
     let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
 
