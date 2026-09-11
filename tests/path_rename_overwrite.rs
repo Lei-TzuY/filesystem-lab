@@ -14,7 +14,7 @@ use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
 use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::journal_region::load_journal_image;
 use filesystem_lab::path_lookup::resolve_path_following_symlinks;
-use filesystem_lab::path_rename_overwrite::rename_overwrite_file_at_path_journaled;
+use filesystem_lab::path_rename_overwrite::rename_overwrite_at_path_journaled;
 use filesystem_lab::recovery::RecoveryReport;
 use filesystem_lab::symlink::create_symlink_journaled;
 use support::CrashDevice;
@@ -70,10 +70,10 @@ fn setup() -> (CrashDevice, Superblock) {
 }
 
 #[test]
-fn overwrites_destination_through_parent_symlinks() {
+fn dispatch_overwrites_singly_linked_file_through_parent_symlinks() {
     let (mut device, superblock) = setup();
     let allocator_before = load_allocator(&mut device, &superblock).unwrap();
-    rename_overwrite_file_at_path_journaled(
+    rename_overwrite_at_path_journaled(
         &mut device,
         &superblock,
         "/src_alias/source",
@@ -97,7 +97,32 @@ fn overwrites_destination_through_parent_symlinks() {
 }
 
 #[test]
-fn rejects_malformed_paths_without_publication() {
+fn dispatch_preserves_multiply_linked_destination_inode() {
+    let (mut device, superblock) = setup();
+    let mut entries = load_directory_table(&mut device, &superblock).unwrap();
+    entries.push(entry(3, 5, "target_alias"));
+    store_directory_table(&mut device, &superblock, &entries).unwrap();
+
+    rename_overwrite_at_path_journaled(&mut device, &superblock, "/src/source", "/dst/target")
+        .unwrap();
+
+    assert_eq!(
+        resolve_path_following_symlinks(&mut device, &superblock, "/dst/target").unwrap(),
+        4
+    );
+    assert_eq!(
+        resolve_path_following_symlinks(&mut device, &superblock, "/dst/target_alias").unwrap(),
+        5
+    );
+    assert!(load_inode_table(&mut device, &superblock)
+        .unwrap()
+        .iter()
+        .any(|inode| inode.id == 5));
+    check_device(&mut device).unwrap();
+}
+
+#[test]
+fn dispatch_rejects_malformed_and_mixed_kind_paths_without_publication() {
     let (mut device, superblock) = setup();
     let entries_before = load_directory_table(&mut device, &superblock).unwrap();
     for (source, destination) in [
@@ -105,9 +130,11 @@ fn rejects_malformed_paths_without_publication() {
         ("/src/source", "dst/target"),
         ("/", "/dst/target"),
         ("/src/source", "/"),
+        ("/src/source/", "/dst/target"),
+        ("/src/source", "/dst"),
     ] {
         assert_eq!(
-            rename_overwrite_file_at_path_journaled(&mut device, &superblock, source, destination)
+            rename_overwrite_at_path_journaled(&mut device, &superblock, source, destination)
                 .unwrap_err()
                 .kind(),
             io::ErrorKind::InvalidInput
@@ -123,10 +150,10 @@ fn rejects_malformed_paths_without_publication() {
 }
 
 #[test]
-fn every_pathname_overwrite_crash_point_recovers_old_or_complete_new_state() {
+fn every_dispatch_file_overwrite_crash_point_recovers_old_or_complete_new_state() {
     let (mut probe, superblock) = setup();
     probe.arm(None);
-    rename_overwrite_file_at_path_journaled(
+    rename_overwrite_at_path_journaled(
         &mut probe,
         &superblock,
         "/src_alias/source",
@@ -142,7 +169,7 @@ fn every_pathname_overwrite_crash_point_recovers_old_or_complete_new_state() {
         let entries_before = load_directory_table(&mut device, &superblock).unwrap();
         device.arm(Some(crash_at));
         assert_eq!(
-            rename_overwrite_file_at_path_journaled(
+            rename_overwrite_at_path_journaled(
                 &mut device,
                 &superblock,
                 "/src_alias/source",
