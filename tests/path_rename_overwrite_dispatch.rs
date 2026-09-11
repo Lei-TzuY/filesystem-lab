@@ -12,7 +12,9 @@ use filesystem_lab::inode_codec::PersistedInode;
 use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
 use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::journal_region::load_journal_image;
-use filesystem_lab::path_lookup::{read_symlink_at_path, resolve_path_without_following_final_symlink};
+use filesystem_lab::path_lookup::{
+    read_symlink_at_path, resolve_path_without_following_final_symlink,
+};
 use filesystem_lab::path_rename_overwrite::rename_overwrite_at_path_journaled;
 use filesystem_lab::recovery::RecoveryReport;
 use filesystem_lab::symlink::create_symlink_journaled;
@@ -91,7 +93,9 @@ fn assert_singly_linked_new_state(
     source_block: u64,
     destination_block: u64,
 ) {
-    assert!(resolve_path_without_following_final_symlink(device, superblock, "/src/source").is_err());
+    assert!(
+        resolve_path_without_following_final_symlink(device, superblock, "/src/source").is_err()
+    );
     assert_eq!(
         resolve_path_without_following_final_symlink(device, superblock, "/dst/target").unwrap(),
         source_inode
@@ -188,9 +192,18 @@ fn every_dispatch_symlink_overwrite_crash_point_recovers_old_or_complete_new_sta
 
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         if recovery.committed_transactions == 0 {
-            assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-            assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
-            assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
+            assert_eq!(
+                load_allocator(&mut device, &superblock).unwrap(),
+                allocator_before
+            );
+            assert_eq!(
+                load_inode_table(&mut device, &superblock).unwrap(),
+                inodes_before
+            );
+            assert_eq!(
+                load_directory_table(&mut device, &superblock).unwrap(),
+                entries_before
+            );
         } else {
             assert_eq!(recovery.committed_transactions, 1);
             assert_singly_linked_new_state(
