@@ -80,9 +80,7 @@ fn dispatch_overwrites_singly_linked_file_through_parent_symlinks() {
         "/dst_alias/target",
     )
     .unwrap();
-    assert!(
-        resolve_path_following_symlinks(&mut device, &superblock, "/src/source").is_err()
-    );
+    assert!(resolve_path_following_symlinks(&mut device, &superblock, "/src/source").is_err());
     assert_eq!(
         resolve_path_following_symlinks(&mut device, &superblock, "/dst/target").unwrap(),
         4
@@ -105,13 +103,8 @@ fn dispatch_preserves_multiply_linked_destination_inode() {
     entries.push(entry(3, 5, "target_alias"));
     store_directory_table(&mut device, &superblock, &entries).unwrap();
 
-    rename_overwrite_at_path_journaled(
-        &mut device,
-        &superblock,
-        "/src/source",
-        "/dst/target",
-    )
-    .unwrap();
+    rename_overwrite_at_path_journaled(&mut device, &superblock, "/src/source", "/dst/target")
+        .unwrap();
 
     assert_eq!(
         resolve_path_following_symlinks(&mut device, &superblock, "/dst/target").unwrap(),
