@@ -1,6 +1,7 @@
 mod support;
 
-use filesystem_lab::allocation_disk::{load_allocator, AllocationMap};
+use filesystem_lab::allocation::BlockAllocator;
+use filesystem_lab::allocation_disk::load_allocator;
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
 use filesystem_lab::directory_table::load_directory_table;
 use filesystem_lab::format::Superblock;
@@ -19,7 +20,7 @@ use support::CrashDevice;
 const JOURNAL_BLOCKS: u64 = 8;
 
 type State = (
-    AllocationMap,
+    BlockAllocator,
     Vec<PersistedInode>,
     Vec<PersistedDirectoryEntry>,
 );
