@@ -43,8 +43,7 @@ pub fn rename_posix_at_path_journaled(
         split_path(normalized_destination, "rename destination")?;
 
     let recovery = recover_journal_and_checkpoint(device, *superblock)?;
-    let source_parent =
-        resolve_path_following_symlinks(device, superblock, source_parent_path)?;
+    let source_parent = resolve_path_following_symlinks(device, superblock, source_parent_path)?;
     let destination_parent =
         resolve_path_following_symlinks(device, superblock, destination_parent_path)?;
 
