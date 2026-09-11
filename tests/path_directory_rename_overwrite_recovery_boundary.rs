@@ -96,14 +96,7 @@ fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
 fn pathname_directory_rename_overwrite_recovers_committed_parent_symlink_before_resolution() {
     let (mut probe, superblock) = setup();
     probe.arm(None);
-    create_symlink_journaled(
-        &mut probe,
-        &superblock,
-        1,
-        "src_alias",
-        "/src_parent",
-    )
-    .unwrap();
+    create_symlink_journaled(&mut probe, &superblock, 1, "src_alias", "/src_parent").unwrap();
     let operations = probe.operations();
     let mut committed_crash_states = 0;
 
@@ -114,14 +107,7 @@ fn pathname_directory_rename_overwrite_recovers_committed_parent_symlink_before_
             .allocated_blocks();
 
         device.arm(Some(crash_at));
-        if create_symlink_journaled(
-            &mut device,
-            &superblock,
-            1,
-            "src_alias",
-            "/src_parent",
-        )
-        .is_ok()
+        if create_symlink_journaled(&mut device, &superblock, 1, "src_alias", "/src_parent").is_ok()
         {
             continue;
         }
@@ -143,7 +129,7 @@ fn pathname_directory_rename_overwrite_recovers_committed_parent_symlink_before_
         assert!(resolve_path_following_symlinks(
             &mut device,
             &superblock,
-            "/src_parent/source"
+            "/src_parent/source",
         )
         .is_err());
         assert_eq!(
@@ -155,7 +141,7 @@ fn pathname_directory_rename_overwrite_recovers_committed_parent_symlink_before_
             resolve_path_following_symlinks(
                 &mut device,
                 &superblock,
-                "/dst_parent/target/child"
+                "/dst_parent/target/child",
             )
             .unwrap(),
             6
