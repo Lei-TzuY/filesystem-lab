@@ -90,12 +90,9 @@ pub fn resize_file_at_path_to_blocks_journaled(
         Ordering::Greater => {
             grow_file_at_path_to_blocks_journaled(device, superblock, path, target_blocks)
         }
-        Ordering::Less => truncate_file_to_blocks_journaled(
-            device,
-            superblock,
-            metadata.inode_id,
-            target_blocks,
-        ),
+        Ordering::Less => {
+            truncate_file_to_blocks_journaled(device, superblock, metadata.inode_id, target_blocks)
+        }
         Ordering::Equal => Err(invalid_input(
             "pathname block-resize target must differ from current logical-block count",
         )),
