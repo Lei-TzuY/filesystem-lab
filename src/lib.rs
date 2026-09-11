@@ -56,6 +56,7 @@ pub mod path_directory;
 pub mod path_directory_rename_overwrite;
 pub mod path_exchange;
 pub mod path_file_read;
+pub mod path_file_write;
 pub mod path_grow;
 pub mod path_hard_link;
 pub mod path_insert;
