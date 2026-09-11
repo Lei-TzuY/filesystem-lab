@@ -107,7 +107,14 @@ fn pathname_directory_rename_overwrite_recovers_committed_parent_symlink_before_
             .allocated_blocks();
 
         device.arm(Some(crash_at));
-        if create_symlink_journaled(&mut device, &superblock, 1, "src_alias", "/src_parent").is_ok()
+        if create_symlink_journaled(
+            &mut device,
+            &superblock,
+            1,
+            "src_alias",
+            "/src_parent",
+        )
+        .is_ok()
         {
             continue;
         }
