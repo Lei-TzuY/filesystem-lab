@@ -75,9 +75,7 @@ fn setup() -> (CrashDevice, Superblock, [[u8; BLOCK_SIZE]; 4]) {
 }
 
 fn blocks_at_path(device: &mut CrashDevice, superblock: &Superblock, path: &str) -> Vec<u64> {
-    let inode_id = metadata_at_path(device, superblock, path)
-        .unwrap()
-        .inode_id;
+    let inode_id = metadata_at_path(device, superblock, path).unwrap().inode_id;
     load_inode_table(device, superblock)
         .unwrap()
         .into_iter()
@@ -92,7 +90,10 @@ fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
     let mut seen = HashSet::new();
     for inode in load_inode_table(device, superblock).unwrap() {
         for block in inode.blocks {
-            assert!(seen.insert(block), "duplicate physical block reference {block}");
+            assert!(
+                seen.insert(block),
+                "duplicate physical block reference {block}"
+            );
             assert!(allocator.is_owned(block).unwrap());
         }
     }
@@ -181,9 +182,18 @@ fn rejects_zero_block_clone_without_persistent_change() {
         .kind(),
         io::ErrorKind::InvalidInput
     );
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        entries_before
+    );
     assert!(load_journal_image(&mut device, superblock)
         .unwrap()
         .is_empty());
@@ -235,9 +245,18 @@ fn every_contiguous_clone_create_crash_point_recovers_old_or_complete_new_file()
             source_blocks_before
         );
         if recovery.committed_transactions == 0 {
-            assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-            assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
-            assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
+            assert_eq!(
+                load_allocator(&mut device, &superblock).unwrap(),
+                allocator_before
+            );
+            assert_eq!(
+                load_inode_table(&mut device, &superblock).unwrap(),
+                inodes_before
+            );
+            assert_eq!(
+                load_directory_table(&mut device, &superblock).unwrap(),
+                entries_before
+            );
             assert_eq!(
                 metadata_at_path(&mut device, &superblock, "/dst/cloned")
                     .unwrap_err()

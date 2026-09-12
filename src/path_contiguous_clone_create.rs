@@ -64,12 +64,7 @@ pub fn clone_file_blocks_contiguous_to_path_journaled(
     }
     debug_assert_eq!(blocks.len(), block_count);
 
-    create_contiguous_file_with_blocks_at_path_journaled(
-        device,
-        superblock,
-        destination,
-        &blocks,
-    )
+    create_contiguous_file_with_blocks_at_path_journaled(device, superblock, destination, &blocks)
 }
 
 fn invalid_input(message: &'static str) -> io::Error {
