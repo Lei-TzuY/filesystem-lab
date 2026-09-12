@@ -3,6 +3,7 @@ mod support;
 use std::collections::HashSet;
 use std::io;
 
+use filesystem_lab::allocation::BlockAllocator;
 use filesystem_lab::allocation_disk::load_allocator;
 use filesystem_lab::block::BLOCK_SIZE;
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
@@ -91,6 +92,38 @@ fn assert_unique_file_ownership(device: &mut CrashDevice, superblock: &Superbloc
             assert!(allocator.is_owned(*block).unwrap());
         }
     }
+}
+
+fn assert_complete_clone_state(
+    device: &mut CrashDevice,
+    superblock: &Superblock,
+    allocator_after: &BlockAllocator,
+    source_before: &PersistedInode,
+    destination_before: &PersistedInode,
+    destination_after: &PersistedInode,
+) {
+    assert_eq!(
+        destination_after.blocks.len(),
+        destination_before.blocks.len()
+    );
+    let replacement = &destination_after.blocks[1..3];
+    assert_eq!(replacement[1], replacement[0] + 1);
+    assert!(replacement
+        .iter()
+        .all(|block| !source_before.blocks.contains(block)));
+    assert_eq!(destination_after.blocks[0], destination_before.blocks[0]);
+    assert_eq!(destination_after.blocks[3], destination_before.blocks[3]);
+    for block in &destination_before.blocks[1..3] {
+        assert!(!allocator_after.is_owned(*block).unwrap());
+    }
+    assert_eq!(
+        read_file_range_at_path(device, superblock, "/destination", 1, 0, BLOCK_SIZE).unwrap(),
+        SOURCE[1]
+    );
+    assert_eq!(
+        read_file_range_at_path(device, superblock, "/destination", 2, 0, BLOCK_SIZE).unwrap(),
+        SOURCE[2]
+    );
 }
 
 #[test]
@@ -250,40 +283,13 @@ fn every_clone_replace_crash_point_recovers_old_or_complete_new_state() {
             assert_eq!(allocator_after, allocator_before);
             assert_eq!(inodes_after, inodes_before);
         } else {
-            assert_eq!(
-                destination_after.blocks.len(),
-                destination_before.blocks.len()
-            );
-            let replacement = &destination_after.blocks[1..3];
-            assert_eq!(replacement[1], replacement[0] + 1);
-            assert!(replacement
-                .iter()
-                .all(|block| !source_before.blocks.contains(block)));
-            assert_eq!(destination_after.blocks[0], destination_before.blocks[0]);
-            assert_eq!(destination_after.blocks[3], destination_before.blocks[3]);
-            assert_eq!(
-                read_file_range_at_path(
-                    &mut device,
-                    &superblock,
-                    "/destination",
-                    1,
-                    0,
-                    BLOCK_SIZE,
-                )
-                .unwrap(),
-                SOURCE[1]
-            );
-            assert_eq!(
-                read_file_range_at_path(
-                    &mut device,
-                    &superblock,
-                    "/destination",
-                    2,
-                    0,
-                    BLOCK_SIZE,
-                )
-                .unwrap(),
-                SOURCE[2]
+            assert_complete_clone_state(
+                &mut device,
+                &superblock,
+                &allocator_after,
+                &source_before,
+                &destination_before,
+                destination_after,
             );
         }
 
