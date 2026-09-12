@@ -44,13 +44,8 @@ fn reports_recovered_empty_and_allocated_space() {
         }
     );
 
-    create_one_block_file_at_path_journaled(
-        &mut device,
-        &superblock,
-        "/payload",
-        &[0x5a; 4096],
-    )
-    .unwrap();
+    create_one_block_file_at_path_journaled(&mut device, &superblock, "/payload", &[0x5a; 4096])
+        .unwrap();
 
     assert_eq!(
         filesystem_space(&mut device, &superblock).unwrap(),
