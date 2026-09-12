@@ -136,40 +136,34 @@ fn run_clone_append(
     )
 }
 
-fn assert_recovered_crash_state(mut device: CrashDevice, superblock: Superblock) {
-    let allocator_before = load_allocator(&mut device, &superblock).unwrap();
-    let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
-    let entries_before = load_directory_table(&mut device, &superblock).unwrap();
-    let source_before = inodes_before
-        .iter()
-        .find(|inode| inode.id == 2)
-        .unwrap()
-        .clone();
-    let destination_before = inodes_before
-        .iter()
-        .find(|inode| inode.id == 3)
-        .unwrap()
-        .clone();
-
+fn assert_recovered_crash_state(
+    mut device: CrashDevice,
+    superblock: Superblock,
+    allocator_before: &BlockAllocator,
+    inodes_before: &[PersistedInode],
+    entries_before: &[PersistedDirectoryEntry],
+    source_before: &PersistedInode,
+    destination_before: &PersistedInode,
+) {
     device.reboot();
     recover_journal_and_checkpoint(&mut device, superblock).unwrap();
     let inodes_after = load_inode_table(&mut device, &superblock).unwrap();
     let source_after = inodes_after.iter().find(|inode| inode.id == 2).unwrap();
     let destination_after = inodes_after.iter().find(|inode| inode.id == 3).unwrap();
-    assert_eq!(source_after, &source_before);
+    assert_eq!(source_after, source_before);
     if destination_after.blocks == destination_before.blocks {
         assert_eq!(
             load_allocator(&mut device, &superblock).unwrap(),
-            allocator_before
+            *allocator_before
         );
         assert_eq!(inodes_after, inodes_before);
     } else {
         assert_complete_state(
             &mut device,
             &superblock,
-            &allocator_before,
-            &source_before,
-            &destination_before,
+            allocator_before,
+            source_before,
+            destination_before,
             destination_after,
         );
     }
@@ -266,6 +260,20 @@ fn every_clone_append_crash_point_recovers_old_or_complete_new_state() {
 
     for crash_at in 0..operations {
         let (mut device, superblock) = setup();
+        let allocator_before = load_allocator(&mut device, &superblock).unwrap();
+        let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
+        let entries_before = load_directory_table(&mut device, &superblock).unwrap();
+        let source_before = inodes_before
+            .iter()
+            .find(|inode| inode.id == 2)
+            .unwrap()
+            .clone();
+        let destination_before = inodes_before
+            .iter()
+            .find(|inode| inode.id == 3)
+            .unwrap()
+            .clone();
+
         device.arm(Some(crash_at));
         assert_eq!(
             run_clone_append(&mut device, &superblock)
@@ -274,6 +282,14 @@ fn every_clone_append_crash_point_recovers_old_or_complete_new_state() {
             io::ErrorKind::Other,
             "crash point {crash_at} must interrupt contiguous clone append"
         );
-        assert_recovered_crash_state(device, superblock);
+        assert_recovered_crash_state(
+            device,
+            superblock,
+            &allocator_before,
+            &inodes_before,
+            &entries_before,
+            &source_before,
+            &destination_before,
+        );
     }
 }
