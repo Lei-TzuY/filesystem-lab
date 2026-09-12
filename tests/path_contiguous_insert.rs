@@ -236,7 +236,7 @@ fn every_contiguous_insert_crash_point_recovers_old_or_complete_new_state() {
                 file_after.blocks.len(),
                 file_before.blocks.len() + INSERT.len()
             );
-            let inserted = &file_after.blocks[1..1 + INSERT.len()];
+            let inserted = &file_after.blocks[1..=INSERT.len()];
             assert!(inserted.windows(2).all(|pair| pair[1] == pair[0] + 1));
             assert_eq!(file_after.blocks[0], file_before.blocks[0]);
             assert_eq!(file_after.blocks[1 + INSERT.len()], file_before.blocks[1]);
