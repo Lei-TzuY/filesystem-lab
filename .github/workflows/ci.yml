@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   rust:
     runs-on: ubuntu-latest
@@ -14,14 +18,22 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Format diagnostic
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           cargo fmt --all
-          {
-            echo '```diff'
-            git diff
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          test -z "$(git status --short)"
+          if ! git diff --quiet; then
+            {
+              echo 'rustfmt diagnostic:'
+              echo '```diff'
+              git diff
+              echo '```'
+            } > /tmp/rustfmt-comment.md
+            gh api "repos/${GITHUB_REPOSITORY}/issues/${{ github.event.pull_request.number }}/comments" \
+              --method POST \
+              --raw-field "body=$(cat /tmp/rustfmt-comment.md)"
+            exit 1
+          fi
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
