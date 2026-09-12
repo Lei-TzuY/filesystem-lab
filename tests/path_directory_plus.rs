@@ -77,17 +77,12 @@ fn setup() -> (MemoryDevice, Superblock) {
 fn reports_recovered_child_metadata_and_global_reference_counts() {
     let (mut device, superblock) = setup();
     let data = [[0x11; BLOCK_SIZE], [0x22; BLOCK_SIZE]];
-    let (file_inode, _) = create_file_with_blocks_at_path_journaled(
-        &mut device,
-        &superblock,
-        "/payload",
-        &data,
-    )
-    .unwrap();
+    let (file_inode, _) =
+        create_file_with_blocks_at_path_journaled(&mut device, &superblock, "/payload", &data)
+            .unwrap();
     let (directory_inode, _) =
         create_directory_at_path_journaled(&mut device, &superblock, "/sub").unwrap();
-    hard_link_file_at_path_journaled(&mut device, &superblock, "/payload", "/sub/alias")
-        .unwrap();
+    hard_link_file_at_path_journaled(&mut device, &superblock, "/payload", "/sub/alias").unwrap();
 
     assert_eq!(
         list_directory_with_metadata_at_path(&mut device, &superblock, "/").unwrap(),
