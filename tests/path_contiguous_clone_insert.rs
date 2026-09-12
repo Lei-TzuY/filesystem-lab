@@ -24,11 +24,7 @@ use filesystem_lab::recovery::RecoveryReport;
 use support::CrashDevice;
 
 const JOURNAL_BLOCKS: u64 = 12;
-const SOURCE: [[u8; BLOCK_SIZE]; 3] = [
-    [0x11; BLOCK_SIZE],
-    [0x22; BLOCK_SIZE],
-    [0x33; BLOCK_SIZE],
-];
+const SOURCE: [[u8; BLOCK_SIZE]; 3] = [[0x11; BLOCK_SIZE], [0x22; BLOCK_SIZE], [0x33; BLOCK_SIZE]];
 const DESTINATION: [[u8; BLOCK_SIZE]; 2] = [[0xa1; BLOCK_SIZE], [0xb2; BLOCK_SIZE]];
 
 fn inode(id: u64, kind: InodeKind) -> PersistedInode {
