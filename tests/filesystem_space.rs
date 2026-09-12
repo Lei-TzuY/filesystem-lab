@@ -122,8 +122,13 @@ fn reports_fragmented_free_extents_after_middle_file_is_unlinked() {
     );
 
     for (path, byte) in [("/a", 0x11), ("/b", 0x22), ("/c", 0x33)] {
-        create_one_block_file_at_path_journaled(&mut device, &superblock, path, &[byte; BLOCK_SIZE])
-            .unwrap();
+        create_one_block_file_at_path_journaled(
+            &mut device,
+            &superblock,
+            path,
+            &[byte; BLOCK_SIZE],
+        )
+        .unwrap();
     }
     unlink_file_at_path_journaled(&mut device, &superblock, "/b").unwrap();
 
