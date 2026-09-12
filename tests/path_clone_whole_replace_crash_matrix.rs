@@ -20,8 +20,7 @@ use filesystem_lab::recovery::RecoveryReport;
 use support::CrashDevice;
 
 const JOURNAL_BLOCKS: u64 = 10;
-const SOURCE: [[u8; BLOCK_SIZE]; 3] =
-    [[0x31; BLOCK_SIZE], [0x42; BLOCK_SIZE], [0x53; BLOCK_SIZE]];
+const SOURCE: [[u8; BLOCK_SIZE]; 3] = [[0x31; BLOCK_SIZE], [0x42; BLOCK_SIZE], [0x53; BLOCK_SIZE]];
 const DESTINATION: [[u8; BLOCK_SIZE]; 2] = [[0xa4; BLOCK_SIZE], [0xb5; BLOCK_SIZE]];
 
 fn setup() -> (CrashDevice, Superblock) {
