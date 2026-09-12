@@ -129,7 +129,10 @@ pub fn list_directory_page_after_name_at_path(
     let entries = list_directory_at_path(device, superblock, path)?;
     Ok(entries
         .into_iter()
-        .filter(|entry| after_name.is_none_or(|cursor| entry.name.as_str() > cursor))
+        .filter(|entry| match after_name {
+            Some(cursor) => entry.name.as_str() > cursor,
+            None => true,
+        })
         .take(limit)
         .collect())
 }
