@@ -36,7 +36,8 @@ fn setup() -> (CrashDevice, Superblock) {
         }],
     )
     .unwrap();
-    create_file_with_blocks_at_path_journaled(&mut device, &superblock, "/source", &SOURCE).unwrap();
+    create_file_with_blocks_at_path_journaled(&mut device, &superblock, "/source", &SOURCE)
+        .unwrap();
     create_file_with_blocks_at_path_journaled(
         &mut device,
         &superblock,
@@ -56,7 +57,10 @@ fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
     let mut seen = HashSet::new();
     for inode in &inodes {
         for block in &inode.blocks {
-            assert!(seen.insert(*block), "duplicate physical block reference {block}");
+            assert!(
+                seen.insert(*block),
+                "duplicate physical block reference {block}"
+            );
             assert!(allocator.is_owned(*block).unwrap());
         }
     }
@@ -131,8 +135,9 @@ fn whole_file_clone_replacement_is_old_or_new_across_every_crash_boundary() {
 fn whole_file_clone_replacement_rejects_same_inode_before_publication() {
     let (mut device, superblock) = setup();
     let before = read_file_blocks_at_path(&mut device, &superblock, "/source").unwrap();
-    let error = clone_file_to_existing_path_journaled(&mut device, &superblock, "/source", "/source")
-        .unwrap_err();
+    let error =
+        clone_file_to_existing_path_journaled(&mut device, &superblock, "/source", "/source")
+            .unwrap_err();
     assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
     assert_eq!(
         read_file_blocks_at_path(&mut device, &superblock, "/source").unwrap(),
