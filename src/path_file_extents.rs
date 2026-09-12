@@ -69,12 +69,7 @@ pub fn file_extents_at_path(
             continue;
         }
 
-        push_extent(
-            &mut extents,
-            logical_start,
-            physical_start,
-            logical_index,
-        )?;
+        push_extent(&mut extents, logical_start, physical_start, logical_index)?;
         logical_start = logical_index;
         physical_start = physical_block;
         previous = physical_block;
