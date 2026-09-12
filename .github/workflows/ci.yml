@@ -15,6 +15,15 @@ jobs:
           components: rustfmt, clippy
       - name: Format
         run: cargo fmt --all -- --check
+      - name: Format diff diagnostic
+        if: failure()
+        run: |
+          cargo fmt --all
+          {
+            echo '```diff'
+            git diff -- src tests
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
