@@ -103,7 +103,8 @@ fn whole_file_clone_replacement_is_old_or_new_across_every_crash_boundary() {
 
         device.reboot();
         recover_journal_and_checkpoint(&mut device, superblock).unwrap();
-        let observed_source = read_file_blocks_at_path(&mut device, &superblock, "/source").unwrap();
+        let observed_source =
+            read_file_blocks_at_path(&mut device, &superblock, "/source").unwrap();
         let observed_destination =
             read_file_blocks_at_path(&mut device, &superblock, "/destination").unwrap();
         assert_eq!(observed_source, source_bytes);
