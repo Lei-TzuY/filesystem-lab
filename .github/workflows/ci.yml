@@ -15,7 +15,20 @@ jobs:
           components: rustfmt, clippy
       - name: Format
         run: cargo fmt --all -- --check
+      - name: Capture Clippy diagnostics
+        run: |
+          set +e
+          cargo clippy --all-targets --all-features -- -D warnings > clippy.log 2>&1
+          echo $? > clippy.status
+          exit 0
+      - name: Upload Clippy diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: clippy-diagnostics
+          path: |
+            clippy.log
+            clippy.status
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: test "$(cat clippy.status)" -eq 0
       - name: Test
         run: cargo test --all-targets --all-features
