@@ -99,6 +99,44 @@ pub fn list_directory_page_at_path(
     Ok(entries.into_iter().skip(offset).take(limit).collect())
 }
 
+/// Lists one deterministic bounded page starting strictly after an entry name.
+///
+/// The caller-provided `after_name` is a lexical cursor over the same deterministic name ordering as
+/// [`list_directory_at_path`]. The cursor does not need to name a currently existing child: entries
+/// whose names compare strictly greater than the cursor are eligible for the page. Passing `None`
+/// starts at the first entry, while a zero `limit` returns an empty page after performing the normal
+/// recovery and namespace validation.
+///
+/// A name cursor avoids the positional shift of offset pagination when entries are inserted before a
+/// previously observed boundary, but it is still not a durable POSIX readdir cookie. Renames,
+/// deletions, or insertion of names at or after the cursor between calls can change later pages. The
+/// implementation currently validates and sorts the complete recovered directory snapshot before
+/// applying the cursor and limit; it does not claim indexed on-disk directory scaling.
+///
+/// No on-disk state or format semantics are changed.
+///
+/// # Errors
+///
+/// Propagates the same recovery/checkpoint, pathname lookup, table decoding, target-kind, and durable
+/// namespace consistency errors as [`list_directory_at_path`].
+pub fn list_directory_page_after_name_at_path(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    path: &str,
+    after_name: Option<&str>,
+    limit: usize,
+) -> io::Result<Vec<PathDirectoryEntry>> {
+    let entries = list_directory_at_path(device, superblock, path)?;
+    Ok(entries
+        .into_iter()
+        .filter(|entry| match after_name {
+            Some(cursor) => entry.name.as_str() > cursor,
+            None => true,
+        })
+        .take(limit)
+        .collect())
+}
+
 fn invalid_data(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
