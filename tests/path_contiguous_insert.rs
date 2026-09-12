@@ -24,11 +24,7 @@ use support::CrashDevice;
 
 const JOURNAL_BLOCKS: u64 = 12;
 const INITIAL: [[u8; BLOCK_SIZE]; 2] = [[0x11; BLOCK_SIZE], [0x22; BLOCK_SIZE]];
-const INSERT: [[u8; BLOCK_SIZE]; 3] = [
-    [0xa1; BLOCK_SIZE],
-    [0xb2; BLOCK_SIZE],
-    [0xc3; BLOCK_SIZE],
-];
+const INSERT: [[u8; BLOCK_SIZE]; 3] = [[0xa1; BLOCK_SIZE], [0xb2; BLOCK_SIZE], [0xc3; BLOCK_SIZE]];
 
 fn inode(id: u64, kind: InodeKind) -> PersistedInode {
     PersistedInode {
@@ -243,10 +239,7 @@ fn every_contiguous_insert_crash_point_recovers_old_or_complete_new_state() {
             let inserted = &file_after.blocks[1..1 + INSERT.len()];
             assert!(inserted.windows(2).all(|pair| pair[1] == pair[0] + 1));
             assert_eq!(file_after.blocks[0], file_before.blocks[0]);
-            assert_eq!(
-                file_after.blocks[1 + INSERT.len()],
-                file_before.blocks[1]
-            );
+            assert_eq!(file_after.blocks[1 + INSERT.len()], file_before.blocks[1]);
             assert_eq!(
                 allocator_after.allocated_blocks(),
                 allocator_before.allocated_blocks() + u64::try_from(INSERT.len()).unwrap()
