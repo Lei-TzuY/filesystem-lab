@@ -143,9 +143,18 @@ fn rejects_empty_contiguous_create_without_persistent_change() {
         io::ErrorKind::InvalidInput
     );
 
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
-    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        entries_before
+    );
     assert!(load_journal_image(&mut device, superblock)
         .unwrap()
         .is_empty());
@@ -193,9 +202,18 @@ fn every_contiguous_create_crash_point_recovers_old_or_complete_new_file() {
         let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
 
         if recovery.committed_transactions == 0 {
-            assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-            assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
-            assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
+            assert_eq!(
+                load_allocator(&mut device, &superblock).unwrap(),
+                allocator_before
+            );
+            assert_eq!(
+                load_inode_table(&mut device, &superblock).unwrap(),
+                inodes_before
+            );
+            assert_eq!(
+                load_directory_table(&mut device, &superblock).unwrap(),
+                entries_before
+            );
             assert_eq!(
                 metadata_at_path(&mut device, &superblock, "/dir/contiguous")
                     .unwrap_err()
@@ -215,7 +233,9 @@ fn every_contiguous_create_crash_point_recovers_old_or_complete_new_file() {
                 inodes_before.len() + 1
             );
             assert_eq!(
-                load_directory_table(&mut device, &superblock).unwrap().len(),
+                load_directory_table(&mut device, &superblock)
+                    .unwrap()
+                    .len(),
                 entries_before.len() + 1
             );
             assert_contiguous_created(&mut device, &superblock, "/dir/contiguous", &data);
