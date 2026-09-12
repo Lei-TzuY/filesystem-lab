@@ -129,11 +129,9 @@ fn every_whole_file_zero_crash_point_recovers_old_or_complete_zero_image() {
             directory_before
         );
         check_device(&mut device).unwrap();
-        assert!(
-            load_journal_image(&mut device, superblock)
-                .unwrap()
-                .is_empty()
-        );
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
