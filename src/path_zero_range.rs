@@ -70,11 +70,14 @@ pub fn zero_file_at_path_journaled(
     if metadata.logical_blocks == 0 {
         return Ok(RecoveryReport::default());
     }
-    let len = metadata.logical_blocks.checked_mul(BLOCK_SIZE).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "pathname whole-file zero block count overflows byte length",
-        )
-    })?;
+    let len = metadata
+        .logical_blocks
+        .checked_mul(BLOCK_SIZE)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "pathname whole-file zero block count overflows byte length",
+            )
+        })?;
     zero_file_range_at_path_journaled(device, superblock, path, 0, 0, len)
 }
