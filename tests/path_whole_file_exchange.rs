@@ -72,13 +72,8 @@ fn setup() -> (CrashDevice, Superblock) {
         &[[0x11; BLOCK_SIZE], [0x22; BLOCK_SIZE]],
     )
     .unwrap();
-    append_file_blocks_at_path_journaled(
-        &mut device,
-        &superblock,
-        "/right",
-        &[[0x33; BLOCK_SIZE]],
-    )
-    .unwrap();
+    append_file_blocks_at_path_journaled(&mut device, &superblock, "/right", &[[0x33; BLOCK_SIZE]])
+        .unwrap();
     check_device(&mut device).unwrap();
     (device, superblock)
 }
