@@ -69,6 +69,7 @@ pub mod path_contiguous_replace;
 pub mod path_copy_range;
 pub mod path_create;
 pub mod path_directory;
+pub mod path_directory_plus;
 pub mod path_directory_rename_overwrite;
 pub mod path_exchange;
 pub mod path_file_extents;
