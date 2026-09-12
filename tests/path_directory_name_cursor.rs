@@ -8,9 +8,7 @@ use filesystem_lab::format_geometry::format_device_with_journal_blocks;
 use filesystem_lab::inode::InodeKind;
 use filesystem_lab::inode_codec::PersistedInode;
 use filesystem_lab::inode_table::store_inode_table;
-use filesystem_lab::path_directory::{
-    list_directory_page_after_name_at_path, PathDirectoryEntry,
-};
+use filesystem_lab::path_directory::{list_directory_page_after_name_at_path, PathDirectoryEntry};
 use filesystem_lab::symlink::create_symlink_journaled;
 
 const JOURNAL_BLOCKS: u64 = 8;
@@ -109,14 +107,8 @@ fn starts_after_exact_name_and_honors_limit() {
     let (mut device, superblock) = setup();
 
     assert_eq!(
-        list_directory_page_after_name_at_path(
-            &mut device,
-            &superblock,
-            "/dir",
-            Some("beta"),
-            2,
-        )
-        .unwrap(),
+        list_directory_page_after_name_at_path(&mut device, &superblock, "/dir", Some("beta"), 2,)
+            .unwrap(),
         vec![
             PathDirectoryEntry {
                 name: "delta".to_owned(),
@@ -164,34 +156,30 @@ fn none_starts_from_first_entry_and_zero_limit_is_empty() {
             .collect::<Vec<_>>(),
         vec!["alpha".to_owned(), "beta".to_owned()]
     );
-    assert!(
-        list_directory_page_after_name_at_path(
-            &mut device,
-            &superblock,
-            "/dir",
-            Some("alpha"),
-            0,
-        )
-        .unwrap()
-        .is_empty()
-    );
+    assert!(list_directory_page_after_name_at_path(
+        &mut device,
+        &superblock,
+        "/dir",
+        Some("alpha"),
+        0,
+    )
+    .unwrap()
+    .is_empty());
 }
 
 #[test]
 fn cursor_past_end_is_empty_and_final_symlink_is_followed() {
     let (mut device, superblock) = setup();
 
-    assert!(
-        list_directory_page_after_name_at_path(
-            &mut device,
-            &superblock,
-            "/dir-link",
-            Some("zzzz"),
-            4,
-        )
-        .unwrap()
-        .is_empty()
-    );
+    assert!(list_directory_page_after_name_at_path(
+        &mut device,
+        &superblock,
+        "/dir-link",
+        Some("zzzz"),
+        4,
+    )
+    .unwrap()
+    .is_empty());
     assert_eq!(
         list_directory_page_after_name_at_path(
             &mut device,
@@ -201,7 +189,7 @@ fn cursor_past_end_is_empty_and_final_symlink_is_followed() {
             1,
         )
         .unwrap()[0]
-        .name,
+            .name,
         "gamma"
     );
 }
