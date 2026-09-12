@@ -58,10 +58,5 @@ pub fn clone_file_blocks_contiguous_append_at_path_journaled(
     }
     debug_assert_eq!(blocks.len(), source.block_count);
 
-    append_file_blocks_contiguous_journaled(
-        device,
-        superblock,
-        destination_inode,
-        &blocks,
-    )
+    append_file_blocks_contiguous_journaled(device, superblock, destination_inode, &blocks)
 }
