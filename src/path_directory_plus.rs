@@ -93,15 +93,16 @@ fn enumerate_directory_with_metadata(
                 "directory entry references missing target inode",
             )
         })?;
-        let namespace_references = reference_counts
-            .get(&entry.target)
-            .copied()
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "directory entry target has no namespace reference",
-                )
-            })?;
+        let namespace_references =
+            reference_counts
+                .get(&entry.target)
+                .copied()
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "directory entry target has no namespace reference",
+                    )
+                })?;
         children.push(PathDirectoryEntryMetadata {
             name: entry.name.clone(),
             inode_id: entry.target,
@@ -175,12 +176,8 @@ mod tests {
 
     #[test]
     fn rejects_non_directory_target() {
-        let error = enumerate_directory_with_metadata(
-            2,
-            &[inode(2, InodeKind::File, &[])],
-            &[],
-        )
-        .unwrap_err();
+        let error = enumerate_directory_with_metadata(2, &[inode(2, InodeKind::File, &[])], &[])
+            .unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     }
 
@@ -191,12 +188,9 @@ mod tests {
             target: 99,
             name: "dangling".to_owned(),
         }];
-        let error = enumerate_directory_with_metadata(
-            1,
-            &[inode(1, InodeKind::Directory, &[])],
-            &entries,
-        )
-        .unwrap_err();
+        let error =
+            enumerate_directory_with_metadata(1, &[inode(1, InodeKind::Directory, &[])], &entries)
+                .unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     }
 }
