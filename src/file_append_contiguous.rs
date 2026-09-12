@@ -99,10 +99,9 @@ pub fn append_file_blocks_contiguous_journaled(
         "contiguous multi-block append image did not render every inode metadata block",
         &mut changed,
     )?;
-    capture
-        .ensure_empty(
-            "contiguous multi-block append image rendered outside allocation and inode regions",
-        )?;
+    capture.ensure_empty(
+        "contiguous multi-block append image rendered outside allocation and inode regions",
+    )?;
     changed.extend(blocks.iter().copied().zip(data_blocks.iter().copied()));
 
     let mut log = JournalLog::new();
