@@ -27,7 +27,7 @@ pub struct PathDirectoryEntry {
 /// enumeration independent of directory-table record order.
 ///
 /// This is deliberately a read-only format-v5 namespace surface. It does not synthesize `.` or
-/// `..`, expose cookies/offsets, or claim POSIX readdir ordering semantics.
+/// `..`, persist directory ordering, or claim POSIX readdir ordering semantics.
 ///
 /// # Errors
 ///
@@ -71,6 +71,27 @@ pub fn list_directory_at_path(
     }
     result.sort_by(|left, right| left.name.cmp(&right.name));
     Ok(result)
+}
+
+/// Lists one deterministic bounded page of immediate children for a directory pathname.
+///
+/// Pagination is applied after the same recovery, pathname resolution, durable namespace validation,
+/// and deterministic name ordering as [`list_directory_at_path`]. `offset` counts entries in that
+/// sorted snapshot and `limit` bounds only the returned vector; an offset at or beyond the end, or a
+/// zero limit, returns an empty page. The offset is intentionally a snapshot-relative index rather
+/// than a durable readdir cookie: concurrent namespace mutation between calls can move entries across
+/// page boundaries.
+///
+/// No on-disk state or format semantics are changed.
+pub fn list_directory_page_at_path(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    path: &str,
+    offset: usize,
+    limit: usize,
+) -> io::Result<Vec<PathDirectoryEntry>> {
+    let entries = list_directory_at_path(device, superblock, path)?;
+    Ok(entries.into_iter().skip(offset).take(limit).collect())
 }
 
 fn invalid_data(message: &'static str) -> io::Error {
