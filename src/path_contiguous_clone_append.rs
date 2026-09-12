@@ -16,7 +16,8 @@ use crate::recovery::RecoveryReport;
 /// bytes are snapshotted before destination mutation, so source and destination may resolve to the
 /// same regular-file inode without the append changing the data being cloned. The copied blocks are
 /// then delegated to [`append_file_blocks_contiguous_journaled`], which publishes allocator
-/// ownership, destination inode growth, and copied data images in one WAL transaction.
+/// ownership, destination inode growth, and copied data images in one WAL transaction. Fresh clone
+/// blocks have independent physical ownership and never share the source block mapping.
 ///
 /// Format v5 continues to persist explicit inode block vectors. Contiguity is an allocation-time
 /// property of the fresh clone blocks, not a persistent extent, reflink/COW, sparse-hole, byte-EOF,
