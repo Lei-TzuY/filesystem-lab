@@ -72,7 +72,7 @@ fn zeroes_complete_file_through_final_symlink_without_metadata_changes() {
 
     assert_eq!(
         read_file_blocks_at_path(&mut device, &superblock, "/file").unwrap(),
-        vec![[0_u8; BLOCK_SIZE], [0_u8; BLOCK_SIZE]]
+        vec![0_u8; 2 * BLOCK_SIZE]
     );
     assert_eq!(
         load_allocator(&mut device, &superblock).unwrap(),
@@ -113,8 +113,9 @@ fn every_whole_file_zero_crash_point_recovers_old_or_complete_zero_image() {
         recover_journal_and_checkpoint(&mut device, superblock).unwrap();
 
         let blocks = read_file_blocks_at_path(&mut device, &superblock, "/file").unwrap();
-        let old = vec![[0x31; BLOCK_SIZE], [0x42; BLOCK_SIZE]];
-        let zero = vec![[0_u8; BLOCK_SIZE], [0_u8; BLOCK_SIZE]];
+        let mut old = vec![0x31; BLOCK_SIZE];
+        old.extend_from_slice(&[0x42; BLOCK_SIZE]);
+        let zero = vec![0_u8; 2 * BLOCK_SIZE];
         assert!(blocks == old || blocks == zero);
         assert_eq!(
             load_allocator(&mut device, &superblock).unwrap(),
