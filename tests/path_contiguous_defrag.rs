@@ -83,7 +83,12 @@ fn setup_fragmented() -> (CrashDevice, Superblock) {
         .into_iter()
         .find(|inode| inode.id == 3)
         .unwrap();
-    assert!(!file.blocks.windows(2).all(|pair| pair[1] == pair[0] + 1));
+    assert!(
+        !file
+            .blocks
+            .windows(2)
+            .all(|pair| pair[1] == pair[0] + 1)
+    );
     check_device(&mut device).unwrap();
     (device, superblock)
 }
@@ -95,7 +100,10 @@ fn assert_unique_file_ownership(device: &mut CrashDevice, superblock: &Superbloc
     let mut seen = HashSet::new();
     for inode in inodes.iter().filter(|inode| inode.kind == InodeKind::File) {
         for block in &inode.blocks {
-            assert!(seen.insert(*block), "duplicate physical block reference {block}");
+            assert!(
+                seen.insert(*block),
+                "duplicate physical block reference {block}"
+            );
             assert!(allocator.is_owned(*block).unwrap());
         }
     }
@@ -129,10 +137,12 @@ fn defragments_a_fragmented_file_through_a_final_symlink() {
         allocator_before.allocated_blocks()
     );
     for block in old_blocks {
-        assert!(!load_allocator(&mut device, &superblock)
-            .unwrap()
-            .is_owned(block)
-            .unwrap());
+        assert!(
+            !load_allocator(&mut device, &superblock)
+                .unwrap()
+                .is_owned(block)
+                .unwrap()
+        );
     }
     for (logical, image) in DATA.iter().enumerate() {
         assert_eq!(
@@ -175,7 +185,10 @@ fn already_contiguous_file_is_an_idempotent_noop() {
 
     assert_eq!(after, blocks);
     assert_eq!(report, RecoveryReport::default());
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
     check_device(&mut device).unwrap();
 }
 
@@ -224,7 +237,10 @@ fn every_defragmentation_crash_point_recovers_old_or_complete_new_state() {
                 .blocks
                 .windows(2)
                 .all(|pair| pair[1] == pair[0] + 1));
-            assert_eq!(allocator_after.allocated_blocks(), allocator_before.allocated_blocks());
+            assert_eq!(
+                allocator_after.allocated_blocks(),
+                allocator_before.allocated_blocks()
+            );
             for old_block in &file_before.blocks {
                 assert!(!allocator_after.is_owned(*old_block).unwrap());
             }
@@ -244,7 +260,10 @@ fn every_defragmentation_crash_point_recovers_old_or_complete_new_state() {
             }
         }
 
-        assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
+        assert_eq!(
+            load_directory_table(&mut device, &superblock).unwrap(),
+            entries_before
+        );
         assert_unique_file_ownership(&mut device, &superblock);
         check_device(&mut device).unwrap();
         assert!(load_journal_image(&mut device, superblock)
