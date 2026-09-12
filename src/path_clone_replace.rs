@@ -1,9 +1,11 @@
 use std::io;
 
-use crate::block::BlockDevice;
+use crate::block::{BlockDevice, BLOCK_SIZE};
 use crate::file_clone_replace::clone_file_blocks_replace_journaled;
 use crate::format::Superblock;
 use crate::journal_checkpoint::recover_journal_and_checkpoint;
+use crate::path_file_read::read_file_blocks_at_path;
+use crate::path_file_write::replace_file_at_path_journaled;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 
@@ -52,4 +54,53 @@ pub fn clone_file_blocks_replace_at_path_journaled(
         destination_inode,
         destination_start,
     )
+}
+
+/// Atomically replaces an existing regular file's complete persisted logical-block sequence with
+/// independent physical copies of another regular file selected by pathname.
+///
+/// Older committed WAL state is recovered and checkpointed before both endpoints are resolved. The
+/// source and destination must resolve to distinct inodes, including when either pathname traverses
+/// symbolic links or names a hard-link alias. The source's complete format-v5 logical-block vector is
+/// then snapshotted before destination mutation begins. Destination publication is delegated to
+/// [`replace_file_at_path_journaled`], so zero/nonzero growth, shrink, and equal-size replacement each
+/// use exactly one existing crash-consistent destination transaction.
+///
+/// Source inode references, source data, and source namespace are never changed. Replacement blocks
+/// are newly allocated by the destination transaction rather than shared with the source, so this is
+/// a physical clone rather than reflink/COW. Format v5 has no persisted byte EOF; the complete file is
+/// therefore exactly its sequence of full 4 KiB logical blocks, and this API does not claim
+/// partial-final-block, sparse-hole, extent, or byte-length semantics. No on-disk format changes.
+///
+/// # Errors
+///
+/// Propagates recovery/checkpoint, bounded pathname lookup, whole-file source-read, destination
+/// replacement, allocator, journal-capacity, and durable I/O failures. Returns `InvalidInput` when
+/// source and destination resolve to the same inode or either endpoint is not a regular file.
+pub fn clone_file_to_existing_path_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    source_path: &str,
+    destination_path: &str,
+) -> io::Result<RecoveryReport> {
+    recover_journal_and_checkpoint(device, *superblock)?;
+    let source_inode = resolve_path_following_symlinks(device, superblock, source_path)?;
+    let destination_inode = resolve_path_following_symlinks(device, superblock, destination_path)?;
+    if source_inode == destination_inode {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "whole-file clone replacement requires distinct source and destination inodes",
+        ));
+    }
+
+    let snapshot = read_file_blocks_at_path(device, superblock, source_path)?;
+    let mut blocks = Vec::with_capacity(snapshot.len() / BLOCK_SIZE);
+    for chunk in snapshot.chunks_exact(BLOCK_SIZE) {
+        let mut image = [0_u8; BLOCK_SIZE];
+        image.copy_from_slice(chunk);
+        blocks.push(image);
+    }
+    debug_assert_eq!(snapshot.len(), blocks.len() * BLOCK_SIZE);
+
+    replace_file_at_path_journaled(device, superblock, destination_path, &blocks)
 }
