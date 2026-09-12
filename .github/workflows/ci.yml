@@ -13,17 +13,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Capture rustfmt diff
-        run: |
-          cargo fmt --all
-          git diff -- . ':!.github/workflows/ci.yml' > rustfmt.diff
-      - name: Upload rustfmt diff
-        uses: actions/upload-artifact@v4
-        with:
-          name: rustfmt-diff
-          path: rustfmt.diff
       - name: Format
-        run: test ! -s rustfmt.diff
+        run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
