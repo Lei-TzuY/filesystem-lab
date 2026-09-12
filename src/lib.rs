@@ -66,6 +66,7 @@ pub mod path_lookup;
 pub mod path_metadata;
 pub mod path_move;
 pub mod path_overwrite_batch;
+pub mod path_read_dir;
 pub mod path_remove;
 pub mod path_rename;
 pub mod path_rename_dispatch;
