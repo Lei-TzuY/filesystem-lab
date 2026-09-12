@@ -32,11 +32,5 @@ pub fn insert_file_blocks_contiguous_at_path_journaled(
 ) -> io::Result<(Vec<u64>, RecoveryReport)> {
     recover_journal_and_checkpoint(device, *superblock)?;
     let inode_id = resolve_path_following_symlinks(device, superblock, path)?;
-    insert_file_blocks_contiguous_journaled(
-        device,
-        superblock,
-        inode_id,
-        insert_index,
-        data_blocks,
-    )
+    insert_file_blocks_contiguous_journaled(device, superblock, inode_id, insert_index, data_blocks)
 }
