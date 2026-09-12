@@ -75,7 +75,10 @@ fn assert_unique_file_ownership(device: &mut CrashDevice, superblock: &Superbloc
     let mut seen = HashSet::new();
     for inode in inodes.iter().filter(|inode| inode.kind == InodeKind::File) {
         for block in &inode.blocks {
-            assert!(seen.insert(*block), "duplicate physical block reference {block}");
+            assert!(
+                seen.insert(*block),
+                "duplicate physical block reference {block}"
+            );
             assert!(allocator.is_owned(*block).unwrap());
         }
     }
@@ -191,7 +194,10 @@ fn every_contiguous_append_crash_point_recovers_old_or_complete_new_state() {
             assert_eq!(allocator_after, allocator_before);
             assert_eq!(inodes_after, inodes_before);
         } else {
-            assert_eq!(file_after.blocks.len(), file_before.blocks.len() + APPEND.len());
+            assert_eq!(
+                file_after.blocks.len(),
+                file_before.blocks.len() + APPEND.len()
+            );
             let appended = &file_after.blocks[file_before.blocks.len()..];
             assert!(appended.windows(2).all(|pair| pair[1] == pair[0] + 1));
             assert_eq!(
