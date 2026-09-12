@@ -2,11 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main, conquest/contiguous-clone-create]
+    branches: [main]
   pull_request:
-
-permissions:
-  contents: write
 
 jobs:
   rust:
@@ -18,15 +15,6 @@ jobs:
           components: rustfmt, clippy
       - name: Format
         run: cargo fmt --all -- --check
-      - name: Apply rustfmt diagnostic
-        if: failure()
-        run: |
-          cargo fmt --all
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src tests
-          git commit -m "Apply rustfmt"
-          git push origin HEAD:${{ github.head_ref || github.ref_name }}
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
