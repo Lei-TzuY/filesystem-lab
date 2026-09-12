@@ -69,7 +69,10 @@ fn contiguous_allocation_is_atomic_when_fragmented_space_is_insufficient() {
     allocator.free(6).unwrap();
 
     let before = allocator.clone();
-    assert_eq!(allocator.allocate_contiguous(2), Err(AllocationError::Exhausted));
+    assert_eq!(
+        allocator.allocate_contiguous(2),
+        Err(AllocationError::Exhausted)
+    );
     assert_eq!(allocator, before);
     allocator.validate().unwrap();
 }
