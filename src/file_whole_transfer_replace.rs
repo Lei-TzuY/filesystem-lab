@@ -102,7 +102,9 @@ pub fn transfer_replace_complete_file_blocks_journaled(
     let destination_pos = inodes
         .iter()
         .position(|inode| inode.id == destination_inode_id)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "destination inode is missing"))?;
+        .ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "destination inode is missing")
+        })?;
 
     if inodes[source_pos].kind != InodeKind::File
         || inodes[destination_pos].kind != InodeKind::File
