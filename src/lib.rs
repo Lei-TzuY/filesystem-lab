@@ -30,6 +30,7 @@ pub mod file_transfer;
 pub mod file_whole_exchange;
 pub mod file_whole_transfer_replace;
 pub mod file_zero_range;
+pub mod filesystem_space;
 pub mod format;
 pub mod format_capacity;
 pub mod format_geometry;
