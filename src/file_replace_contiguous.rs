@@ -1,9 +1,11 @@
 use std::io;
 
+use crate::allocation::BlockAllocator;
 use crate::allocation_disk::{load_allocator, store_allocator};
 use crate::block::{BlockDevice, BLOCK_SIZE};
 use crate::format::Superblock;
 use crate::inode::InodeKind;
+use crate::inode_codec::PersistedInode;
 use crate::inode_table::{load_inode_table, store_inode_table};
 use crate::journal::JournalLog;
 use crate::journal_checkpoint::recover_journal_and_checkpoint;
@@ -48,12 +50,6 @@ pub fn replace_file_blocks_contiguous_journaled(
             "contiguous block replacement destination range overflows usize",
         )
     })?;
-    let replacement_count = u64::try_from(replacements.len()).map_err(|_| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "contiguous block replacement exceeds the block address space",
-        )
-    })?;
 
     let mut allocator = load_allocator(device, superblock)?;
     let mut inodes = load_inode_table(device, superblock)?;
@@ -79,44 +75,8 @@ pub fn replace_file_blocks_contiguous_journaled(
         ));
     }
 
-    let displaced_blocks = inode.blocks[start..end].to_vec();
-    for block in &displaced_blocks {
-        if !allocator
-            .is_owned(*block)
-            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "contiguous replacement displaced block is not allocator-owned",
-            ));
-        }
-    }
-
-    let first_block = allocator
-        .allocate_contiguous(replacement_count)
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
-    let mut new_blocks = Vec::with_capacity(replacements.len());
-    for index in 0..replacements.len() {
-        let offset = u64::try_from(index).map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "contiguous block replacement exceeds the block address space",
-            )
-        })?;
-        let block = first_block.checked_add(offset).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                "contiguous replacement run overflowed block address space",
-            )
-        })?;
-        new_blocks.push(block);
-    }
-    for block in &displaced_blocks {
-        allocator
-            .free(*block)
-            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-    }
-    inode.blocks.splice(start..end, new_blocks.iter().copied());
+    let (new_blocks, displaced_blocks) =
+        prepare_mapping(&mut allocator, inode, start, end, replacements.len())?;
 
     let mut capture = CaptureDevice::new(superblock.total_blocks);
     store_allocator(&mut capture, superblock, &allocator)?;
@@ -157,4 +117,58 @@ pub fn replace_file_blocks_contiguous_journaled(
     }
 
     Ok((new_blocks, displaced_blocks, report))
+}
+
+fn prepare_mapping(
+    allocator: &mut BlockAllocator,
+    inode: &mut PersistedInode,
+    start: usize,
+    end: usize,
+    replacement_len: usize,
+) -> io::Result<(Vec<u64>, Vec<u64>)> {
+    let displaced_blocks = inode.blocks[start..end].to_vec();
+    for block in &displaced_blocks {
+        if !allocator
+            .is_owned(*block)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "contiguous replacement displaced block is not allocator-owned",
+            ));
+        }
+    }
+
+    let replacement_count = u64::try_from(replacement_len).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "contiguous block replacement exceeds the block address space",
+        )
+    })?;
+    let first_block = allocator
+        .allocate_contiguous(replacement_count)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+    let mut new_blocks = Vec::with_capacity(replacement_len);
+    for index in 0..replacement_len {
+        let offset = u64::try_from(index).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "contiguous block replacement exceeds the block address space",
+            )
+        })?;
+        let block = first_block.checked_add(offset).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "contiguous replacement run overflowed block address space",
+            )
+        })?;
+        new_blocks.push(block);
+    }
+    for block in &displaced_blocks {
+        allocator
+            .free(*block)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    }
+    inode.blocks.splice(start..end, new_blocks.iter().copied());
+    Ok((new_blocks, displaced_blocks))
 }
