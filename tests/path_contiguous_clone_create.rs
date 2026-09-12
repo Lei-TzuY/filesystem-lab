@@ -192,7 +192,7 @@ fn rejects_zero_block_clone_without_persistent_change() {
 
 #[test]
 fn every_contiguous_clone_create_crash_point_recovers_old_or_complete_new_file() {
-    let (mut probe, superblock, source) = setup();
+    let (mut probe, superblock, _) = setup();
     probe.arm(None);
     clone_file_blocks_contiguous_to_path_journaled(
         &mut probe,
