@@ -138,12 +138,7 @@ pub fn replace_file_blocks_contiguous_journaled(
     capture.ensure_empty(
         "contiguous block replacement image rendered outside allocation and inode regions",
     )?;
-    changed.extend(
-        new_blocks
-            .iter()
-            .copied()
-            .zip(replacements.iter().copied()),
-    );
+    changed.extend(new_blocks.iter().copied().zip(replacements.iter().copied()));
 
     let mut log = JournalLog::new();
     let txid = log.begin()?;
