@@ -22,11 +22,7 @@ use filesystem_lab::symlink::create_symlink_journaled;
 use support::CrashDevice;
 
 const JOURNAL_BLOCKS: u64 = 12;
-const APPEND: [[u8; BLOCK_SIZE]; 3] = [
-    [0xa1; BLOCK_SIZE],
-    [0xb2; BLOCK_SIZE],
-    [0xc3; BLOCK_SIZE],
-];
+const APPEND: [[u8; BLOCK_SIZE]; 3] = [[0xa1; BLOCK_SIZE], [0xb2; BLOCK_SIZE], [0xc3; BLOCK_SIZE]];
 
 fn inode(id: u64, kind: InodeKind) -> PersistedInode {
     PersistedInode {
