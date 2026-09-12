@@ -1,6 +1,7 @@
 mod support;
 
 use std::collections::HashSet;
+use std::io;
 
 use filesystem_lab::allocation_disk::load_allocator;
 use filesystem_lab::block::BLOCK_SIZE;
@@ -50,6 +51,10 @@ fn setup() -> (CrashDevice, Superblock) {
     (device, superblock)
 }
 
+fn run(device: &mut CrashDevice, superblock: &Superblock) -> io::Result<RecoveryReport> {
+    clone_file_to_existing_path_journaled(device, superblock, "/source", "/destination")
+}
+
 fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
     let allocator = load_allocator(device, superblock).unwrap();
     allocator.validate().unwrap();
@@ -70,13 +75,7 @@ fn assert_unique_ownership(device: &mut CrashDevice, superblock: &Superblock) {
 fn whole_file_clone_replacement_is_old_or_new_across_every_crash_boundary() {
     let (mut probe, superblock) = setup();
     probe.arm(None);
-    clone_file_to_existing_path_journaled(
-        &mut probe,
-        &superblock,
-        "/source",
-        "/destination",
-    )
-    .unwrap();
+    run(&mut probe, &superblock).unwrap();
     let operations = probe.operations();
     assert!(operations > 0);
 
@@ -89,14 +88,7 @@ fn whole_file_clone_replacement_is_old_or_new_across_every_crash_boundary() {
     for crash_at in 0..operations {
         let (mut device, superblock) = setup();
         device.arm(Some(crash_at));
-        if clone_file_to_existing_path_journaled(
-            &mut device,
-            &superblock,
-            "/source",
-            "/destination",
-        )
-        .is_ok()
-        {
+        if run(&mut device, &superblock).is_ok() {
             continue;
         }
         interrupted += 1;
@@ -139,7 +131,7 @@ fn whole_file_clone_replacement_rejects_same_inode_before_publication() {
     let error =
         clone_file_to_existing_path_journaled(&mut device, &superblock, "/source", "/source")
             .unwrap_err();
-    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     assert_eq!(
         read_file_blocks_at_path(&mut device, &superblock, "/source").unwrap(),
         before
