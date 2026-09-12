@@ -53,6 +53,7 @@ pub mod path_clone_insert;
 pub mod path_clone_replace;
 pub mod path_clone_splice;
 pub mod path_collapse;
+pub mod path_contiguous_create;
 pub mod path_copy_range;
 pub mod path_create;
 pub mod path_directory;
