@@ -8,7 +8,9 @@ use filesystem_lab::format_geometry::format_device_with_journal_blocks;
 use filesystem_lab::inode::InodeKind;
 use filesystem_lab::inode_codec::PersistedInode;
 use filesystem_lab::inode_table::store_inode_table;
-use filesystem_lab::path_directory::{list_directory_at_path, PathDirectoryEntry};
+use filesystem_lab::path_directory::{
+    list_directory_at_path, list_directory_page_at_path, PathDirectoryEntry,
+};
 use filesystem_lab::symlink::create_symlink_journaled;
 
 const JOURNAL_BLOCKS: u64 = 8;
@@ -130,6 +132,36 @@ fn lists_root_children_deterministically_without_following_child_symlinks() {
             },
         ]
     );
+}
+
+#[test]
+fn paginates_the_deterministic_directory_snapshot() {
+    let (mut device, superblock) = setup();
+
+    assert_eq!(
+        list_directory_page_at_path(&mut device, &superblock, "/", 1, 2).unwrap(),
+        vec![
+            PathDirectoryEntry {
+                name: "dir-link".to_owned(),
+                inode_id: 6,
+                kind: InodeKind::Symlink,
+            },
+            PathDirectoryEntry {
+                name: "empty".to_owned(),
+                inode_id: 5,
+                kind: InodeKind::Directory,
+            },
+        ]
+    );
+    assert!(list_directory_page_at_path(&mut device, &superblock, "/", 0, 0)
+        .unwrap()
+        .is_empty());
+    assert!(list_directory_page_at_path(&mut device, &superblock, "/", 4, 3)
+        .unwrap()
+        .is_empty());
+    assert!(list_directory_page_at_path(&mut device, &superblock, "/", usize::MAX, 1)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
