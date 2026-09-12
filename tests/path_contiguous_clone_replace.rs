@@ -17,7 +17,9 @@ use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
 use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::journal_region::load_journal_image;
 use filesystem_lab::path_clone_replace::PathCloneReplaceRange;
-use filesystem_lab::path_contiguous_clone_replace::clone_file_blocks_contiguous_replace_at_path_journaled as clone_replace;
+use filesystem_lab::path_contiguous_clone_replace::{
+    clone_file_blocks_contiguous_replace_at_path_journaled as clone_replace,
+};
 use filesystem_lab::path_lookup::read_file_range_at_path;
 use filesystem_lab::recovery::RecoveryReport;
 use support::CrashDevice;
