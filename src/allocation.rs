@@ -191,10 +191,7 @@ impl BlockAllocator {
         let absolute_start = start + relative_start;
         let absolute_end = absolute_start + run_length;
         self.allocated[absolute_start..absolute_end].fill(true);
-        self.allocated_blocks = self
-            .allocated_blocks
-            .checked_add(block_count)
-            .expect("allocated block count cannot exceed total blocks");
+        self.allocated_blocks += block_count;
 
         u64::try_from(absolute_start)
             .map_err(|_| AllocationError::AddressSpaceTooLarge(self.total_blocks))
