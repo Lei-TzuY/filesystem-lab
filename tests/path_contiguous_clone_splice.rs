@@ -172,10 +172,11 @@ fn clone_splice_grows_destination_with_independent_contiguous_source_copies() {
         &source_before
     );
     let destination_after = inodes_after.iter().find(|inode| inode.id == 3).unwrap();
+    let allocator_after = load_allocator(&mut device, &superblock).unwrap();
     assert_complete_splice_state(
         &mut device,
         &superblock,
-        &load_allocator(&mut device, &superblock).unwrap(),
+        &allocator_after,
         &source_before,
         &destination_before,
         destination_after,
