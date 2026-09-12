@@ -54,9 +54,12 @@ fn enumerate_directory(
 ) -> io::Result<Vec<PathDirectoryEntry>> {
     let inode_by_id: BTreeMap<u64, &PersistedInode> =
         inodes.iter().map(|inode| (inode.id, inode)).collect();
-    let directory = inode_by_id
-        .get(&directory_inode)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "resolved directory inode is missing"))?;
+    let directory = inode_by_id.get(&directory_inode).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "resolved directory inode is missing",
+        )
+    })?;
     if directory.kind != InodeKind::Directory {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -65,7 +68,10 @@ fn enumerate_directory(
     }
 
     let mut children = Vec::new();
-    for entry in entries.iter().filter(|entry| entry.parent == directory_inode) {
+    for entry in entries
+        .iter()
+        .filter(|entry| entry.parent == directory_inode)
+    {
         let target = inode_by_id.get(&entry.target).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -161,7 +167,8 @@ mod tests {
             target: 99,
             name: "dangling".to_owned(),
         }];
-        let error = enumerate_directory(1, &[inode(1, InodeKind::Directory)], &entries).unwrap_err();
+        let error =
+            enumerate_directory(1, &[inode(1, InodeKind::Directory)], &entries).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     }
 }
