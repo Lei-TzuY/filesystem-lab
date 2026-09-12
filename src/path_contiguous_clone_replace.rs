@@ -44,8 +44,7 @@ pub fn clone_file_blocks_contiguous_replace_at_path_journaled(
 
     recover_journal_and_checkpoint(device, *superblock)?;
     let source_inode = resolve_path_following_symlinks(device, superblock, source.path)?;
-    let destination_inode =
-        resolve_path_following_symlinks(device, superblock, destination_path)?;
+    let destination_inode = resolve_path_following_symlinks(device, superblock, destination_path)?;
     if source_inode == destination_inode {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
