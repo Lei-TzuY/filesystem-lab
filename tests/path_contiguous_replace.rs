@@ -29,11 +29,8 @@ const INITIAL: [[u8; BLOCK_SIZE]; 4] = [
     [0x33; BLOCK_SIZE],
     [0x44; BLOCK_SIZE],
 ];
-const REPLACEMENT: [[u8; BLOCK_SIZE]; 3] = [
-    [0xa1; BLOCK_SIZE],
-    [0xb2; BLOCK_SIZE],
-    [0xc3; BLOCK_SIZE],
-];
+const REPLACEMENT: [[u8; BLOCK_SIZE]; 3] =
+    [[0xa1; BLOCK_SIZE], [0xb2; BLOCK_SIZE], [0xc3; BLOCK_SIZE]];
 
 fn inode(id: u64, kind: InodeKind) -> PersistedInode {
     PersistedInode {
