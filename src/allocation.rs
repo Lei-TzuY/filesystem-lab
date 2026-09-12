@@ -14,6 +14,7 @@ pub enum AllocationError {
     },
     ReservedBlock(u64),
     AlreadyFree(u64),
+    InvalidRunLength(u64),
     Exhausted,
 }
 
@@ -40,6 +41,9 @@ impl fmt::Display for AllocationError {
             ),
             Self::ReservedBlock(block) => write!(formatter, "block {block} is reserved metadata"),
             Self::AlreadyFree(block) => write!(formatter, "block {block} is already free"),
+            Self::InvalidRunLength(length) => {
+                write!(formatter, "allocation run length must be non-zero, got {length}")
+            }
             Self::Exhausted => formatter.write_str("no free data blocks remain"),
         }
     }
@@ -152,20 +156,44 @@ impl BlockAllocator {
     ///
     /// Returns [`AllocationError::Exhausted`] when no free data block remains.
     pub fn allocate(&mut self) -> Result<u64, AllocationError> {
+        self.allocate_contiguous(1)
+    }
+
+    /// Allocates the lowest-numbered contiguous run of free data blocks.
+    ///
+    /// The returned value is the first block in the run. The operation is all-or-nothing: if no
+    /// sufficiently large run exists, allocator ownership and accounting remain unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AllocationError::InvalidRunLength`] for a zero-length request,
+    /// [`AllocationError::AddressSpaceTooLarge`] when the requested run cannot be indexed on this
+    /// platform, and [`AllocationError::Exhausted`] when no contiguous free run is large enough.
+    pub fn allocate_contiguous(&mut self, block_count: u64) -> Result<u64, AllocationError> {
+        if block_count == 0 {
+            return Err(AllocationError::InvalidRunLength(block_count));
+        }
+
         let start = usize::try_from(self.reserved_blocks)
             .map_err(|_| AllocationError::AddressSpaceTooLarge(self.total_blocks))?;
+        let run_length = usize::try_from(block_count)
+            .map_err(|_| AllocationError::AddressSpaceTooLarge(self.total_blocks))?;
+        if run_length > self.allocated.len().saturating_sub(start) {
+            return Err(AllocationError::Exhausted);
+        }
 
-        let Some(index) = self.allocated[start..]
-            .iter()
-            .position(|allocated| !allocated)
+        let Some(relative_start) = self.allocated[start..]
+            .windows(run_length)
+            .position(|run| run.iter().all(|allocated| !allocated))
         else {
             return Err(AllocationError::Exhausted);
         };
-        let absolute_index = start + index;
-        self.allocated[absolute_index] = true;
-        self.allocated_blocks += 1;
+        let absolute_start = start + relative_start;
+        let absolute_end = absolute_start + run_length;
+        self.allocated[absolute_start..absolute_end].fill(true);
+        self.allocated_blocks += block_count;
 
-        u64::try_from(absolute_index)
+        u64::try_from(absolute_start)
             .map_err(|_| AllocationError::AddressSpaceTooLarge(self.total_blocks))
     }
 

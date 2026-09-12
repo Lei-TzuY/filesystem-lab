@@ -44,6 +44,53 @@ fn free_releases_exactly_one_block_and_reuses_it_deterministically() {
 }
 
 #[test]
+fn contiguous_allocation_uses_lowest_sufficient_free_run() {
+    let mut allocator = BlockAllocator::new(12, 2).unwrap();
+    let first = allocator.allocate_contiguous(3).unwrap();
+    let second = allocator.allocate_contiguous(3).unwrap();
+    assert_eq!((first, second), (2, 5));
+
+    allocator.free(3).unwrap();
+    allocator.free(4).unwrap();
+    allocator.free(5).unwrap();
+    assert_eq!(allocator.allocate_contiguous(2).unwrap(), 3);
+    assert_eq!(allocator.allocated_blocks(), 5);
+    assert_eq!(allocator.free_blocks(), 5);
+    allocator.validate().unwrap();
+}
+
+#[test]
+fn contiguous_allocation_is_atomic_when_fragmented_space_is_insufficient() {
+    let mut allocator = BlockAllocator::new(9, 1).unwrap();
+    let start = allocator.allocate_contiguous(8).unwrap();
+    assert_eq!(start, 1);
+    allocator.free(2).unwrap();
+    allocator.free(4).unwrap();
+    allocator.free(6).unwrap();
+
+    let before = allocator.clone();
+    assert_eq!(
+        allocator.allocate_contiguous(2),
+        Err(AllocationError::Exhausted)
+    );
+    assert_eq!(allocator, before);
+    allocator.validate().unwrap();
+}
+
+#[test]
+fn contiguous_allocation_rejects_zero_length_without_mutation() {
+    let mut allocator = BlockAllocator::new(6, 1).unwrap();
+    let before = allocator.clone();
+
+    assert_eq!(
+        allocator.allocate_contiguous(0),
+        Err(AllocationError::InvalidRunLength(0))
+    );
+    assert_eq!(allocator, before);
+    allocator.validate().unwrap();
+}
+
+#[test]
 fn accounting_holds_through_allocate_free_cycle() {
     let mut allocator = BlockAllocator::new(10, 2).unwrap();
     assert_eq!(allocator.total_blocks(), 10);
