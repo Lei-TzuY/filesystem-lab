@@ -109,12 +109,7 @@ pub fn filesystem_free_space_extents(
                 run_start = Some(block);
             }
         } else if let Some(start_block) = run_start.take() {
-            push_extent(
-                &mut extents,
-                &mut largest_extent_blocks,
-                start_block,
-                block,
-            )?;
+            push_extent(&mut extents, &mut largest_extent_blocks, start_block, block)?;
         }
     }
 
