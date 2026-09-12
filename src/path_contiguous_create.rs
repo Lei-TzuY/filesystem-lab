@@ -71,9 +71,9 @@ pub fn create_contiguous_file_with_blocks_at_path_journaled(
         let offset = u64::try_from(index).map_err(|_| {
             invalid_input("contiguous multi-block file create exceeds the block address space")
         })?;
-        let block = first_block
-            .checked_add(offset)
-            .ok_or_else(|| invalid_data("contiguous allocation run overflowed block address space"))?;
+        let block = first_block.checked_add(offset).ok_or_else(|| {
+            invalid_data("contiguous allocation run overflowed block address space")
+        })?;
         inode_blocks.push(block);
         initialized.push((block, *image));
     }
