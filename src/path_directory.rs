@@ -83,6 +83,11 @@ pub fn list_directory_at_path(
 /// page boundaries.
 ///
 /// No on-disk state or format semantics are changed.
+///
+/// # Errors
+///
+/// Propagates the same recovery/checkpoint, pathname lookup, table decoding, target-kind, and durable
+/// namespace consistency errors as [`list_directory_at_path`].
 pub fn list_directory_page_at_path(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
