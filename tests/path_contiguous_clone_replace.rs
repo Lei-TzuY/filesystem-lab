@@ -17,7 +17,7 @@ use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
 use filesystem_lab::journal_checkpoint::recover_journal_and_checkpoint;
 use filesystem_lab::journal_region::load_journal_image;
 use filesystem_lab::path_clone_replace::PathCloneReplaceRange;
-use filesystem_lab::path_contiguous_clone_replace::clone_file_blocks_contiguous_replace_at_path_journaled;
+use filesystem_lab::path_contiguous_clone_replace::clone_file_blocks_contiguous_replace_at_path_journaled as clone_replace;
 use filesystem_lab::path_lookup::read_file_range_at_path;
 use filesystem_lab::recovery::RecoveryReport;
 use support::CrashDevice;
@@ -84,7 +84,10 @@ fn assert_unique_file_ownership(device: &mut CrashDevice, superblock: &Superbloc
     let mut seen = HashSet::new();
     for inode in inodes.iter().filter(|inode| inode.kind == InodeKind::File) {
         for block in &inode.blocks {
-            assert!(seen.insert(*block), "duplicate physical block reference {block}");
+            assert!(
+                seen.insert(*block),
+                "duplicate physical block reference {block}"
+            );
             assert!(allocator.is_owned(*block).unwrap());
         }
     }
@@ -94,10 +97,18 @@ fn assert_unique_file_ownership(device: &mut CrashDevice, superblock: &Superbloc
 fn clone_replaces_with_independent_contiguous_source_copies() {
     let (mut device, superblock) = setup();
     let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
-    let source_before = inodes_before.iter().find(|inode| inode.id == 2).unwrap().clone();
-    let destination_before = inodes_before.iter().find(|inode| inode.id == 3).unwrap().clone();
+    let source_before = inodes_before
+        .iter()
+        .find(|inode| inode.id == 2)
+        .unwrap()
+        .clone();
+    let destination_before = inodes_before
+        .iter()
+        .find(|inode| inode.id == 3)
+        .unwrap()
+        .clone();
 
-    let (new_blocks, displaced, _) = clone_file_blocks_contiguous_replace_at_path_journaled(
+    let (new_blocks, displaced, _) = clone_replace(
         &mut device,
         &superblock,
         PathCloneReplaceRange {
@@ -113,7 +124,9 @@ fn clone_replaces_with_independent_contiguous_source_copies() {
     assert_eq!(displaced, destination_before.blocks[1..3]);
     assert_eq!(new_blocks.len(), 2);
     assert_eq!(new_blocks[1], new_blocks[0] + 1);
-    assert!(new_blocks.iter().all(|block| !source_before.blocks.contains(block)));
+    assert!(new_blocks
+        .iter()
+        .all(|block| !source_before.blocks.contains(block)));
     assert_eq!(
         load_inode_table(&mut device, &superblock)
             .unwrap()
@@ -123,16 +136,20 @@ fn clone_replaces_with_independent_contiguous_source_copies() {
         source_before
     );
     assert_eq!(
-        read_file_range_at_path(&mut device, &superblock, "/destination", 1, 0, BLOCK_SIZE).unwrap(),
+        read_file_range_at_path(&mut device, &superblock, "/destination", 1, 0, BLOCK_SIZE)
+            .unwrap(),
         SOURCE[1]
     );
     assert_eq!(
-        read_file_range_at_path(&mut device, &superblock, "/destination", 2, 0, BLOCK_SIZE).unwrap(),
+        read_file_range_at_path(&mut device, &superblock, "/destination", 2, 0, BLOCK_SIZE)
+            .unwrap(),
         SOURCE[2]
     );
     assert_unique_file_ownership(&mut device, &superblock);
     check_device(&mut device).unwrap();
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -142,7 +159,7 @@ fn rejects_identical_endpoint_without_persistent_change() {
     let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
 
     assert_eq!(
-        clone_file_blocks_contiguous_replace_at_path_journaled(
+        clone_replace(
             &mut device,
             &superblock,
             PathCloneReplaceRange {
@@ -157,8 +174,14 @@ fn rejects_identical_endpoint_without_persistent_change() {
         .kind(),
         io::ErrorKind::InvalidInput
     );
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
     check_device(&mut device).unwrap();
 }
 
@@ -166,7 +189,7 @@ fn rejects_identical_endpoint_without_persistent_change() {
 fn every_clone_replace_crash_point_recovers_old_or_complete_new_state() {
     let (mut probe, superblock) = setup();
     probe.arm(None);
-    clone_file_blocks_contiguous_replace_at_path_journaled(
+    clone_replace(
         &mut probe,
         &superblock,
         PathCloneReplaceRange {
@@ -185,12 +208,20 @@ fn every_clone_replace_crash_point_recovers_old_or_complete_new_state() {
         let allocator_before = load_allocator(&mut device, &superblock).unwrap();
         let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
         let entries_before = load_directory_table(&mut device, &superblock).unwrap();
-        let source_before = inodes_before.iter().find(|inode| inode.id == 2).unwrap().clone();
-        let destination_before = inodes_before.iter().find(|inode| inode.id == 3).unwrap().clone();
+        let source_before = inodes_before
+            .iter()
+            .find(|inode| inode.id == 2)
+            .unwrap()
+            .clone();
+        let destination_before = inodes_before
+            .iter()
+            .find(|inode| inode.id == 3)
+            .unwrap()
+            .clone();
 
         device.arm(Some(crash_at));
         assert_eq!(
-            clone_file_blocks_contiguous_replace_at_path_journaled(
+            clone_replace(
                 &mut device,
                 &superblock,
                 PathCloneReplaceRange {
@@ -219,7 +250,10 @@ fn every_clone_replace_crash_point_recovers_old_or_complete_new_state() {
             assert_eq!(allocator_after, allocator_before);
             assert_eq!(inodes_after, inodes_before);
         } else {
-            assert_eq!(destination_after.blocks.len(), destination_before.blocks.len());
+            assert_eq!(
+                destination_after.blocks.len(),
+                destination_before.blocks.len()
+            );
             let replacement = &destination_after.blocks[1..3];
             assert_eq!(replacement[1], replacement[0] + 1);
             assert!(replacement
@@ -253,10 +287,15 @@ fn every_clone_replace_crash_point_recovers_old_or_complete_new_state() {
             );
         }
 
-        assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
+        assert_eq!(
+            load_directory_table(&mut device, &superblock).unwrap(),
+            entries_before
+        );
         assert_unique_file_ownership(&mut device, &superblock);
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
