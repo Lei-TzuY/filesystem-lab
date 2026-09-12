@@ -74,9 +74,12 @@ fn enumerate_directory_with_metadata(
     let mut reference_counts = BTreeMap::<u64, usize>::new();
     for entry in entries {
         let count = reference_counts.entry(entry.target).or_default();
-        *count = count
-            .checked_add(1)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "namespace reference count overflow"))?;
+        *count = count.checked_add(1).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "namespace reference count overflow",
+            )
+        })?;
     }
 
     let mut children = Vec::new();
@@ -90,12 +93,15 @@ fn enumerate_directory_with_metadata(
                 "directory entry references missing target inode",
             )
         })?;
-        let namespace_references = reference_counts.get(&entry.target).copied().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                "directory entry target has no namespace reference",
-            )
-        })?;
+        let namespace_references = reference_counts
+            .get(&entry.target)
+            .copied()
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "directory entry target has no namespace reference",
+                )
+            })?;
         children.push(PathDirectoryEntryMetadata {
             name: entry.name.clone(),
             inode_id: entry.target,
