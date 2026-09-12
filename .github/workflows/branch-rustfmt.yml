@@ -1,0 +1,31 @@
+name: Branch rustfmt
+
+on:
+  push:
+    branches:
+      - feat/path-whole-file-transfer-replace
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/path-whole-file-transfer-replace
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Apply rustfmt
+        run: cargo fmt --all
+      - name: Commit canonical formatting
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add .
+            git commit -m "Apply rustfmt"
+            git push origin HEAD:feat/path-whole-file-transfer-replace
+          fi
