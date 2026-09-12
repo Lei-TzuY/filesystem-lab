@@ -24,14 +24,26 @@ use support::CrashDevice;
 
 const JOURNAL_BLOCKS: u64 = 12;
 const INITIAL: [[u8; BLOCK_SIZE]; 2] = [[0x11; BLOCK_SIZE], [0x22; BLOCK_SIZE]];
-const INSERT: [[u8; BLOCK_SIZE]; 3] = [[0xa1; BLOCK_SIZE], [0xb2; BLOCK_SIZE], [0xc3; BLOCK_SIZE]];
+const INSERT: [[u8; BLOCK_SIZE]; 3] = [
+    [0xa1; BLOCK_SIZE],
+    [0xb2; BLOCK_SIZE],
+    [0xc3; BLOCK_SIZE],
+];
 
 fn inode(id: u64, kind: InodeKind) -> PersistedInode {
-    PersistedInode { id, kind, blocks: Vec::new() }
+    PersistedInode {
+        id,
+        kind,
+        blocks: Vec::new(),
+    }
 }
 
 fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
-    PersistedDirectoryEntry { parent, target, name: name.to_owned() }
+    PersistedDirectoryEntry {
+        parent,
+        target,
+        name: name.to_owned(),
+    }
 }
 
 fn setup() -> (CrashDevice, Superblock) {
@@ -66,7 +78,10 @@ fn assert_unique_file_ownership(device: &mut CrashDevice, superblock: &Superbloc
     let mut seen = HashSet::new();
     for inode in inodes.iter().filter(|inode| inode.kind == InodeKind::File) {
         for block in &inode.blocks {
-            assert!(seen.insert(*block), "duplicate physical block reference {block}");
+            assert!(
+                seen.insert(*block),
+                "duplicate physical block reference {block}"
+            );
             assert!(allocator.is_owned(*block).unwrap());
         }
     }
@@ -89,7 +104,9 @@ fn inserts_one_contiguous_run_at_an_interior_boundary_through_a_final_symlink() 
     assert_eq!(blocks.len(), INSERT.len());
     assert!(blocks.windows(2).all(|pair| pair[1] == pair[0] + 1));
     assert_eq!(
-        load_allocator(&mut device, &superblock).unwrap().allocated_blocks(),
+        load_allocator(&mut device, &superblock)
+            .unwrap()
+            .allocated_blocks(),
         allocator_before.allocated_blocks() + u64::try_from(INSERT.len()).unwrap()
     );
     assert_eq!(
@@ -98,8 +115,15 @@ fn inserts_one_contiguous_run_at_an_interior_boundary_through_a_final_symlink() 
     );
     for (offset, image) in INSERT.iter().enumerate() {
         assert_eq!(
-            read_file_range_at_path(&mut device, &superblock, "/dir/file", 1 + offset, 0, BLOCK_SIZE)
-                .unwrap(),
+            read_file_range_at_path(
+                &mut device,
+                &superblock,
+                "/dir/file",
+                1 + offset,
+                0,
+                BLOCK_SIZE,
+            )
+            .unwrap(),
             *image
         );
     }
@@ -117,7 +141,9 @@ fn inserts_one_contiguous_run_at_an_interior_boundary_through_a_final_symlink() 
     );
     assert_unique_file_ownership(&mut device, &superblock);
     check_device(&mut device).unwrap();
-    assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -150,8 +176,14 @@ fn rejects_invalid_contiguous_insert_without_persistent_change() {
         .kind(),
         io::ErrorKind::InvalidInput
     );
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
     check_device(&mut device).unwrap();
 }
 
@@ -174,7 +206,11 @@ fn every_contiguous_insert_crash_point_recovers_old_or_complete_new_state() {
         let allocator_before = load_allocator(&mut device, &superblock).unwrap();
         let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
         let entries_before = load_directory_table(&mut device, &superblock).unwrap();
-        let file_before = inodes_before.iter().find(|inode| inode.id == 3).unwrap().clone();
+        let file_before = inodes_before
+            .iter()
+            .find(|inode| inode.id == 3)
+            .unwrap()
+            .clone();
 
         device.arm(Some(crash_at));
         assert_eq!(
@@ -200,11 +236,17 @@ fn every_contiguous_insert_crash_point_recovers_old_or_complete_new_state() {
             assert_eq!(allocator_after, allocator_before);
             assert_eq!(inodes_after, inodes_before);
         } else {
-            assert_eq!(file_after.blocks.len(), file_before.blocks.len() + INSERT.len());
+            assert_eq!(
+                file_after.blocks.len(),
+                file_before.blocks.len() + INSERT.len()
+            );
             let inserted = &file_after.blocks[1..1 + INSERT.len()];
             assert!(inserted.windows(2).all(|pair| pair[1] == pair[0] + 1));
             assert_eq!(file_after.blocks[0], file_before.blocks[0]);
-            assert_eq!(file_after.blocks[1 + INSERT.len()], file_before.blocks[1]);
+            assert_eq!(
+                file_after.blocks[1 + INSERT.len()],
+                file_before.blocks[1]
+            );
             assert_eq!(
                 allocator_after.allocated_blocks(),
                 allocator_before.allocated_blocks() + u64::try_from(INSERT.len()).unwrap()
@@ -225,10 +267,15 @@ fn every_contiguous_insert_crash_point_recovers_old_or_complete_new_state() {
             }
         }
 
-        assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
+        assert_eq!(
+            load_directory_table(&mut device, &superblock).unwrap(),
+            entries_before
+        );
         assert_unique_file_ownership(&mut device, &superblock);
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock).unwrap().is_empty());
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
