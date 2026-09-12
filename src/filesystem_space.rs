@@ -1,5 +1,6 @@
 use std::io;
 
+use crate::allocation_disk::load_allocator;
 use crate::block::{BlockDevice, BLOCK_SIZE_U64};
 use crate::format::Superblock;
 use crate::fsck::check_device;
@@ -14,6 +15,21 @@ pub struct FilesystemSpace {
     pub data_blocks: u64,
     pub allocated_data_blocks: u64,
     pub free_data_blocks: u64,
+}
+
+/// One contiguous run of allocator-free format-v5 data blocks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FreeSpaceExtent {
+    pub start_block: u64,
+    pub block_count: u64,
+}
+
+/// Recovered free-space topology derived from the durable allocator image.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FilesystemFreeSpace {
+    pub total_free_blocks: u64,
+    pub largest_extent_blocks: u64,
+    pub extents: Vec<FreeSpaceExtent>,
 }
 
 /// Returns trustworthy block-space accounting from recovered durable filesystem state.
@@ -38,14 +54,7 @@ pub fn filesystem_space(
 ) -> io::Result<FilesystemSpace> {
     recover_journal_and_checkpoint(device, *superblock)?;
     let report = check_device(device)?;
-    if report.total_blocks != superblock.total_blocks
-        || report.reserved_blocks != superblock.reserved_blocks()
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "durable superblock geometry changed during filesystem-space query",
-        ));
-    }
+    validate_geometry(superblock, report.total_blocks, report.reserved_blocks)?;
 
     Ok(FilesystemSpace {
         block_size: BLOCK_SIZE_U64,
@@ -55,4 +64,108 @@ pub fn filesystem_space(
         allocated_data_blocks: report.allocated_blocks,
         free_data_blocks: report.free_blocks,
     })
+}
+
+/// Returns the exact contiguous free-data-block runs in recovered durable allocator state.
+///
+/// The query recovers and checkpoints committed WAL state, runs full read-only fsck, then scans the
+/// durable allocation image from the first data block to the end of the filesystem. Adjacent free
+/// blocks are coalesced into deterministic ascending extents. Reserved metadata blocks are never
+/// reported. The sum of all extent lengths is checked against fsck's free-block accounting before a
+/// result is returned, so allocator topology and repository-wide ownership accounting must agree.
+///
+/// This is an observation surface, not an allocation reservation or extent-format feature. It does
+/// not mutate the filesystem and does not claim that a later allocation will receive a reported run.
+/// The on-disk format remains filesystem format v5 with allocation-image version 1.
+///
+/// # Errors
+///
+/// Propagates recovery/checkpoint, device I/O, metadata decoding, journal validation, allocator, and
+/// fsck consistency failures. Returns `InvalidData` if durable geometry changes during the query or
+/// if scanned free-space topology disagrees with fsck accounting.
+pub fn filesystem_free_space_extents(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+) -> io::Result<FilesystemFreeSpace> {
+    recover_journal_and_checkpoint(device, *superblock)?;
+    let report = check_device(device)?;
+    validate_geometry(superblock, report.total_blocks, report.reserved_blocks)?;
+    let allocator = load_allocator(device, superblock)?;
+
+    let mut extents = Vec::new();
+    let mut run_start = None;
+    let mut total_free_blocks = 0_u64;
+    let mut largest_extent_blocks = 0_u64;
+
+    for block in superblock.reserved_blocks()..superblock.total_blocks {
+        let owned = allocator
+            .is_owned(block)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error.to_string()))?;
+        if !owned {
+            total_free_blocks = total_free_blocks
+                .checked_add(1)
+                .ok_or_else(|| invalid_data("free-space extent accounting overflow"))?;
+            if run_start.is_none() {
+                run_start = Some(block);
+            }
+        } else if let Some(start_block) = run_start.take() {
+            push_extent(&mut extents, &mut largest_extent_blocks, start_block, block)?;
+        }
+    }
+
+    if let Some(start_block) = run_start {
+        push_extent(
+            &mut extents,
+            &mut largest_extent_blocks,
+            start_block,
+            superblock.total_blocks,
+        )?;
+    }
+
+    if total_free_blocks != report.free_blocks {
+        return Err(invalid_data(
+            "free-space extents disagree with fsck free-block accounting",
+        ));
+    }
+
+    Ok(FilesystemFreeSpace {
+        total_free_blocks,
+        largest_extent_blocks,
+        extents,
+    })
+}
+
+fn validate_geometry(
+    superblock: &Superblock,
+    total_blocks: u64,
+    reserved_blocks: u64,
+) -> io::Result<()> {
+    if total_blocks != superblock.total_blocks || reserved_blocks != superblock.reserved_blocks() {
+        return Err(invalid_data(
+            "durable superblock geometry changed during filesystem-space query",
+        ));
+    }
+    Ok(())
+}
+
+fn push_extent(
+    extents: &mut Vec<FreeSpaceExtent>,
+    largest_extent_blocks: &mut u64,
+    start_block: u64,
+    end_block: u64,
+) -> io::Result<()> {
+    let block_count = end_block
+        .checked_sub(start_block)
+        .filter(|count| *count > 0)
+        .ok_or_else(|| invalid_data("invalid free-space extent bounds"))?;
+    *largest_extent_blocks = (*largest_extent_blocks).max(block_count);
+    extents.push(FreeSpaceExtent {
+        start_block,
+        block_count,
+    });
+    Ok(())
+}
+
+fn invalid_data(message: &'static str) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message)
 }
