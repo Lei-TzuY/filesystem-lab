@@ -102,14 +102,20 @@ fn assert_complete_splice_state(
     destination_before: &PersistedInode,
     destination_after: &PersistedInode,
 ) {
-    assert_eq!(destination_after.blocks.len(), destination_before.blocks.len() + 2);
+    assert_eq!(
+        destination_after.blocks.len(),
+        destination_before.blocks.len() + 2
+    );
     let replacement = &destination_after.blocks[1..4];
     assert!(replacement.windows(2).all(|pair| pair[1] == pair[0] + 1));
     assert!(replacement
         .iter()
         .all(|block| !source_before.blocks.contains(block)));
     assert_eq!(destination_after.blocks[0], destination_before.blocks[0]);
-    assert_eq!(destination_after.blocks[4..], destination_before.blocks[2..]);
+    assert_eq!(
+        destination_after.blocks[4..],
+        destination_before.blocks[2..]
+    );
     assert!(!allocator_after
         .is_owned(destination_before.blocks[1])
         .unwrap());
