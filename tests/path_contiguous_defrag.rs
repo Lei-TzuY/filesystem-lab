@@ -23,11 +23,7 @@ use filesystem_lab::symlink::create_symlink_journaled;
 use support::CrashDevice;
 
 const JOURNAL_BLOCKS: u64 = 12;
-const DATA: [[u8; BLOCK_SIZE]; 3] = [
-    [0x11; BLOCK_SIZE],
-    [0x22; BLOCK_SIZE],
-    [0x33; BLOCK_SIZE],
-];
+const DATA: [[u8; BLOCK_SIZE]; 3] = [[0x11; BLOCK_SIZE], [0x22; BLOCK_SIZE], [0x33; BLOCK_SIZE]];
 const BLOCKER: [u8; BLOCK_SIZE] = [0xee; BLOCK_SIZE];
 
 fn inode(id: u64, kind: InodeKind) -> PersistedInode {
@@ -83,12 +79,7 @@ fn setup_fragmented() -> (CrashDevice, Superblock) {
         .into_iter()
         .find(|inode| inode.id == 3)
         .unwrap();
-    assert!(
-        !file
-            .blocks
-            .windows(2)
-            .all(|pair| pair[1] == pair[0] + 1)
-    );
+    assert!(!file.blocks.windows(2).all(|pair| pair[1] == pair[0] + 1));
     check_device(&mut device).unwrap();
     (device, superblock)
 }
@@ -120,12 +111,9 @@ fn defragments_a_fragmented_file_through_a_final_symlink() {
         .unwrap()
         .blocks;
 
-    let (new_blocks, report) = defragment_file_contiguous_at_path_journaled(
-        &mut device,
-        &superblock,
-        "/file_alias",
-    )
-    .unwrap();
+    let (new_blocks, report) =
+        defragment_file_contiguous_at_path_journaled(&mut device, &superblock, "/file_alias")
+            .unwrap();
 
     assert_eq!(new_blocks.len(), DATA.len());
     assert!(new_blocks.windows(2).all(|pair| pair[1] == pair[0] + 1));
@@ -137,12 +125,10 @@ fn defragments_a_fragmented_file_through_a_final_symlink() {
         allocator_before.allocated_blocks()
     );
     for block in old_blocks {
-        assert!(
-            !load_allocator(&mut device, &superblock)
-                .unwrap()
-                .is_owned(block)
-                .unwrap()
-        );
+        assert!(!load_allocator(&mut device, &superblock)
+            .unwrap()
+            .is_owned(block)
+            .unwrap());
     }
     for (logical, image) in DATA.iter().enumerate() {
         assert_eq!(
@@ -212,13 +198,9 @@ fn every_defragmentation_crash_point_recovers_old_or_complete_new_state() {
 
         device.arm(Some(crash_at));
         assert_eq!(
-            defragment_file_contiguous_at_path_journaled(
-                &mut device,
-                &superblock,
-                "/file_alias",
-            )
-            .unwrap_err()
-            .kind(),
+            defragment_file_contiguous_at_path_journaled(&mut device, &superblock, "/file_alias",)
+                .unwrap_err()
+                .kind(),
             io::ErrorKind::Other,
             "crash point {crash_at} must interrupt defragmentation"
         );
