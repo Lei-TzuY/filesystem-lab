@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
   rust:
     runs-on: ubuntu-latest
@@ -15,15 +18,15 @@ jobs:
           components: rustfmt, clippy
       - name: Format
         run: cargo fmt --all -- --check
-      - name: Format diff diagnostic
+      - name: Apply rustfmt diagnostic
         if: failure()
         run: |
           cargo fmt --all
-          {
-            echo '```diff'
-            git diff -- src tests
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src tests
+          git commit -m "Apply rustfmt"
+          git push origin HEAD:${{ github.head_ref }}
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
