@@ -75,12 +75,7 @@ pub fn file_extents_at_path(
         previous = physical_block;
     }
 
-    push_extent(
-        &mut extents,
-        logical_start,
-        physical_start,
-        inode.blocks.len(),
-    )?;
+    push_extent(&mut extents, logical_start, physical_start, inode.blocks.len())?;
     Ok(extents)
 }
 
