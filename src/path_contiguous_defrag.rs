@@ -42,7 +42,12 @@ pub fn defragment_file_contiguous_at_path_journaled(
     let inode = inodes
         .iter()
         .find(|inode| inode.id == inode_id)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "defragment target inode is missing"))?;
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "defragment target inode is missing",
+            )
+        })?;
     if inode.kind != InodeKind::File {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
