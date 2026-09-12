@@ -106,8 +106,7 @@ pub fn transfer_replace_complete_file_blocks_journaled(
             io::Error::new(io::ErrorKind::InvalidInput, "destination inode is missing")
         })?;
 
-    if inodes[source_pos].kind != InodeKind::File
-        || inodes[destination_pos].kind != InodeKind::File
+    if inodes[source_pos].kind != InodeKind::File || inodes[destination_pos].kind != InodeKind::File
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,

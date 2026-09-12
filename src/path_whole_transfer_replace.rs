@@ -33,8 +33,7 @@ pub fn transfer_replace_complete_file_at_path_journaled(
 ) -> io::Result<RecoveryReport> {
     recover_journal_and_checkpoint(device, *superblock)?;
     let source_inode = resolve_path_following_symlinks(device, superblock, source_path)?;
-    let destination_inode =
-        resolve_path_following_symlinks(device, superblock, destination_path)?;
+    let destination_inode = resolve_path_following_symlinks(device, superblock, destination_path)?;
     transfer_replace_complete_file_blocks_journaled(
         device,
         superblock,

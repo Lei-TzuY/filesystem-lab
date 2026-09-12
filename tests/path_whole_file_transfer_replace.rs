@@ -110,9 +110,11 @@ fn transfers_complete_source_over_destination_and_releases_displaced_blocks() {
 
     transfer_source_over_destination(&mut device, &superblock).unwrap();
 
-    assert!(read_file_blocks_at_path(&mut device, &superblock, "/source")
-        .unwrap()
-        .is_empty());
+    assert!(
+        read_file_blocks_at_path(&mut device, &superblock, "/source")
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(
         read_file_blocks_at_path(&mut device, &superblock, "/destination").unwrap(),
         source_before
@@ -141,9 +143,11 @@ fn empty_source_atomically_clears_destination_and_releases_its_blocks() {
     assert!(read_file_blocks_at_path(&mut device, &superblock, "/empty")
         .unwrap()
         .is_empty());
-    assert!(read_file_blocks_at_path(&mut device, &superblock, "/destination")
-        .unwrap()
-        .is_empty());
+    assert!(
+        read_file_blocks_at_path(&mut device, &superblock, "/destination")
+            .unwrap()
+            .is_empty()
+    );
     let allocator_after = load_allocator(&mut device, &superblock).unwrap();
     assert_eq!(
         allocator_after.allocated_blocks() + 1,
