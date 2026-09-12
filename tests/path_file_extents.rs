@@ -81,13 +81,8 @@ fn reports_maximal_physical_runs_for_fragmented_file_mapping() {
         &initial,
     )
     .unwrap();
-    create_one_block_file_at_path_journaled(
-        &mut device,
-        &superblock,
-        "/gap",
-        &[0x33; BLOCK_SIZE],
-    )
-    .unwrap();
+    create_one_block_file_at_path_journaled(&mut device, &superblock, "/gap", &[0x33; BLOCK_SIZE])
+        .unwrap();
     append_file_blocks_at_path_journaled(
         &mut device,
         &superblock,
@@ -125,11 +120,7 @@ fn reports_maximal_physical_runs_for_fragmented_file_mapping() {
 #[test]
 fn reports_one_extent_for_contiguous_file() {
     let (mut device, superblock) = setup();
-    let data = [
-        [0x51; BLOCK_SIZE],
-        [0x62; BLOCK_SIZE],
-        [0x73; BLOCK_SIZE],
-    ];
+    let data = [[0x51; BLOCK_SIZE], [0x62; BLOCK_SIZE], [0x73; BLOCK_SIZE]];
     let (inode_id, _) = create_contiguous_file_with_blocks_at_path_journaled(
         &mut device,
         &superblock,
