@@ -56,14 +56,7 @@ pub fn clone_file_blocks_contiguous_replace_at_path_journaled(
         .block_count
         .checked_mul(BLOCK_SIZE)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "clone byte length overflow"))?;
-    let snapshot = read_file_range(
-        device,
-        superblock,
-        source_inode,
-        source.start,
-        0,
-        byte_len,
-    )?;
+    let snapshot = read_file_range(device, superblock, source_inode, source.start, 0, byte_len)?;
     let mut blocks = Vec::with_capacity(source.block_count);
     for chunk in snapshot.chunks_exact(BLOCK_SIZE) {
         let mut image = [0_u8; BLOCK_SIZE];
