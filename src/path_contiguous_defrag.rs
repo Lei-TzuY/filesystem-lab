@@ -73,11 +73,7 @@ pub fn defragment_file_contiguous_at_path_journaled(
         }
     }
 
-    if inode
-        .blocks
-        .windows(2)
-        .all(|pair| pair[1] == pair[0] + 1)
-    {
+    if inode.blocks.windows(2).all(|pair| pair[1] == pair[0] + 1) {
         return Ok((inode.blocks.clone(), RecoveryReport::default()));
     }
 
