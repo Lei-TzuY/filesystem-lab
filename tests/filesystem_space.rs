@@ -2,8 +2,9 @@ use std::io;
 
 use filesystem_lab::block::{BlockDevice, BLOCK_SIZE, BLOCK_SIZE_U64};
 use filesystem_lab::filesystem_space::{
-    filesystem_free_space_extents, filesystem_free_space_extents_page, filesystem_space,
-    FilesystemFreeSpace, FilesystemFreeSpacePage, FilesystemSpace, FreeSpaceExtent,
+    filesystem_first_fit_free_extent, filesystem_free_space_extents,
+    filesystem_free_space_extents_page, filesystem_space, FilesystemFreeSpace,
+    FilesystemFreeSpacePage, FilesystemSpace, FreeSpaceExtent,
 };
 use filesystem_lab::format::Superblock;
 use filesystem_lab::format_geometry::format_device_with_journal_blocks;
@@ -154,6 +155,64 @@ fn reports_fragmented_free_extents_after_middle_file_is_unlinked() {
 }
 
 #[test]
+fn first_fit_query_returns_lowest_sufficient_run_prefix() {
+    let (mut device, superblock) = setup();
+    let first_data_block = superblock.reserved_blocks();
+
+    assert_eq!(
+        filesystem_first_fit_free_extent(&mut device, &superblock, 3).unwrap(),
+        Some(FreeSpaceExtent {
+            start_block: first_data_block,
+            block_count: 3,
+        })
+    );
+
+    for (path, byte) in [
+        ("/a", 0x11),
+        ("/b", 0x22),
+        ("/c", 0x33),
+        ("/d", 0x44),
+    ] {
+        create_one_block_file_at_path_journaled(
+            &mut device,
+            &superblock,
+            path,
+            &[byte; BLOCK_SIZE],
+        )
+        .unwrap();
+    }
+    unlink_file_at_path_journaled(&mut device, &superblock, "/b").unwrap();
+
+    assert_eq!(
+        filesystem_first_fit_free_extent(&mut device, &superblock, 2).unwrap(),
+        Some(FreeSpaceExtent {
+            start_block: first_data_block + 4,
+            block_count: 2,
+        })
+    );
+}
+
+#[test]
+fn first_fit_query_handles_exact_fit_no_fit_and_zero_request() {
+    let (mut device, superblock) = setup();
+    let free_blocks = superblock.total_blocks - superblock.reserved_blocks();
+
+    assert_eq!(
+        filesystem_first_fit_free_extent(&mut device, &superblock, free_blocks).unwrap(),
+        Some(FreeSpaceExtent {
+            start_block: superblock.reserved_blocks(),
+            block_count: free_blocks,
+        })
+    );
+    assert_eq!(
+        filesystem_first_fit_free_extent(&mut device, &superblock, free_blocks + 1).unwrap(),
+        None
+    );
+    let error = filesystem_first_fit_free_extent(&mut device, &superblock, 0).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+}
+
+#[test]
 fn paginates_fragmented_free_extents_with_exclusive_block_cursor() {
     let (mut device, superblock) = setup();
     let first_data_block = superblock.reserved_blocks();
@@ -285,5 +344,7 @@ fn rejects_allocator_inode_ownership_disagreement() {
     let error = filesystem_free_space_extents(&mut device, &superblock).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     let error = filesystem_free_space_extents_page(&mut device, &superblock, None, 1).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    let error = filesystem_first_fit_free_extent(&mut device, &superblock, 1).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
 }
