@@ -74,7 +74,10 @@ fn assert_unique_file_ownership(device: &mut CrashDevice, superblock: &Superbloc
     let mut seen = HashSet::new();
     for inode in inodes.iter().filter(|inode| inode.kind == InodeKind::File) {
         for block in &inode.blocks {
-            assert!(seen.insert(*block), "duplicate physical block reference {block}");
+            assert!(
+                seen.insert(*block),
+                "duplicate physical block reference {block}"
+            );
             assert!(allocator.is_owned(*block).unwrap());
         }
     }
@@ -157,8 +160,14 @@ fn rejects_zero_count_without_persistent_change() {
         .kind(),
         io::ErrorKind::InvalidInput
     );
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
     check_device(&mut device).unwrap();
 }
 
@@ -211,7 +220,10 @@ fn every_zero_insert_crash_point_recovers_old_or_complete_new_state() {
             assert_eq!(allocator_after, allocator_before);
             assert_eq!(inodes_after, inodes_before);
         } else {
-            assert_eq!(file_after.blocks.len(), file_before.blocks.len() + ZERO_COUNT);
+            assert_eq!(
+                file_after.blocks.len(),
+                file_before.blocks.len() + ZERO_COUNT
+            );
             let inserted = &file_after.blocks[1..=ZERO_COUNT];
             assert!(inserted.windows(2).all(|pair| pair[1] == pair[0] + 1));
             assert_eq!(file_after.blocks[0], file_before.blocks[0]);
@@ -236,7 +248,10 @@ fn every_zero_insert_crash_point_recovers_old_or_complete_new_state() {
             }
         }
 
-        assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), entries_before);
+        assert_eq!(
+            load_directory_table(&mut device, &superblock).unwrap(),
+            entries_before
+        );
         assert_unique_file_ownership(&mut device, &superblock);
         check_device(&mut device).unwrap();
         assert!(load_journal_image(&mut device, superblock)
