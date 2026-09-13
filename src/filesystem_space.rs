@@ -144,6 +144,44 @@ pub fn filesystem_free_space_extents(
     })
 }
 
+/// Returns the lowest-address contiguous free run that can satisfy `block_count`.
+///
+/// The query observes the same recovered, fsck-validated allocator snapshot as
+/// [`filesystem_free_space_extents`] and applies deterministic first-fit selection in ascending
+/// physical-block order. The returned extent is clipped to exactly `block_count` blocks rather than
+/// exposing the remainder of the containing free run.
+///
+/// This is a placement query only. It does not reserve or allocate blocks, and a subsequent mutating
+/// operation must revalidate allocator state before publication. Filesystem format remains v5 with
+/// allocation-image version 1.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` when `block_count` is zero. Recovery/checkpoint, fsck, allocator decoding,
+/// and block-device failures are propagated.
+pub fn filesystem_first_fit_free_extent(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    block_count: u64,
+) -> io::Result<Option<FreeSpaceExtent>> {
+    if block_count == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "first-fit free-space request must contain at least one block",
+        ));
+    }
+
+    let free_space = filesystem_free_space_extents(device, superblock)?;
+    Ok(free_space
+        .extents
+        .into_iter()
+        .find(|extent| extent.block_count >= block_count)
+        .map(|extent| FreeSpaceExtent {
+            start_block: extent.start_block,
+            block_count,
+        }))
+}
+
 /// Returns one bounded page of exact free-data-block runs from recovered durable allocator state.
 ///
 /// `after_block` is an exclusive physical-block cursor. If it falls inside a free extent, the first
