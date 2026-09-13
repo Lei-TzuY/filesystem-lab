@@ -10,7 +10,8 @@ use filesystem_lab::path_create::{
     create_directory_at_path_journaled, create_file_with_blocks_at_path_journaled,
 };
 use filesystem_lab::path_directory_plus::{
-    list_directory_with_metadata_at_path, PathDirectoryEntryMetadata,
+    list_directory_with_metadata_at_path, list_directory_with_metadata_page_at_path,
+    PathDirectoryEntryMetadata, PathDirectoryMetadataPage,
 };
 use filesystem_lab::path_hard_link::hard_link_file_at_path_journaled;
 
@@ -113,6 +114,129 @@ fn reports_recovered_child_metadata_and_global_reference_counts() {
             logical_blocks: 2,
             namespace_references: 2,
         }]
+    );
+}
+
+#[test]
+fn pages_recovered_metadata_with_stable_exclusive_name_cursor() {
+    let (mut device, superblock) = setup();
+    let data = [[0x33; BLOCK_SIZE]];
+    let (alpha_inode, _) =
+        create_file_with_blocks_at_path_journaled(&mut device, &superblock, "/alpha", &data)
+            .unwrap();
+    let (charlie_inode, _) =
+        create_file_with_blocks_at_path_journaled(&mut device, &superblock, "/charlie", &data)
+            .unwrap();
+    let (echo_inode, _) =
+        create_file_with_blocks_at_path_journaled(&mut device, &superblock, "/echo", &data).unwrap();
+    hard_link_file_at_path_journaled(&mut device, &superblock, "/alpha", "/alpha-link").unwrap();
+
+    let first = list_directory_with_metadata_page_at_path(&mut device, &superblock, "/", None, 2)
+        .unwrap();
+    assert_eq!(
+        first,
+        PathDirectoryMetadataPage {
+            entries: vec![
+                PathDirectoryEntryMetadata {
+                    name: "alpha".to_owned(),
+                    inode_id: alpha_inode,
+                    kind: InodeKind::File,
+                    logical_blocks: 1,
+                    namespace_references: 2,
+                },
+                PathDirectoryEntryMetadata {
+                    name: "alpha-link".to_owned(),
+                    inode_id: alpha_inode,
+                    kind: InodeKind::File,
+                    logical_blocks: 1,
+                    namespace_references: 2,
+                },
+            ],
+            next_after: Some("alpha-link".to_owned()),
+        }
+    );
+
+    let second = list_directory_with_metadata_page_at_path(
+        &mut device,
+        &superblock,
+        "/",
+        first.next_after.as_deref(),
+        2,
+    )
+    .unwrap();
+    assert_eq!(
+        second,
+        PathDirectoryMetadataPage {
+            entries: vec![
+                PathDirectoryEntryMetadata {
+                    name: "charlie".to_owned(),
+                    inode_id: charlie_inode,
+                    kind: InodeKind::File,
+                    logical_blocks: 1,
+                    namespace_references: 1,
+                },
+                PathDirectoryEntryMetadata {
+                    name: "echo".to_owned(),
+                    inode_id: echo_inode,
+                    kind: InodeKind::File,
+                    logical_blocks: 1,
+                    namespace_references: 1,
+                },
+            ],
+            next_after: None,
+        }
+    );
+
+    assert_eq!(
+        list_directory_with_metadata_page_at_path(
+            &mut device,
+            &superblock,
+            "/",
+            Some("bravo"),
+            1,
+        )
+        .unwrap(),
+        PathDirectoryMetadataPage {
+            entries: vec![PathDirectoryEntryMetadata {
+                name: "charlie".to_owned(),
+                inode_id: charlie_inode,
+                kind: InodeKind::File,
+                logical_blocks: 1,
+                namespace_references: 1,
+            }],
+            next_after: Some("charlie".to_owned()),
+        }
+    );
+}
+
+#[test]
+fn rejects_zero_page_limit_and_non_directory_pathname() {
+    let (mut device, superblock) = setup();
+    create_file_with_blocks_at_path_journaled(
+        &mut device,
+        &superblock,
+        "/payload",
+        &[[0x44; BLOCK_SIZE]],
+    )
+    .unwrap();
+
+    assert_eq!(
+        list_directory_with_metadata_page_at_path(&mut device, &superblock, "/", None, 0)
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        list_directory_with_metadata_page_at_path(
+            &mut device,
+            &superblock,
+            "/payload",
+            None,
+            1,
+        )
+        .unwrap_err()
+        .kind(),
+        io::ErrorKind::InvalidInput
     );
 }
 
