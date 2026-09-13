@@ -144,7 +144,9 @@ fn paginate_extents(
         ));
     }
 
-    let first_logical = after_logical.and_then(|cursor| cursor.checked_add(1)).unwrap_or(0);
+    let first_logical = after_logical
+        .and_then(|cursor| cursor.checked_add(1))
+        .unwrap_or(0);
     let mut eligible = Vec::new();
     for extent in extents {
         let logical_end = extent
@@ -224,8 +226,16 @@ mod tests {
             first,
             FileExtentPage {
                 extents: vec![
-                    FileExtent { logical_start: 0, physical_start: 20, block_count: 2 },
-                    FileExtent { logical_start: 2, physical_start: 40, block_count: 1 },
+                    FileExtent {
+                        logical_start: 0,
+                        physical_start: 20,
+                        block_count: 2,
+                    },
+                    FileExtent {
+                        logical_start: 2,
+                        physical_start: 40,
+                        block_count: 1,
+                    },
                 ],
                 next_after_logical: Some(2),
             }
@@ -233,7 +243,11 @@ mod tests {
         assert_eq!(
             paginate_extents(extents, first.next_after_logical, 2).unwrap(),
             FileExtentPage {
-                extents: vec![FileExtent { logical_start: 3, physical_start: 60, block_count: 2 }],
+                extents: vec![FileExtent {
+                    logical_start: 3,
+                    physical_start: 60,
+                    block_count: 2,
+                }],
                 next_after_logical: None,
             }
         );
@@ -241,11 +255,19 @@ mod tests {
 
     #[test]
     fn cursor_inside_extent_clips_without_repeating_blocks() {
-        let extents = vec![FileExtent { logical_start: 4, physical_start: 100, block_count: 5 }];
+        let extents = vec![FileExtent {
+            logical_start: 4,
+            physical_start: 100,
+            block_count: 5,
+        }];
         assert_eq!(
             paginate_extents(extents, Some(5), 1).unwrap(),
             FileExtentPage {
-                extents: vec![FileExtent { logical_start: 6, physical_start: 102, block_count: 3 }],
+                extents: vec![FileExtent {
+                    logical_start: 6,
+                    physical_start: 102,
+                    block_count: 3,
+                }],
                 next_after_logical: None,
             }
         );
@@ -254,12 +276,24 @@ mod tests {
     #[test]
     fn stale_cursor_between_extents_advances_to_next_run() {
         let extents = vec![
-            FileExtent { logical_start: 0, physical_start: 10, block_count: 2 },
-            FileExtent { logical_start: 4, physical_start: 30, block_count: 2 },
+            FileExtent {
+                logical_start: 0,
+                physical_start: 10,
+                block_count: 2,
+            },
+            FileExtent {
+                logical_start: 4,
+                physical_start: 30,
+                block_count: 2,
+            },
         ];
         assert_eq!(
             paginate_extents(extents, Some(2), 1).unwrap().extents,
-            vec![FileExtent { logical_start: 4, physical_start: 30, block_count: 2 }]
+            vec![FileExtent {
+                logical_start: 4,
+                physical_start: 30,
+                block_count: 2,
+            }]
         );
     }
 
