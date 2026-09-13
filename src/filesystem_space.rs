@@ -1,6 +1,5 @@
 use std::io;
 
-use crate::allocation::BlockAllocator;
 use crate::allocation_disk::load_allocator;
 use crate::block::{BlockDevice, BLOCK_SIZE_U64};
 use crate::format::Superblock;
@@ -101,108 +100,11 @@ pub fn filesystem_free_space_extents(
     let report = check_device(device)?;
     validate_geometry(superblock, report.total_blocks, report.reserved_blocks)?;
     let allocator = load_allocator(device, superblock)?;
-    let scan = scan_free_space(&allocator, superblock, superblock.reserved_blocks(), None)?;
 
-    if scan.total_free_blocks != report.free_blocks {
-        return Err(invalid_data(
-            "free-space extents disagree with fsck free-block accounting",
-        ));
-    }
-
-    Ok(FilesystemFreeSpace {
-        total_free_blocks: scan.total_free_blocks,
-        largest_extent_blocks: scan.largest_extent_blocks,
-        extents: scan.extents,
-    })
-}
-
-/// Returns one bounded page of exact free-data-block runs from recovered durable allocator state.
-///
-/// `after_block` is an exclusive physical-block cursor. A cursor before the data region is clipped to
-/// the first data block. A cursor at or beyond the end of the filesystem returns an empty page. If a
-/// cursor lands inside a free extent, the first returned extent begins at the next block so pages
-/// never repeat already-consumed free blocks. `next_after` is the last physical block of the final
-/// returned extent and is present only when another free extent remains after the page.
-///
-/// The query still scans the complete durable allocation image so `total_free_blocks` and
-/// `largest_extent_blocks` describe the whole recovered filesystem and are checked against full
-/// read-only fsck accounting. Only the returned extent vector is bounded by `limit`; the operation
-/// does not reserve space or promise future allocation placement. Filesystem format remains v5.
-///
-/// # Errors
-///
-/// Returns `InvalidInput` when `limit` is zero. Propagates recovery/checkpoint, device I/O, metadata
-/// decoding, journal validation, allocator, and fsck consistency failures. Returns `InvalidData` if
-/// durable geometry changes during the query or allocator topology disagrees with fsck accounting.
-pub fn filesystem_free_space_extents_page(
-    device: &mut impl BlockDevice,
-    superblock: &Superblock,
-    after_block: Option<u64>,
-    limit: usize,
-) -> io::Result<FilesystemFreeSpacePage> {
-    if limit == 0 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "free-space extent page limit must be non-zero",
-        ));
-    }
-
-    recover_journal_and_checkpoint(device, *superblock)?;
-    let report = check_device(device)?;
-    validate_geometry(superblock, report.total_blocks, report.reserved_blocks)?;
-    let allocator = load_allocator(device, superblock)?;
-    let page_start = after_block
-        .and_then(|block| block.checked_add(1))
-        .unwrap_or_else(|| {
-            if after_block.is_some() {
-                superblock.total_blocks
-            } else {
-                superblock.reserved_blocks()
-            }
-        })
-        .max(superblock.reserved_blocks())
-        .min(superblock.total_blocks);
-    let scan = scan_free_space(&allocator, superblock, page_start, Some(limit))?;
-
-    if scan.total_free_blocks != report.free_blocks {
-        return Err(invalid_data(
-            "free-space extents disagree with fsck free-block accounting",
-        ));
-    }
-
-    let next_after = if scan.has_more {
-        scan.extents.last().map(extent_last_block).transpose()?
-    } else {
-        None
-    };
-
-    Ok(FilesystemFreeSpacePage {
-        total_free_blocks: scan.total_free_blocks,
-        largest_extent_blocks: scan.largest_extent_blocks,
-        extents: scan.extents,
-        next_after,
-    })
-}
-
-#[derive(Debug)]
-struct FreeSpaceScan {
-    total_free_blocks: u64,
-    largest_extent_blocks: u64,
-    extents: Vec<FreeSpaceExtent>,
-    has_more: bool,
-}
-
-fn scan_free_space(
-    allocator: &BlockAllocator,
-    superblock: &Superblock,
-    page_start: u64,
-    limit: Option<usize>,
-) -> io::Result<FreeSpaceScan> {
     let mut extents = Vec::new();
     let mut run_start = None;
     let mut total_free_blocks = 0_u64;
     let mut largest_extent_blocks = 0_u64;
-    let mut has_more = false;
 
     for block in superblock.reserved_blocks()..superblock.total_blocks {
         let owned = allocator
@@ -216,81 +118,121 @@ fn scan_free_space(
                 run_start = Some(block);
             }
         } else if let Some(start_block) = run_start.take() {
-            record_extent(
-                &mut extents,
-                &mut largest_extent_blocks,
-                &mut has_more,
-                start_block,
-                block,
-                page_start,
-                limit,
-            )?;
+            push_extent(&mut extents, &mut largest_extent_blocks, start_block, block)?;
         }
     }
 
     if let Some(start_block) = run_start {
-        record_extent(
+        push_extent(
             &mut extents,
             &mut largest_extent_blocks,
-            &mut has_more,
             start_block,
             superblock.total_blocks,
-            page_start,
-            limit,
         )?;
     }
 
-    Ok(FreeSpaceScan {
+    if total_free_blocks != report.free_blocks {
+        return Err(invalid_data(
+            "free-space extents disagree with fsck free-block accounting",
+        ));
+    }
+
+    Ok(FilesystemFreeSpace {
         total_free_blocks,
         largest_extent_blocks,
         extents,
-        has_more,
     })
 }
 
-#[allow(clippy::too_many_arguments)]
-fn record_extent(
-    extents: &mut Vec<FreeSpaceExtent>,
-    largest_extent_blocks: &mut u64,
-    has_more: &mut bool,
-    start_block: u64,
-    end_block: u64,
-    page_start: u64,
-    limit: Option<usize>,
-) -> io::Result<()> {
-    let block_count = end_block
-        .checked_sub(start_block)
-        .filter(|count| *count > 0)
-        .ok_or_else(|| invalid_data("invalid free-space extent bounds"))?;
-    *largest_extent_blocks = (*largest_extent_blocks).max(block_count);
-
-    let clipped_start = start_block.max(page_start);
-    if clipped_start >= end_block {
-        return Ok(());
+/// Returns one bounded page of exact free-data-block runs from recovered durable allocator state.
+///
+/// `after_block` is an exclusive physical-block cursor. If it falls inside a free extent, the first
+/// returned extent is clipped to start at the following block, so advancing pages never repeat free
+/// blocks already consumed by the caller. A cursor before the data region advances to the first data
+/// block, while a cursor at or beyond the filesystem end returns an empty page.
+///
+/// Each call independently recovers, fsck-validates, and scans one durable snapshot. The returned
+/// extent vector is bounded by `limit`, but cursor pagination across concurrent mutations is not a
+/// multi-call snapshot guarantee. Filesystem format remains v5; this API does not reserve free space
+/// or introduce persistent extent allocation semantics.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` when `limit` is zero. Recovery/checkpoint, fsck, allocator decoding, and
+/// block-device failures are propagated.
+pub fn filesystem_free_space_extents_page(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    after_block: Option<u64>,
+    limit: usize,
+) -> io::Result<FilesystemFreeSpacePage> {
+    if limit == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "free-space extent page limit must be greater than zero",
+        ));
     }
-    let clipped_count = end_block
-        .checked_sub(clipped_start)
-        .filter(|count| *count > 0)
-        .ok_or_else(|| invalid_data("invalid clipped free-space extent bounds"))?;
 
-    if limit.is_some_and(|value| extents.len() >= value) {
-        *has_more = true;
-        return Ok(());
-    }
-
-    extents.push(FreeSpaceExtent {
-        start_block: clipped_start,
-        block_count: clipped_count,
-    });
-    Ok(())
+    let free_space = filesystem_free_space_extents(device, superblock)?;
+    paginate_free_space_extents(free_space, superblock, after_block, limit)
 }
 
-fn extent_last_block(extent: &FreeSpaceExtent) -> io::Result<u64> {
-    extent
-        .start_block
-        .checked_add(extent.block_count)
-        .and_then(|end| end.checked_sub(1))
-        .ok_or_else(|| invalid_data("free-space extent end overflow"))
+fn paginate_free_space_extents(
+    free_space: FilesystemFreeSpace,
+    superblock: &Superblock,
+    after_block: Option<u64>,
+    limit: usize,
+) -> io::Result<FilesystemFreeSpacePage> {
+    if limit == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "free-space extent page limit must be greater than zero",
+        ));
+    }
+
+    let first_block = after_block
+        .and_then(|cursor| cursor.checked_add(1))
+        .unwrap_or(superblock.reserved_blocks())
+        .max(superblock.reserved_blocks());
+    let mut eligible = Vec::new();
+
+    for extent in free_space.extents {
+        let extent_end = extent
+            .start_block
+            .checked_add(extent.block_count)
+            .ok_or_else(|| invalid_data("free-space extent end overflow"))?;
+        if extent_end <= first_block {
+            continue;
+        }
+        if extent.start_block < first_block {
+            eligible.push(FreeSpaceExtent {
+                start_block: first_block,
+                block_count: extent_end - first_block,
+            });
+        } else {
+            eligible.push(extent);
+        }
+    }
+
+    let has_more = eligible.len() > limit;
+    eligible.truncate(limit);
+    let next_after = if has_more {
+        let last = eligible
+            .last()
+            .ok_or_else(|| invalid_data("free-space pagination lost its final extent"))?;
+        last.start_block
+            .checked_add(last.block_count)
+            .and_then(|end| end.checked_sub(1))
+    } else {
+        None
+    };
+
+    Ok(FilesystemFreeSpacePage {
+        total_free_blocks: free_space.total_free_blocks,
+        largest_extent_blocks: free_space.largest_extent_blocks,
+        extents: eligible,
+        next_after,
+    })
 }
 
 fn validate_geometry(
@@ -303,6 +245,24 @@ fn validate_geometry(
             "durable superblock geometry changed during filesystem-space query",
         ));
     }
+    Ok(())
+}
+
+fn push_extent(
+    extents: &mut Vec<FreeSpaceExtent>,
+    largest_extent_blocks: &mut u64,
+    start_block: u64,
+    end_block: u64,
+) -> io::Result<()> {
+    let block_count = end_block
+        .checked_sub(start_block)
+        .filter(|count| *count > 0)
+        .ok_or_else(|| invalid_data("invalid free-space extent bounds"))?;
+    *largest_extent_blocks = (*largest_extent_blocks).max(block_count);
+    extents.push(FreeSpaceExtent {
+        start_block,
+        block_count,
+    });
     Ok(())
 }
 
