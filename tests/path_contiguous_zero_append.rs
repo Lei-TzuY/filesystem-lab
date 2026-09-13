@@ -212,8 +212,8 @@ fn every_zero_append_crash_point_recovers_old_or_complete_new_state() {
                 allocator_after.allocated_blocks(),
                 allocator_before.allocated_blocks() + ZERO_BLOCKS
             );
-            for logical_block in
-                file_before.blocks.len()..file_before.blocks.len() + usize::try_from(ZERO_BLOCKS).unwrap()
+            for logical_block in file_before.blocks.len()
+                ..file_before.blocks.len() + usize::try_from(ZERO_BLOCKS).unwrap()
             {
                 assert_eq!(
                     read_file_range_at_path(
