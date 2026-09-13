@@ -95,3 +95,106 @@ pub fn defragment_file_contiguous_at_path_journaled(
     )?;
     Ok((new_blocks, report))
 }
+
+/// Relocates one non-empty logical-block range of a regular file into one contiguous physical run.
+///
+/// The selected range preserves its logical position, length, and data. Blocks before and after the
+/// range keep their existing mappings. Older committed WAL state is recovered and checkpointed first,
+/// and the pathname follows intermediate and final symbolic links through the bounded resolver.
+///
+/// If the selected physical blocks are already contiguous, the operation is an idempotent no-op.
+/// Otherwise the current data images are snapshotted before the existing contiguous replacement WAL
+/// path reserves a fresh lowest-address run, releases the displaced ownership, and atomically publishes
+/// allocation metadata, the updated inode vector, and copied data images.
+///
+/// Format v5 continues to persist an explicit block vector; range contiguity is an allocation-time
+/// result only and does not create a persistent extent record.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` for a zero block count, range overflow, a range outside the file, a missing
+/// inode, or a non-file target. Returns `InvalidData` when allocator ownership disagrees with a selected
+/// inode block. Contiguous-space exhaustion, journal-capacity, recovery, checkpoint, and device I/O
+/// failures are propagated.
+pub fn defragment_file_range_contiguous_at_path_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    path: &str,
+    start: usize,
+    block_count: usize,
+) -> io::Result<(Vec<u64>, RecoveryReport)> {
+    if block_count == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "defragment range must contain at least one logical block",
+        ));
+    }
+    let end = start.checked_add(block_count).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "defragment range overflows usize",
+        )
+    })?;
+
+    recover_journal_and_checkpoint(device, *superblock)?;
+    let inode_id = resolve_path_following_symlinks(device, superblock, path)?;
+
+    let allocator = load_allocator(device, superblock)?;
+    let inodes = load_inode_table(device, superblock)?;
+    let inode = inodes
+        .iter()
+        .find(|inode| inode.id == inode_id)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "defragment range target inode is missing",
+            )
+        })?;
+    if inode.kind != InodeKind::File {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "defragment range target must be a regular file",
+        ));
+    }
+    if end > inode.blocks.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "defragment range exceeds existing logical blocks",
+        ));
+    }
+
+    let selected = &inode.blocks[start..end];
+    for block in selected {
+        if !allocator
+            .is_owned(*block)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "defragment range block is not allocator-owned",
+            ));
+        }
+    }
+
+    if selected.windows(2).all(|pair| pair[1] == pair[0] + 1) {
+        return Ok((selected.to_vec(), RecoveryReport::default()));
+    }
+
+    let old_blocks = selected.to_vec();
+    let mut snapshots = Vec::with_capacity(old_blocks.len());
+    for block in &old_blocks {
+        let mut image = [0_u8; BLOCK_SIZE];
+        device.read_block(*block, &mut image)?;
+        snapshots.push(image);
+    }
+
+    let (new_blocks, _displaced, report) = replace_file_blocks_contiguous_journaled(
+        device,
+        superblock,
+        inode_id,
+        start,
+        block_count,
+        &snapshots,
+    )?;
+    Ok((new_blocks, report))
+}
