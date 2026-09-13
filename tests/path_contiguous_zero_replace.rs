@@ -234,15 +234,8 @@ fn every_zero_replacement_crash_point_recovers_old_or_complete_new_state() {
             assert_eq!(allocator_after, allocator_before);
             assert_eq!(inodes_after, inodes_before);
             assert_eq!(
-                read_file_range_at_path(
-                    &mut device,
-                    &superblock,
-                    "/dir/file",
-                    1,
-                    0,
-                    BLOCK_SIZE,
-                )
-                .unwrap(),
+                read_file_range_at_path(&mut device, &superblock, "/dir/file", 1, 0, BLOCK_SIZE,)
+                    .unwrap(),
                 INITIAL[1]
             );
         } else {
