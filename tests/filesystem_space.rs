@@ -167,12 +167,7 @@ fn first_fit_query_returns_lowest_sufficient_run_prefix() {
         })
     );
 
-    for (path, byte) in [
-        ("/a", 0x11),
-        ("/b", 0x22),
-        ("/c", 0x33),
-        ("/d", 0x44),
-    ] {
+    for (path, byte) in [("/a", 0x11), ("/b", 0x22), ("/c", 0x33), ("/d", 0x44)] {
         create_one_block_file_at_path_journaled(
             &mut device,
             &superblock,
