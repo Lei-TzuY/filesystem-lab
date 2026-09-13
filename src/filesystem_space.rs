@@ -32,6 +32,15 @@ pub struct FilesystemFreeSpace {
     pub extents: Vec<FreeSpaceExtent>,
 }
 
+/// One bounded page of recovered free-space topology.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FilesystemFreeSpacePage {
+    pub total_free_blocks: u64,
+    pub largest_extent_blocks: u64,
+    pub extents: Vec<FreeSpaceExtent>,
+    pub next_after: Option<u64>,
+}
+
 /// Returns trustworthy block-space accounting from recovered durable filesystem state.
 ///
 /// Any committed WAL transaction is recovered and checkpointed before accounting is observed. The
@@ -132,6 +141,98 @@ pub fn filesystem_free_space_extents(
         total_free_blocks,
         largest_extent_blocks,
         extents,
+    })
+}
+
+/// Returns one bounded page of exact free-data-block runs from recovered durable allocator state.
+///
+/// `after_block` is an exclusive physical-block cursor. If it falls inside a free extent, the first
+/// returned extent is clipped to start at the following block, so advancing pages never repeat free
+/// blocks already consumed by the caller. A cursor before the data region advances to the first data
+/// block, while a cursor at or beyond the filesystem end returns an empty page.
+///
+/// Each call independently recovers, fsck-validates, and scans one durable snapshot. The returned
+/// extent vector is bounded by `limit`, but cursor pagination across concurrent mutations is not a
+/// multi-call snapshot guarantee. Filesystem format remains v5; this API does not reserve free space
+/// or introduce persistent extent allocation semantics.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` when `limit` is zero. Recovery/checkpoint, fsck, allocator decoding, and
+/// block-device failures are propagated.
+pub fn filesystem_free_space_extents_page(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    after_block: Option<u64>,
+    limit: usize,
+) -> io::Result<FilesystemFreeSpacePage> {
+    if limit == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "free-space extent page limit must be greater than zero",
+        ));
+    }
+
+    let free_space = filesystem_free_space_extents(device, superblock)?;
+    paginate_free_space_extents(free_space, superblock, after_block, limit)
+}
+
+fn paginate_free_space_extents(
+    free_space: FilesystemFreeSpace,
+    superblock: &Superblock,
+    after_block: Option<u64>,
+    limit: usize,
+) -> io::Result<FilesystemFreeSpacePage> {
+    if limit == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "free-space extent page limit must be greater than zero",
+        ));
+    }
+
+    let first_block = match after_block {
+        Some(cursor) => cursor.checked_add(1).unwrap_or(superblock.total_blocks),
+        None => superblock.reserved_blocks(),
+    }
+    .max(superblock.reserved_blocks());
+    let mut eligible = Vec::new();
+
+    for extent in free_space.extents {
+        let extent_end = extent
+            .start_block
+            .checked_add(extent.block_count)
+            .ok_or_else(|| invalid_data("free-space extent end overflow"))?;
+        if extent_end <= first_block {
+            continue;
+        }
+        if extent.start_block < first_block {
+            eligible.push(FreeSpaceExtent {
+                start_block: first_block,
+                block_count: extent_end - first_block,
+            });
+        } else {
+            eligible.push(extent);
+        }
+    }
+
+    let has_more = eligible.len() > limit;
+    eligible.truncate(limit);
+    let next_after = if has_more {
+        let last = eligible
+            .last()
+            .ok_or_else(|| invalid_data("free-space pagination lost its final extent"))?;
+        last.start_block
+            .checked_add(last.block_count)
+            .and_then(|end| end.checked_sub(1))
+    } else {
+        None
+    };
+
+    Ok(FilesystemFreeSpacePage {
+        total_free_blocks: free_space.total_free_blocks,
+        largest_extent_blocks: free_space.largest_extent_blocks,
+        extents: eligible,
+        next_after,
     })
 }
 
