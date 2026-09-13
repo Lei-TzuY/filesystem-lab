@@ -70,12 +70,14 @@ pub fn append_zeroed_blocks_contiguous_at_path_journaled(
         )
     })?;
     let mut data_blocks = Vec::new();
-    data_blocks.try_reserve_exact(block_count).map_err(|error| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("contiguous zero append block vector is too large: {error}"),
-        )
-    })?;
+    data_blocks
+        .try_reserve_exact(block_count)
+        .map_err(|error| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("contiguous zero append block vector is too large: {error}"),
+            )
+        })?;
     data_blocks.resize(block_count, [0_u8; BLOCK_SIZE]);
 
     append_file_blocks_contiguous_at_path_journaled(device, superblock, path, &data_blocks)
