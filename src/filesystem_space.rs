@@ -190,10 +190,11 @@ fn paginate_free_space_extents(
         ));
     }
 
-    let first_block = after_block
-        .and_then(|cursor| cursor.checked_add(1))
-        .unwrap_or(superblock.reserved_blocks())
-        .max(superblock.reserved_blocks());
+    let first_block = match after_block {
+        Some(cursor) => cursor.checked_add(1).unwrap_or(superblock.total_blocks),
+        None => superblock.reserved_blocks(),
+    }
+    .max(superblock.reserved_blocks());
     let mut eligible = Vec::new();
 
     for extent in free_space.extents {
