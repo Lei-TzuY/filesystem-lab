@@ -2,7 +2,7 @@
 
 `insert_file_blocks_contiguous_at_path_journaled` inserts one non-empty sequence of complete logical blocks at an existing regular-file logical boundary while requiring every newly allocated physical block to come from one lowest-address contiguous free run.
 
-`insert_zeroed_blocks_contiguous_at_path_journaled` is the zero-filled growth variant. It inserts a non-zero count of real, independently owned physical blocks at the requested logical boundary and durably writes every new block as all zeroes. Existing logical blocks at and after the boundary shift right without changing their physical ownership. This is not a sparse-hole or reservation operation.
+`insert_zeroed_blocks_contiguous_at_path_journaled` is the zero-filled growth variant. It inserts a non-zero count of real, independently owned physical blocks at the requested logical boundary and durably writes every new block as all zeroes. Existing logical blocks at and after the boundary shift right without changing their physical ownership. This is not a sparse-hole or reservation operation. `insert_index` may equal the current logical block count (append-equivalent insertion), but an index beyond the current block count is rejected.
 
 The pathname wrapper recovers and checkpoints any older committed WAL before resolving the path. Intermediate and final symbolic links use the repository's bounded symlink-following resolver. The inode-level operation then validates the regular-file target and insertion boundary before allocating the run.
 
