@@ -194,13 +194,8 @@ fn paginates_fragmented_free_extents_with_exclusive_block_cursor() {
         }
     );
 
-    let second = filesystem_free_space_extents_page(
-        &mut device,
-        &superblock,
-        first.next_after,
-        1,
-    )
-    .unwrap();
+    let second =
+        filesystem_free_space_extents_page(&mut device, &superblock, first.next_after, 1).unwrap();
     assert_eq!(
         second,
         FilesystemFreeSpacePage {
@@ -214,13 +209,8 @@ fn paginates_fragmented_free_extents_with_exclusive_block_cursor() {
         }
     );
 
-    let third = filesystem_free_space_extents_page(
-        &mut device,
-        &superblock,
-        second.next_after,
-        1,
-    )
-    .unwrap();
+    let third =
+        filesystem_free_space_extents_page(&mut device, &superblock, second.next_after, 1).unwrap();
     assert_eq!(
         third,
         FilesystemFreeSpacePage {
@@ -294,7 +284,6 @@ fn rejects_allocator_inode_ownership_disagreement() {
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     let error = filesystem_free_space_extents(&mut device, &superblock).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
-    let error =
-        filesystem_free_space_extents_page(&mut device, &superblock, None, 1).unwrap_err();
+    let error = filesystem_free_space_extents_page(&mut device, &superblock, None, 1).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
 }
