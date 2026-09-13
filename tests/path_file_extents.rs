@@ -9,7 +9,9 @@ use filesystem_lab::inode_table::{load_inode_table, store_inode_table};
 use filesystem_lab::path_append::append_file_blocks_at_path_journaled;
 use filesystem_lab::path_contiguous_create::create_contiguous_file_with_blocks_at_path_journaled;
 use filesystem_lab::path_create::create_one_block_file_at_path_journaled;
-use filesystem_lab::path_file_extents::{file_extents_at_path, FileExtent};
+use filesystem_lab::path_file_extents::{
+    file_extents_at_path, file_extents_page_at_path, FileExtent, FileExtentPage,
+};
 
 const JOURNAL_BLOCKS: u64 = 12;
 
@@ -118,6 +120,64 @@ fn reports_maximal_physical_runs_for_fragmented_file_mapping() {
 }
 
 #[test]
+fn pages_fragmented_mapping_with_exclusive_logical_cursor() {
+    let (mut device, superblock) = setup();
+    let initial = [[0x11; BLOCK_SIZE], [0x22; BLOCK_SIZE]];
+    let (inode_id, _) = create_contiguous_file_with_blocks_at_path_journaled(
+        &mut device,
+        &superblock,
+        "/payload",
+        &initial,
+    )
+    .unwrap();
+    create_one_block_file_at_path_journaled(&mut device, &superblock, "/gap", &[0x33; BLOCK_SIZE])
+        .unwrap();
+    append_file_blocks_at_path_journaled(
+        &mut device,
+        &superblock,
+        "/payload",
+        &[[0x44; BLOCK_SIZE]],
+    )
+    .unwrap();
+    let inode = load_inode_table(&mut device, &superblock)
+        .unwrap()
+        .into_iter()
+        .find(|inode| inode.id == inode_id)
+        .unwrap();
+
+    let first = file_extents_page_at_path(&mut device, &superblock, "/payload", None, 1).unwrap();
+    assert_eq!(
+        first,
+        FileExtentPage {
+            extents: vec![FileExtent {
+                logical_start: 0,
+                physical_start: inode.blocks[0],
+                block_count: 2,
+            }],
+            next_after_logical: Some(1),
+        }
+    );
+    assert_eq!(
+        file_extents_page_at_path(
+            &mut device,
+            &superblock,
+            "/payload",
+            first.next_after_logical,
+            1,
+        )
+        .unwrap(),
+        FileExtentPage {
+            extents: vec![FileExtent {
+                logical_start: 2,
+                physical_start: inode.blocks[2],
+                block_count: 1,
+            }],
+            next_after_logical: None,
+        }
+    );
+}
+
+#[test]
 fn reports_one_extent_for_contiguous_file() {
     let (mut device, superblock) = setup();
     let data = [[0x51; BLOCK_SIZE], [0x62; BLOCK_SIZE], [0x73; BLOCK_SIZE]];
@@ -150,6 +210,23 @@ fn rejects_non_file_pathname() {
 
     assert_eq!(
         file_extents_at_path(&mut device, &superblock, "/")
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::InvalidInput
+    );
+    assert_eq!(
+        file_extents_page_at_path(&mut device, &superblock, "/", None, 1)
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::InvalidInput
+    );
+}
+
+#[test]
+fn rejects_zero_extent_page_limit() {
+    let (mut device, superblock) = setup();
+    assert_eq!(
+        file_extents_page_at_path(&mut device, &superblock, "/", None, 0)
             .unwrap_err()
             .kind(),
         io::ErrorKind::InvalidInput
