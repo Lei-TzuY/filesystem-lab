@@ -115,9 +115,10 @@ fn paginate_directory_metadata(
         ));
     }
 
-    let mut eligible = children
-        .into_iter()
-        .filter(|entry| after.is_none_or(|cursor| entry.name.as_str() > cursor));
+    let mut eligible = children.into_iter().filter(|entry| match after {
+        Some(cursor) => entry.name.as_str() > cursor,
+        None => true,
+    });
     let mut page_entries = Vec::new();
     page_entries.try_reserve_exact(limit).map_err(|_| {
         io::Error::new(
