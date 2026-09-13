@@ -20,6 +20,14 @@ pub struct PathDirectoryEntryMetadata {
     pub namespace_references: usize,
 }
 
+/// One bounded lexicographic page from recovered directory metadata enumeration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PathDirectoryMetadataPage {
+    pub entries: Vec<PathDirectoryEntryMetadata>,
+    /// Exclusive continuation cursor for the next page, present only when more entries remain.
+    pub next_after: Option<String>,
+}
+
 /// Enumerates immediate directory children with inode metadata in deterministic name order.
 ///
 /// Any older committed WAL is recovered and checkpointed first. A full read-only fsck then proves
@@ -49,6 +57,94 @@ pub fn list_directory_with_metadata_at_path(
     let inodes = load_inode_table(device, superblock)?;
     let entries = load_directory_table(device, superblock)?;
     enumerate_directory_with_metadata(directory_inode_id, &inodes, &entries)
+}
+
+/// Returns one bounded page of immediate child metadata in deterministic lexicographic order.
+///
+/// `after` is an exclusive name cursor: only children whose persisted names compare greater than
+/// the cursor are eligible for the returned page. The cursor does not have to name a currently
+/// existing child, so callers can continue safely after a previously returned entry is removed
+/// between independent calls. Each call nevertheless observes one freshly recovered and fsck-
+/// validated snapshot; this API does not promise a multi-call snapshot or mutation-stable view.
+///
+/// `next_after` is the final returned name only when at least one additional eligible child remains.
+/// Passing that value back as `after` advances to the next page without repeating an entry. A page
+/// size of zero is rejected rather than producing an ambiguous non-advancing cursor.
+///
+/// Like [`list_directory_with_metadata_at_path`], this operation follows the directory pathname's
+/// symbolic links but does not follow symbolic-link children while enumerating them. It reports only
+/// metadata persisted or derivable in filesystem format v5 and does not modify the on-disk format.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` when `limit` is zero or when the resolved pathname is not a directory.
+/// Recovery/checkpoint, fsck, pathname-resolution, and persisted metadata errors are propagated.
+pub fn list_directory_with_metadata_page_at_path(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    path: &str,
+    after: Option<&str>,
+    limit: usize,
+) -> io::Result<PathDirectoryMetadataPage> {
+    if limit == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "pathname directory metadata page limit must be greater than zero",
+        ));
+    }
+
+    recover_journal_and_checkpoint(device, *superblock)?;
+    check_device(device)?;
+
+    let directory_inode_id = resolve_path_following_symlinks(device, superblock, path)?;
+    let inodes = load_inode_table(device, superblock)?;
+    let entries = load_directory_table(device, superblock)?;
+    let children = enumerate_directory_with_metadata(directory_inode_id, &inodes, &entries)?;
+    paginate_directory_metadata(children, after, limit)
+}
+
+fn paginate_directory_metadata(
+    children: Vec<PathDirectoryEntryMetadata>,
+    after: Option<&str>,
+    limit: usize,
+) -> io::Result<PathDirectoryMetadataPage> {
+    if limit == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "pathname directory metadata page limit must be greater than zero",
+        ));
+    }
+
+    let mut eligible = children.into_iter().filter(|entry| match after {
+        Some(cursor) => entry.name.as_str() > cursor,
+        None => true,
+    });
+    let mut page_entries = Vec::new();
+    page_entries.try_reserve_exact(limit).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "pathname directory metadata page limit exceeds staging capacity",
+        )
+    })?;
+
+    for _ in 0..limit {
+        let Some(entry) = eligible.next() else {
+            break;
+        };
+        page_entries.push(entry);
+    }
+
+    let has_more = eligible.next().is_some();
+    let next_after = if has_more {
+        page_entries.last().map(|entry| entry.name.clone())
+    } else {
+        None
+    };
+
+    Ok(PathDirectoryMetadataPage {
+        entries: page_entries,
+        next_after,
+    })
 }
 
 fn enumerate_directory_with_metadata(
@@ -128,6 +224,16 @@ mod tests {
         }
     }
 
+    fn metadata(name: &str, inode_id: u64) -> PathDirectoryEntryMetadata {
+        PathDirectoryEntryMetadata {
+            name: name.to_owned(),
+            inode_id,
+            kind: InodeKind::File,
+            logical_blocks: 0,
+            namespace_references: 1,
+        }
+    }
+
     #[test]
     fn reports_sorted_metadata_and_namespace_reference_counts() {
         let inodes = vec![
@@ -172,6 +278,48 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn paginates_with_exclusive_cursor_and_more_signal() {
+        let children = vec![
+            metadata("alpha", 2),
+            metadata("bravo", 3),
+            metadata("charlie", 4),
+        ];
+
+        assert_eq!(
+            paginate_directory_metadata(children.clone(), None, 2).unwrap(),
+            PathDirectoryMetadataPage {
+                entries: vec![metadata("alpha", 2), metadata("bravo", 3)],
+                next_after: Some("bravo".to_owned()),
+            }
+        );
+        assert_eq!(
+            paginate_directory_metadata(children, Some("bravo"), 2).unwrap(),
+            PathDirectoryMetadataPage {
+                entries: vec![metadata("charlie", 4)],
+                next_after: None,
+            }
+        );
+    }
+
+    #[test]
+    fn stale_cursor_advances_lexicographically_without_requiring_a_match() {
+        let children = vec![metadata("alpha", 2), metadata("charlie", 4)];
+        assert_eq!(
+            paginate_directory_metadata(children, Some("bravo"), 1).unwrap(),
+            PathDirectoryMetadataPage {
+                entries: vec![metadata("charlie", 4)],
+                next_after: None,
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_zero_page_limit() {
+        let error = paginate_directory_metadata(Vec::new(), None, 0).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     }
 
     #[test]
