@@ -33,3 +33,50 @@ pub fn append_file_blocks_contiguous_at_path_journaled(
     let inode_id = resolve_path_following_symlinks(device, superblock, path)?;
     append_file_blocks_contiguous_journaled(device, superblock, inode_id, data_blocks)
 }
+
+/// Atomically extends a pathname-resolved regular file with zero-filled blocks in one contiguous run.
+///
+/// This is a block-granular file-growth operation, not sparse preallocation: every requested logical
+/// block receives an independently owned physical block whose durable data image is all zeroes. The
+/// fresh blocks use the same deterministic lowest-address first-fit contiguous placement and WAL
+/// publication contract as [`append_file_blocks_contiguous_at_path_journaled`]. Final symbolic links
+/// are followed through the existing bounded pathname resolver.
+///
+/// Filesystem format remains v5 with explicit inode block vectors. No byte-level EOF, hole, unwritten
+/// extent, reservation, or persistent extent-record semantics are introduced.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` when `block_count` is zero. Returns `InvalidInput` if the requested count
+/// cannot be represented as an in-memory block vector. Propagates allocation failure, pathname,
+/// recovery/checkpoint, contiguous-placement, journal-capacity, and durable I/O errors.
+pub fn append_zeroed_blocks_contiguous_at_path_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    path: &str,
+    block_count: u64,
+) -> io::Result<(Vec<u64>, RecoveryReport)> {
+    if block_count == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "contiguous zero append must contain at least one block",
+        ));
+    }
+
+    let block_count = usize::try_from(block_count).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "contiguous zero append block count exceeds addressable memory",
+        )
+    })?;
+    let mut data_blocks = Vec::new();
+    data_blocks.try_reserve_exact(block_count).map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("contiguous zero append block vector is too large: {error}"),
+        )
+    })?;
+    data_blocks.resize(block_count, [0_u8; BLOCK_SIZE]);
+
+    append_file_blocks_contiguous_at_path_journaled(device, superblock, path, &data_blocks)
+}
