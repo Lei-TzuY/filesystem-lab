@@ -128,11 +128,12 @@ fn pages_recovered_metadata_with_stable_exclusive_name_cursor() {
         create_file_with_blocks_at_path_journaled(&mut device, &superblock, "/charlie", &data)
             .unwrap();
     let (echo_inode, _) =
-        create_file_with_blocks_at_path_journaled(&mut device, &superblock, "/echo", &data).unwrap();
+        create_file_with_blocks_at_path_journaled(&mut device, &superblock, "/echo", &data)
+            .unwrap();
     hard_link_file_at_path_journaled(&mut device, &superblock, "/alpha", "/alpha-link").unwrap();
 
-    let first = list_directory_with_metadata_page_at_path(&mut device, &superblock, "/", None, 2)
-        .unwrap();
+    let first =
+        list_directory_with_metadata_page_at_path(&mut device, &superblock, "/", None, 2).unwrap();
     assert_eq!(
         first,
         PathDirectoryMetadataPage {
@@ -188,14 +189,8 @@ fn pages_recovered_metadata_with_stable_exclusive_name_cursor() {
     );
 
     assert_eq!(
-        list_directory_with_metadata_page_at_path(
-            &mut device,
-            &superblock,
-            "/",
-            Some("bravo"),
-            1,
-        )
-        .unwrap(),
+        list_directory_with_metadata_page_at_path(&mut device, &superblock, "/", Some("bravo"), 1,)
+            .unwrap(),
         PathDirectoryMetadataPage {
             entries: vec![PathDirectoryEntryMetadata {
                 name: "charlie".to_owned(),
@@ -227,15 +222,9 @@ fn rejects_zero_page_limit_and_non_directory_pathname() {
         io::ErrorKind::InvalidInput
     );
     assert_eq!(
-        list_directory_with_metadata_page_at_path(
-            &mut device,
-            &superblock,
-            "/payload",
-            None,
-            1,
-        )
-        .unwrap_err()
-        .kind(),
+        list_directory_with_metadata_page_at_path(&mut device, &superblock, "/payload", None, 1,)
+            .unwrap_err()
+            .kind(),
         io::ErrorKind::InvalidInput
     );
 }
