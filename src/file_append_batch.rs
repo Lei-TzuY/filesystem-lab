@@ -217,8 +217,7 @@ fn prepare_byte_grow_plan(
         ));
     }
 
-    let existing_tail_write =
-        prepare_existing_tail_zero(device, &allocator, inode, current_bytes)?;
+    let existing_tail_write = prepare_existing_tail_zero(device, &allocator, inode, current_bytes)?;
     let additional = target_blocks - current_blocks;
     let mut allocated = Vec::with_capacity(additional);
     for _ in 0..additional {
@@ -266,10 +265,9 @@ fn prepare_existing_tail_zero(
         return Ok(None);
     }
 
-    let block = *inode
-        .blocks
-        .last()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "byte-grow final block missing"))?;
+    let block = *inode.blocks.last().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidData, "byte-grow final block missing")
+    })?;
     let owned = allocator
         .is_owned(block)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
