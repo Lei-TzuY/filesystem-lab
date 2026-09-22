@@ -7,7 +7,7 @@ use crate::file_replace::replace_file_blocks_journaled;
 use crate::format::Superblock;
 use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
-use crate::journal_checkpoint::recover_journal_and_checkpoint;
+use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 use crate::truncate_tx::truncate_file_to_blocks_journaled;
@@ -37,7 +37,7 @@ pub fn write_file_blocks_at_path_journaled(
     path: &str,
     data: &[u8],
 ) -> io::Result<RecoveryReport> {
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let inode_id = resolve_path_following_symlinks(device, superblock, path)?;
     let inodes = load_inode_table(device, superblock)?;
     let inode = inodes
@@ -94,7 +94,7 @@ pub fn replace_file_at_path_journaled(
     path: &str,
     replacement: &[[u8; BLOCK_SIZE]],
 ) -> io::Result<RecoveryReport> {
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let inode_id = resolve_path_following_symlinks(device, superblock, path)?;
     let inodes = load_inode_table(device, superblock)?;
     let inode = inodes
