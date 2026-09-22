@@ -22,6 +22,7 @@ fn root_inode() -> PersistedInode {
         kind: InodeKind::Directory,
         blocks: Vec::new(),
     }
+    byte_len: 0,
 }
 
 fn setup() -> (CrashDevice, Superblock) {
@@ -49,6 +50,8 @@ fn desired_create(
             id: 2,
             kind: InodeKind::File,
             blocks: vec![data_block],
+        
+            byte_len: 0,
         },
     ];
     let entries = vec![PersistedDirectoryEntry {
@@ -196,6 +199,8 @@ fn successful_create_checkpoints_before_fixed_journal_reuse() {
         id: 3,
         kind: InodeKind::File,
         blocks: vec![second_block],
+    
+        byte_len: 0,
     });
     let mut second_entries = entries;
     second_entries.push(PersistedDirectoryEntry {

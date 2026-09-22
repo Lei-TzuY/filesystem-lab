@@ -25,6 +25,7 @@ fn root_inode() -> PersistedInode {
         kind: InodeKind::Directory,
         blocks: Vec::new(),
     }
+    byte_len: 0,
 }
 
 fn long_target() -> String {
