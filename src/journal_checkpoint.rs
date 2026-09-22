@@ -1,19 +1,22 @@
 use std::io;
 
-use crate::block::{BlockDevice, BLOCK_SIZE};
+use crate::block::BlockDevice;
 use crate::format::{read_superblock, Superblock};
 use crate::fsck::check_device;
-use crate::journal_region::load_journal_image;
+use crate::journal_region::{load_journal_image, store_empty_journal_anchor};
 use crate::recovery::{recover_journal, RecoveryReport};
 use crate::recovery_projection::check_device_after_recovery_projection;
 
 /// Clears a fully processed persistent journal after validating its current image.
 ///
-/// The checkpoint uses the filesystem's existing flush durability model: every journal block is
-/// overwritten with zeroes, then one `flush` makes the empty reservation durable. A crash before
-/// that flush leaves the previous durable journal image intact, so recovery can replay it again.
-/// A crash after the flush exposes a completely empty journal. This intentionally does not model
-/// sector tearing or controller reordering beyond the `BlockDevice` contract.
+/// The checkpoint publishes one checksummed version-2 empty anchor in the header-bearing journal
+/// block after home replay has crossed its durability boundary. Later journal blocks are deliberately
+/// left untouched and are non-authoritative while the empty anchor is present.
+///
+/// The `BlockDevice` contract allows an issued write to become durable before `flush`. Under the
+/// whole-block persistence model, a crash therefore exposes either the previous complete active
+/// anchor or the complete empty anchor; it cannot expose a partially zeroed multi-block journal that
+/// fails to decode merely because some pre-flush writes reached storage early.
 ///
 /// Returns `Ok(false)` when the journal is already empty and no writes or flush are needed.
 ///
@@ -29,17 +32,7 @@ pub fn checkpoint_journal(
         return Ok(false);
     }
 
-    let zero = [0_u8; BLOCK_SIZE];
-    for offset in 0..superblock.journal_blocks {
-        let block = superblock
-            .journal_start
-            .checked_add(offset)
-            .ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidInput, "journal block index overflow")
-            })?;
-        device.write_block(block, &zero)?;
-    }
-    device.flush()?;
+    store_empty_journal_anchor(device, superblock)?;
     Ok(true)
 }
 

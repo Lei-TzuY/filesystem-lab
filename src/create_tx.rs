@@ -226,7 +226,9 @@ mod tests {
 
         assert_eq!(report.committed_transactions, 1);
         assert_eq!(report.home_writes, 3);
-        assert_eq!(device.flushes, flushes_before + 3);
+        // v2 publication adds empty-anchor and staged-tail barriers; create still performs
+        // durable home replay plus the existing final checkpoint boundary.
+        assert_eq!(device.flushes, flushes_before + 5);
         assert!(load_journal_image(&mut device, superblock)
             .unwrap()
             .is_empty());

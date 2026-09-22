@@ -8,8 +8,11 @@ use filesystem_lab::journal_region::{load_journal_image, store_journal_image};
 use filesystem_lab::recovery::RecoveryReport;
 use support::CrashDevice;
 
-fn prepared_committed_update() -> (CrashDevice, Superblock, u64, [u8; BLOCK_SIZE]) {
+fn prepared_committed_update_with(
+    write_through: bool,
+) -> (CrashDevice, Superblock, u64, [u8; BLOCK_SIZE]) {
     let mut device = CrashDevice::new(32);
+    device.write_through = write_through;
     let superblock = Superblock::with_journal_blocks(32, 2).unwrap();
     let home = superblock.reserved_blocks();
     let old = [0x11; BLOCK_SIZE];
@@ -25,6 +28,10 @@ fn prepared_committed_update() -> (CrashDevice, Superblock, u64, [u8; BLOCK_SIZE
     store_journal_image(&mut device, superblock, log.entries()).unwrap();
 
     (device, superblock, home, new)
+}
+
+fn prepared_committed_update() -> (CrashDevice, Superblock, u64, [u8; BLOCK_SIZE]) {
+    prepared_committed_update_with(false)
 }
 
 fn read_block(device: &mut CrashDevice, block: u64) -> [u8; BLOCK_SIZE] {
@@ -76,6 +83,56 @@ fn checkpoint_crash_matrix_preserves_recoverability_at_every_mutation_boundary()
 
         let second = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         assert_eq!(second, RecoveryReport::default(), "crash_at={crash_at}");
+    }
+}
+
+#[test]
+fn write_through_checkpoint_crash_matrix_preserves_recoverability() {
+    let (prepared, superblock, home, expected) = prepared_committed_update_with(true);
+
+    let mut probe = prepared.clone();
+    probe.arm(None);
+    let report = recover_journal_and_checkpoint(&mut probe, superblock).unwrap();
+    assert_eq!(
+        report,
+        RecoveryReport {
+            committed_transactions: 1,
+            home_writes: 1,
+        }
+    );
+    let mutation_count = probe.operations();
+    assert!(mutation_count >= 4);
+
+    for crash_at in 0..mutation_count {
+        let mut device = prepared.clone();
+        device.arm(Some(crash_at));
+        assert!(
+            recover_journal_and_checkpoint(&mut device, superblock).is_err(),
+            "crash_at={crash_at}"
+        );
+
+        device.reboot();
+        let replay = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
+        assert!(
+            replay == RecoveryReport::default()
+                || replay
+                    == RecoveryReport {
+                        committed_transactions: 1,
+                        home_writes: 1,
+                    },
+            "crash_at={crash_at}, replay={replay:?}"
+        );
+        assert_eq!(
+            read_block(&mut device, home),
+            expected,
+            "crash_at={crash_at}"
+        );
+        assert!(
+            load_journal_image(&mut device, superblock)
+                .unwrap()
+                .is_empty(),
+            "crash_at={crash_at}"
+        );
     }
 }
 

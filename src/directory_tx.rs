@@ -159,7 +159,9 @@ mod tests {
 
         assert_eq!(report.committed_transactions, 1);
         assert_eq!(report.home_writes, 1);
-        assert_eq!(device.flushes, flushes_before + 2);
+        // v2 publication crosses empty-anchor, staged-tail, and active-anchor barriers before
+        // replay crosses the home durability boundary.
+        assert_eq!(device.flushes, flushes_before + 4);
         assert_eq!(
             load_directory_table(&mut device, &superblock).unwrap(),
             vec![desired]

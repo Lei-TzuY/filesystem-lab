@@ -5,6 +5,7 @@ use crate::allocation_disk::initialize_allocation_region;
 use crate::block::{BlockDevice, BLOCK_SIZE, BLOCK_SIZE_U64};
 use crate::directory_table::initialize_directory_table_region;
 use crate::inode_table::initialize_inode_table_region;
+use crate::journal_region::initialize_journal_region;
 
 pub const SUPERBLOCK_BLOCK: u64 = 0;
 pub const SUPERBLOCK_MAGIC: [u8; 8] = *b"FSLABFS\0";
@@ -397,7 +398,7 @@ fn invalid_data(message: &'static str) -> io::Error {
 
 /// Writes a fresh format-v5 metadata prefix and flushes it through the durability boundary.
 ///
-/// Allocation, inode, and directory metadata are initialized before the superblock is published,
+/// Journal, allocation, inode, and directory metadata are initialized before the superblock is published,
 /// so a successful superblock write never points at uninitialized durable metadata.
 ///
 /// # Errors
@@ -405,6 +406,7 @@ fn invalid_data(message: &'static str) -> io::Error {
 /// Returns an error when the device is too small, metadata initialization fails, or I/O fails.
 pub fn format_device(device: &mut impl BlockDevice) -> io::Result<Superblock> {
     let superblock = Superblock::new(device.block_count())?;
+    initialize_journal_region(device, superblock)?;
     initialize_allocation_region(device, &superblock)?;
     initialize_inode_table_region(device, &superblock)?;
     initialize_directory_table_region(device, &superblock)?;

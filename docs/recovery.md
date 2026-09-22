@@ -9,9 +9,9 @@ The durable recovery implementation consumes the bounded format-v5 journal-regio
 3. A trailing transaction without a durable commit record is ignored completely.
 4. Committed home writes are issued in journal order.
 5. After all committed writes have been issued, one block-device `flush` establishes the home-location durability boundary.
-6. `recover_journal_and_checkpoint` may then clear the fixed journal reservation and flush the cleared image. Journal clearing never precedes durable home replay.
+6. `recover_journal_and_checkpoint` may then publish and flush a checksummed v2 empty anchor in the first journal block. Journal invalidation never precedes durable home replay.
 
-`recover_journal` remains intentionally idempotent and leaves the durable log in place. `recover_journal_and_checkpoint` composes that replay with the crash-safe checkpoint step: a crash before the checkpoint flush leaves the prior committed journal durable and replayable; a crash after it exposes an empty journal. This model relies on the repository's existing block-device flush contract and does not claim sector-tear or controller-reordering behavior.
+`recover_journal` remains intentionally idempotent and leaves the durable log in place. `recover_journal_and_checkpoint` composes that replay with a single-block v2 empty-anchor checkpoint. The design does not assume that writes remain volatile until `flush`: a successful whole-block write may become durable early. A crash therefore sees either the previous complete active anchor or the complete empty anchor after home replay has already crossed its flush boundary. Sector tearing, controller reordering, and partial-block persistence remain outside the model.
 
 ## Allowed home locations
 
@@ -31,7 +31,7 @@ Read-only fsck remains independent of mutating recovery. `recovery_projection::c
 
 `recover_journal_and_checkpoint_checked` turns that projection into a fail-closed high-level recovery boundary when durable WAL actually exists: the supplied superblock must match block zero; an already empty journal is a no-op; otherwise projected strict fsck must succeed before the first home mutation, ordinary replay/checkpoint installs the committed state, the actual recovery report must match the projection, and final strict fsck must succeed. Core regular-file, metadata, and namespace pathname entry points use this checked boundary, including create variants, directory listing, hard-link/symlink lifecycle, rename families, and unlink/rmdir dispatch. Low-level table and inode-ID transaction primitives retain ordinary recovery so their narrower contracts are not silently redefined as complete-filesystem states. This intentionally does not turn every journal-free pathname operation into a global fsck pass; existing operation-specific validation remains authoritative when there is no recovery work.
 
-Deterministic crash tests exercise create, unlink, rename, truncate-to-zero, file-block overwrite, and journal checkpoint boundaries.
+Deterministic crash tests exercise create, unlink, rename, truncate-to-zero, file-block overwrite, journal publication, and journal checkpoint boundaries. Journal publication/checkpoint additionally run under a write-through model where each successful whole-block write may be durable before the next flush.
 
 ## Current limits
 

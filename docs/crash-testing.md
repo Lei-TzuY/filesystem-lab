@@ -94,3 +94,8 @@ The matrix enumerates every deterministic journal publication, three-region home
 This contract does not alter format v5 and intentionally does not implement directory replacement, rename exchange, or replacement of a multiply linked destination.
 
 Future lifecycle operations can reuse the same `CrashDevice` and enumeration pattern so later multi-block namespace and file-data transitions are checked against every write/flush boundary rather than isolated injected failures.
+
+
+## Early whole-block persistence
+
+Journal-region publication and checkpoint are also exercised with a write-through crash device where each successful whole-block write becomes durable immediately. This tests the one-way `flush` contract without claiming sector tearing, controller reordering, or partial-block persistence.
