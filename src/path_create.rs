@@ -114,6 +114,26 @@ pub fn create_file_with_blocks_at_path_journaled(
     destination: &str,
     data: &[[u8; BLOCK_SIZE]],
 ) -> io::Result<(u64, RecoveryReport)> {
+    let byte_len = u64::try_from(data.len())
+        .ok()
+        .and_then(|blocks| blocks.checked_mul(BLOCK_SIZE as u64))
+        .ok_or_else(|| invalid_input("multi-block file create byte length overflows"))?;
+    create_file_with_blocks_and_size_at_path_journaled(
+        device,
+        superblock,
+        destination,
+        data,
+        byte_len,
+    )
+}
+
+pub(crate) fn create_file_with_blocks_and_size_at_path_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    destination: &str,
+    data: &[[u8; BLOCK_SIZE]],
+    byte_len: u64,
+) -> io::Result<(u64, RecoveryReport)> {
     if data.is_empty() {
         return Err(invalid_input(
             "multi-block file create requires at least one logical block",
@@ -146,10 +166,10 @@ pub fn create_file_with_blocks_at_path_journaled(
         name: name.to_owned(),
     };
     encode_directory_entry(&new_entry)?;
-    inodes.push(PersistedInode::new(
+    inodes.push(PersistedInode::new_file_with_size(
         inode_id,
-        InodeKind::File,
         inode_blocks,
+        byte_len,
     )?);
     entries.push(new_entry);
 

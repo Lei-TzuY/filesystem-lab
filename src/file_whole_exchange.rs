@@ -58,9 +58,9 @@ fn publish_whole_file_exchange(
 /// be empty. Exchanging two empty files is a validated no-op that publishes no WAL transaction.
 /// Namespace state and inode identities are unchanged.
 ///
-/// Format v5 has no persisted byte length, so "whole file" means the complete sequence of persisted
-/// 4 KiB logical blocks. This primitive does not define partial-final-block, sparse-hole, extent,
-/// reflink, or byte-EOF semantics.
+/// Format v6 exchanges both the complete logical-block vectors and persisted byte EOF values, so
+/// partial-final-block files retain exact whole-file semantics. Sparse holes, extents, and reflink
+/// semantics remain outside this primitive.
 ///
 /// # Errors
 ///
@@ -127,6 +127,8 @@ pub fn exchange_complete_file_blocks_journaled(
         return Ok(RecoveryReport::default());
     }
 
+    let left_byte_len = inodes[left_pos].canonical_byte_len()?;
+    let right_byte_len = inodes[right_pos].canonical_byte_len()?;
     let left_blocks = inodes[left_pos].blocks.clone();
     let right_blocks = inodes[right_pos].blocks.clone();
     let left_len = left_blocks.len();
@@ -135,6 +137,8 @@ pub fn exchange_complete_file_blocks_journaled(
     debug_assert_eq!(displaced_left, left_blocks);
     let displaced_right = inodes[right_pos].replace_block_range(0..right_len, &left_blocks)?;
     debug_assert_eq!(displaced_right, right_blocks);
+    inodes[left_pos].set_file_byte_len(right_byte_len)?;
+    inodes[right_pos].set_file_byte_len(left_byte_len)?;
 
     publish_whole_file_exchange(device, superblock, &inodes)
 }

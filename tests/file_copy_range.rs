@@ -75,16 +75,19 @@ fn setup() -> (MemoryDevice, Superblock) {
             id: 1,
             kind: InodeKind::Directory,
             blocks: Vec::new(),
+            byte_len: 0,
         },
         PersistedInode {
             id: 2,
             kind: InodeKind::File,
             blocks: vec![source_a, source_b],
+            byte_len: 0,
         },
         PersistedInode {
             id: 3,
             kind: InodeKind::File,
             blocks: vec![destination_a, destination_b],
+            byte_len: 0,
         },
     ];
     let entries = vec![

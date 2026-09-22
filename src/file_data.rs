@@ -73,11 +73,7 @@ pub fn write_file_block_range_journaled(
             "partial file-data write must be non-empty and stay within one block",
         ));
     }
-    let block = resolve_owned_file_block(device, superblock, inode_id, file_block_index)?;
-    let mut image = [0_u8; BLOCK_SIZE];
-    device.read_block(block, &mut image)?;
-    image[offset..offset + data.len()].copy_from_slice(data);
-    journal_block_image(device, superblock, block, &image)
+    write_file_range_journaled(device, superblock, inode_id, file_block_index, offset, data)
 }
 
 /// Atomically writes a byte range across one or more already-existing logical file blocks.
@@ -106,6 +102,51 @@ pub fn write_file_range_journaled(
             "file-data range must be non-empty and start within a block",
         ));
     }
+    let absolute_start = first_block_index
+        .checked_mul(BLOCK_SIZE)
+        .and_then(|base| base.checked_add(start_offset))
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "file-data absolute byte offset overflow",
+            )
+        })?;
+    let absolute_end = absolute_start.checked_add(data.len()).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "file-data range length overflow",
+        )
+    })?;
+
+    let inodes = load_inode_table(device, superblock)?;
+    let inode = inodes
+        .iter()
+        .find(|inode| inode.id == inode_id)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "file-data target inode is missing",
+            )
+        })?;
+    if inode.kind != InodeKind::File {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "file-data target must be a regular file",
+        ));
+    }
+    let byte_len = usize::try_from(inode.byte_len).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "file byte length exceeds platform address space",
+        )
+    })?;
+    if absolute_end > byte_len {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "file-data write range extends beyond EOF",
+        ));
+    }
+
     let last_byte = start_offset.checked_add(data.len()).ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,

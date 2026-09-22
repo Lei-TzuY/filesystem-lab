@@ -1,27 +1,50 @@
-# Inode record format v2
+# Inode record format v3
 
-The inode record codec is independently versioned from the filesystem superblock format. Filesystem format v5 now writes inode-record version 2. Version 2 preserves the existing record geometry and adds an explicit symbolic-link inode kind; readers intentionally reject older inode-record versions rather than silently reinterpreting them.
+The inode record codec is independently versioned from the filesystem superblock. Filesystem format
+v6 writes inode-record version 3. Older inode-record versions are intentionally rejected by the v6
+reader; there is no implicit reinterpretation or migration path.
 
-Each record is self-delimiting and little-endian. The fixed 32-byte header is followed by `block_count` 64-bit block numbers.
+Each record is self-delimiting and little-endian. The fixed 40-byte header is followed by
+`block_count` 64-bit physical block numbers.
 
 | Offset | Size | Field |
-| --- | ---: | --- |
+| ---: | ---: | --- |
 | 0 | 4 | magic `INO1` |
-| 4 | 2 | codec version (`2`) |
+| 4 | 2 | codec version (`3`) |
 | 6 | 2 | kind (`1` file, `2` directory, `3` symbolic link) |
 | 8 | 4 | total record length |
 | 12 | 8 | inode identifier |
 | 20 | 4 | block reference count |
-| 24 | 4 | IEEE CRC-32 |
-| 28 | 4 | reserved, must be zero |
-| 32 | `8 * block_count` | ordered block references |
+| 24 | 8 | exact regular-file byte EOF |
+| 32 | 4 | IEEE CRC-32 |
+| 36 | 4 | reserved, must be zero |
+| 40 | `8 * block_count` | ordered block references |
 
-The CRC is computed over the complete record with the CRC field treated as four zero bytes. Readers reject bad magic or version, unknown kinds, inode id zero, non-zero reserved bytes, inconsistent lengths, duplicate block references, checksum mismatch, and torn headers or payloads.
+The CRC covers the complete record with the CRC field treated as four zero bytes. Readers reject bad
+magic/version, unknown kinds, inode id zero, non-zero reserved bytes, inconsistent lengths,
+duplicate block references, impossible EOF/block-map combinations, checksum mismatch, and torn
+headers or payloads.
 
-The codec deliberately preserves block-reference order because it is part of inode logical state. Duplicate references within one inode are invalid at the codec boundary. Cross-inode duplicate ownership and allocator agreement remain fsck responsibilities.
+For a regular file, zero blocks require byte length zero. A non-empty regular file requires
+`0 < byte_len <= block_count * 4096`, and EOF must lie inside the final referenced block rather than
+before it. This makes the block vector the complete non-sparse prefix of the file. Directory and
+symlink inode records require byte length zero; symlink target length remains encoded in the symlink
+payload itself.
 
-Production creation of durable inode values goes through `PersistedInode::new`, which enforces identifier and duplicate-block invariants before a value reaches inode-table or WAL publication. The encoder remains defensive and re-validates those invariants so legacy callers that still construct the public compatibility struct directly cannot bypass durable validation. This construction boundary is intentionally separate from the v2 field layout so a future record revision can centralize new persisted-field initialization rather than duplicating it across pathname create and symlink code.
+Production inode creation goes through `PersistedInode::new` or
+`PersistedInode::new_file_with_size`. The former retains block-granular compatibility by assigning
+a regular file its full logical-block capacity as EOF; the latter accepts an exact EOF. Encoder-side
+validation remains defensive, so direct compatibility struct literals cannot persist an impossible
+record. The in-memory compatibility shorthand `byte_len = 0` on a non-empty regular file is
+canonicalized to full block capacity before encoding and is never accepted as such from a decoded
+v3 image.
 
-Production operations that change a persisted inode's logical block count go through `PersistedInode::replace_block_range`. The helper prepares the complete candidate vector, validates it before mutating the inode, and returns displaced blocks in logical order. Append, insert, truncate/remove/collapse, variable-length replace/splice, cross-file transfer/exchange, and whole-file transfer/exchange now share this boundary. Equal-length mapping rewrites and same-file reorder operations remain outside this block-count-specific hook because they do not change the inode's logical block count. This gives a future byte-length record revision one audited place to attach size-coupling rules instead of rediscovering every growth/shrink call site.
+Operations that change a persisted inode's logical block count use
+`PersistedInode::replace_block_range`. The helper validates the complete candidate mapping before
+commit and preserves the unused tail offset in the final block, so whole-block append/insert/remove
+operations shift EOF coherently. `set_file_byte_len` is the explicit boundary for exact regular-file
+EOF changes.
 
-Symbolic-link payload semantics are defined separately in [`symlinks.md`](symlinks.md). The bounded symbolic-link slice uses exactly one owned data block per symlink inode and does not add path traversal, target resolution, permissions, or broad POSIX semantics.
+Format-v6 exact-byte shrink journals allocator release, inode EOF/block-map updates, and zeroing of
+bytes discarded after a partial final EOF in one bounded transaction. Growth, sparse holes, and
+general extent semantics remain outside this record milestone.

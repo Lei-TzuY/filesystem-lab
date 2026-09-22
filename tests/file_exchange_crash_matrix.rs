@@ -34,16 +34,19 @@ fn setup() -> (CrashDevice, Superblock, [u64; 6]) {
                 id: 1,
                 kind: InodeKind::Directory,
                 blocks: Vec::new(),
+                byte_len: 0,
             },
             PersistedInode {
                 id: 2,
                 kind: InodeKind::File,
                 blocks: blocks[..3].to_vec(),
+                byte_len: 0,
             },
             PersistedInode {
                 id: 3,
                 kind: InodeKind::File,
                 blocks: blocks[3..].to_vec(),
+                byte_len: 0,
             },
         ],
     )

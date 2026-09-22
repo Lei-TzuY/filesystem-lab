@@ -6,7 +6,8 @@ use crate::format::Superblock;
 use crate::inode::InodeKind;
 use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::path_create::{
-    create_empty_file_at_path_journaled, create_file_with_blocks_at_path_journaled,
+    create_empty_file_at_path_journaled, create_file_with_blocks_and_size_at_path_journaled,
+    create_file_with_blocks_at_path_journaled,
 };
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::path_metadata::metadata_at_path;
@@ -23,7 +24,7 @@ use crate::recovery::RecoveryReport;
 /// namespace, and copied data images under one WAL commit.
 ///
 /// The source inode, block references, data, and namespace are never mutated. This is a physical
-/// clone, not a reflink: destination blocks have independent allocator ownership. Format v5 has no
+/// clone, not a reflink: destination blocks have independent allocator ownership. Format v6 has no
 /// persisted byte length, so this operation only clones a non-empty range of complete 4 KiB logical
 /// blocks and does not define EOF, sparse-hole, shared-extent, or copy-on-write semantics.
 ///
@@ -77,9 +78,9 @@ pub fn clone_file_blocks_to_path_journaled(
 /// Any older committed WAL is recovered and checkpointed before source lookup. The source pathname
 /// follows the existing bounded symbolic-link rules and must resolve to a regular file. Because
 /// format v5 represents file size only as a vector of complete 4 KiB logical blocks, the whole-file
-/// boundary is exactly that vector length. Non-empty files delegate to
-/// [`clone_file_blocks_to_path_journaled`] for a complete physical copy; zero-block files delegate to
-/// [`create_empty_file_at_path_journaled`] so empty regular files are clonable too.
+/// boundary is the persisted exact EOF. Non-empty files snapshot only bytes through EOF, pad the
+/// final physical clone block with zeroes when needed, and create the destination with the same
+/// persisted byte length. Zero-block files delegate to [`create_empty_file_at_path_journaled`].
 ///
 /// The destination receives a fresh inode. For a non-empty source every destination logical block
 /// is backed by a newly allocated physical block, so source and destination never share ownership.
@@ -108,13 +109,22 @@ pub fn clone_file_to_path_journaled(
     if metadata.logical_blocks == 0 {
         create_empty_file_at_path_journaled(device, superblock, destination)
     } else {
-        clone_file_blocks_to_path_journaled(
+        let len = usize::try_from(metadata.byte_len)
+            .map_err(|_| invalid_input("pathname whole-file clone byte length exceeds usize"))?;
+        let source_inode = resolve_path_following_symlinks(device, superblock, source)?;
+        let snapshot = read_file_range(device, superblock, source_inode, 0, 0, len)?;
+        let mut blocks = Vec::with_capacity(metadata.logical_blocks);
+        for chunk in snapshot.chunks(BLOCK_SIZE) {
+            let mut image = [0_u8; BLOCK_SIZE];
+            image[..chunk.len()].copy_from_slice(chunk);
+            blocks.push(image);
+        }
+        create_file_with_blocks_and_size_at_path_journaled(
             device,
             superblock,
-            source,
-            0,
-            metadata.logical_blocks,
             destination,
+            &blocks,
+            metadata.byte_len,
         )
     }
 }

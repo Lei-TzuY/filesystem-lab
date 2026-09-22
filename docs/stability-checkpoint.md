@@ -4,7 +4,7 @@ This document defines the consolidation boundary for the current `filesystem-lab
 
 ## Included architecture
 
-The v5 filesystem reserves one deterministic metadata prefix:
+The v6 filesystem reserves one deterministic metadata prefix:
 
 1. superblock;
 2. bounded journal;
@@ -30,7 +30,7 @@ The allocation, inode, and directory home regions have independent codecs and in
 
 `create`, `unlink`, `rename`, and `truncate-to-zero` have deterministic integration tests that enumerate every block-device `write_block`/`flush` mutation point of a successful bounded operation.
 
-`truncate-to-zero` is intentionally narrower than general truncate. Format v5 does not persist byte length, so the only unambiguous truncate state currently represented on disk is removal of every data-block reference while preserving the file inode and namespace. Partial-block truncation, sparse files, and file-data ordering require a separately versioned or otherwise explicitly specified data model.
+`truncate-to-zero` remains as a block-granular compatibility path. Format v6 additionally persists exact regular-file byte EOF and supports crash-consistent exact-byte shrink, including partial-final-block tail zeroing and trailing-block release in the same WAL transaction. Growth and sparse extension remain separately deferred.
 
 ## Crash-state contract
 
@@ -47,9 +47,22 @@ The current fault model enumerates whole-block writes and flush boundaries. Jour
 
 Since the original v5 checkpoint, the executable surface has expanded beyond the initial lifecycle table: journal checkpoint/clearing, hard links, symbolic links, rename overwrite/exchange families, block-granular file range operations, strict bidirectional allocator/inode ownership checks, bounded orphan-allocation repair, and read-only semantic recovery projection are now implemented and covered by the repository's integration gates. High-level regular-file, metadata, and namespace pathname operations additionally use fail-closed checked recovery so a structurally valid WAL that projects to an inconsistent complete filesystem is rejected before home replay. Namespace coverage includes create variants, directory observation, hard-link/symlink lifecycle, rename dispatch/overwrite/exchange, and unlink/rmdir surfaces.
 
-Durable inode construction and block-count mutation now also have explicit invariant boundaries. New production inode values use `PersistedInode::new`; operations that grow, shrink, or transfer logical block counts use `replace_block_range`, which validates the complete candidate mapping before committing the in-memory inode change. This does not add byte-length semantics to format v5, but it closes the mutation fan-out that would otherwise make a future persisted EOF field impossible to update coherently.
+Durable inode construction and block-count mutation now also have explicit invariant boundaries. New production inode values use `PersistedInode::new`; operations that grow, shrink, or transfer logical block counts use `replace_block_range`, which validates the complete candidate mapping before committing the in-memory inode change. That consolidation now feeds format-v6 byte EOF: block-count changes preserve final-block tail slack, while explicit exact-byte shrink updates EOF through the same durable inode boundary.
 
-The bounded journal region now writes version-2 empty/active anchors. Tail blocks are staged behind a durable empty anchor and flushed before active publication; checkpoint invalidates the log with one checksummed empty-anchor block after home replay is durable. Complete version-1 journal images remain readable. This closes the earlier dependence on pre-flush writes being volatile while leaving the filesystem superblock at format v5.
+The bounded journal region now writes version-2 empty/active anchors. Tail blocks are staged behind a durable empty anchor and flushed before active publication; checkpoint invalidates the log with one checksummed empty-anchor block after home replay is durable. Complete version-1 journal images remain readable. This closes the earlier dependence on pre-flush writes being volatile and remains part of the format-v6 durability model.
+
+## Format-v6 byte EOF milestone
+
+Filesystem format v6 promotes exact regular-file EOF into inode-record version 3. Whole-file and
+range reads stop at that persisted EOF, overwrite-only byte writes cannot extend it, and exact-byte
+truncate can shrink into a partial final block while zeroing discarded tail bytes and releasing only
+the trailing block suffix. The tail zero, allocator image, and inode-table update share one bounded
+WAL transaction and deterministic crash tests require recovery to converge to the complete old or
+complete new state.
+
+Whole-file clone, exchange, and transfer-replace carry exact EOF together with file contents, so a
+partial-final-block file remains semantically whole across those operations. The filesystem still
+does not claim growth, sparse holes, or general extent semantics.
 
 ## Consolidated transaction-image boundary
 
@@ -79,7 +92,7 @@ A change belongs inside this checkpoint only if it preserves or tightens the exi
 The checkpoint still deliberately does not define:
 
 - a circular journal with persistent head/tail or multi-transaction retention beyond the bounded reservation;
-- persisted regular-file byte length, partial-final-block EOF, general byte truncate/extension, sparse files, or a general extent data model;
+- regular-file growth/extension, sparse files, hole punching, or a general extent data model;
 - persisted hard-link counts, generic inode-orphan namespace reattachment, or recursive removal;
 - permissions, ACLs, mmap, FUSE, or broad POSIX compatibility;
 - stronger hardware fault models such as torn sectors or storage reordering.

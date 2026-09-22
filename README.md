@@ -4,7 +4,7 @@ A focused filesystem implementation and crash-consistency laboratory for buildin
 
 ## Durable metadata-core checkpoint
 
-The current checkpoint is **filesystem format v5**. Its deterministic metadata prefix is:
+The current checkpoint is **filesystem format v6**. Its deterministic metadata prefix is:
 
 `superblock -> journal -> allocation image -> inode table -> directory table -> data blocks`
 
@@ -12,9 +12,9 @@ The implemented core now includes:
 
 - fixed 4 KiB logical blocks and a file-backed block device with strict bounds/size checking;
 - explicit durability boundaries through the block-device `flush` contract;
-- version-5 superblock geometry with independently reserved journal, allocation, inode, and directory regions;
+- version-6 superblock geometry with independently reserved journal, allocation, inode, and directory regions;
 - checksummed allocation image v1 with deterministic first-fit ownership accounting and reserved-block exclusion;
-- independently versioned persisted inode records and checksummed inode-table images;
+- independently versioned inode-record v3 persistence with exact regular-file byte EOF and checksummed inode-table images;
 - independently versioned persisted directory entries and checksummed directory-table images;
 - buffer-cache `Clean` / `Dirty` / `Writeback` state semantics and durability-aware eviction rules;
 - logical WAL transactions with Begin/full-block Write/Commit records, versioned journal-region anchors, committed-only replay, and checkpoint invalidation that remains safe when whole-block writes persist before flush;
@@ -23,7 +23,7 @@ The implemented core now includes:
 - deterministic write/flush crash enumeration for create, unlink, and rename;
 - idempotent recovery after committed home-write interruption;
 - read-only fsck across superblock geometry, allocation ownership, journal integrity, inode block ownership, namespace references, root reachability, and directory-cycle constraints;
-- focused malformed-image, corruption, insufficient-journal-capacity, and crash-prefix regressions.
+- crash-consistent exact-byte shrink truncate with partial-final-block tail zeroing, plus focused malformed-image, corruption, insufficient-journal-capacity, and crash-prefix regressions.
 
 The transaction paths share one internal metadata-image capture primitive so table encoders are rendered and compared with home blocks under one bounds/zero-fill contract before publication through the WAL.
 
@@ -45,7 +45,7 @@ See [`docs/metadata-transactions.md`](docs/metadata-transactions.md) and [`docs/
 
 ## Format and recovery documentation
 
-- [`docs/on-disk-format.md`](docs/on-disk-format.md): filesystem superblock versions and v5 metadata geometry
+- [`docs/on-disk-format.md`](docs/on-disk-format.md): filesystem superblock versions and current v6 metadata geometry
 - [`docs/inode-record-format.md`](docs/inode-record-format.md) / [`docs/inode-table-format.md`](docs/inode-table-format.md): persisted inode representation
 - [`docs/directory-entry-format.md`](docs/directory-entry-format.md) / [`docs/directory-table-format.md`](docs/directory-table-format.md): persisted namespace representation
 - [`docs/journal-record-format.md`](docs/journal-record-format.md) / [`docs/journal-region-format.md`](docs/journal-region-format.md): WAL encoding
@@ -53,7 +53,7 @@ See [`docs/metadata-transactions.md`](docs/metadata-transactions.md) and [`docs/
 - [`docs/fsck.md`](docs/fsck.md): read-only consistency invariants
 - [`docs/stability-checkpoint.md`](docs/stability-checkpoint.md): consolidation boundary and deferred scope
 
-Versions 1 through 4 remain documented historical schemas and are intentionally rejected by the v5 reader. Durable semantics are never silently reinterpreted across format versions.
+Versions 1 through 5 remain documented historical schemas and are intentionally rejected by the v6 reader. Durable semantics are never silently reinterpreted across format versions.
 
 ## Checkpoint scope
 
@@ -62,8 +62,8 @@ This repository is now treated as a **crash-consistent durable metadata-core che
 The following are intentionally outside the current checkpoint unless a concrete correctness requirement justifies reopening them:
 
 - circular journal head/tail management and multi-transaction retention beyond the bounded reservation;
-- persistent file-data write semantics, truncate, sparse files, and complex extents;
-- hard-link counts, orphan handling, recursive deletion, rename overwrite/exchange semantics;
+- file growth/extension, sparse files, hole punching, and a general extent data model;
+- persisted hard-link counts, generic orphan reattachment, and recursive deletion;
 - permissions, ACLs, symlinks, mmap, FUSE integration, and broad POSIX compatibility;
 - sector tearing, controller reordering, and partial-block fault models.
 

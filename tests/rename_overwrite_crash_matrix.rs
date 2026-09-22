@@ -22,6 +22,7 @@ fn root() -> PersistedInode {
         id: 1,
         kind: InodeKind::Directory,
         blocks: Vec::new(),
+        byte_len: 0,
     }
 }
 
@@ -41,11 +42,13 @@ fn setup() -> (CrashDevice, Superblock, u64, u64) {
                 id: 2,
                 kind: InodeKind::File,
                 blocks: vec![source_block],
+                byte_len: 0,
             },
             PersistedInode {
                 id: 3,
                 kind: InodeKind::File,
                 blocks: vec![destination_block],
+                byte_len: 0,
             },
         ],
     )
@@ -106,6 +109,7 @@ fn assert_new(device: &mut CrashDevice, superblock: &Superblock, source: u64, de
                 id: 2,
                 kind: InodeKind::File,
                 blocks: vec![source],
+                byte_len: 0,
             },
         ]
     );

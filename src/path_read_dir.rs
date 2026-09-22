@@ -97,6 +97,7 @@ mod tests {
             id,
             kind,
             blocks: Vec::new(),
+            byte_len: 0,
         }
     }
 

@@ -25,6 +25,7 @@ fn inode(id: u64) -> PersistedInode {
         id,
         kind: InodeKind::Directory,
         blocks: Vec::new(),
+        byte_len: 0,
     }
 }
 

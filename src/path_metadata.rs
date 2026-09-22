@@ -11,16 +11,18 @@ use crate::path_lookup::{
     resolve_path_following_symlinks, resolve_path_without_following_final_symlink,
 };
 
-/// Persisted metadata that can be reported truthfully without byte-length semantics.
+/// Persisted metadata reported from the recovered durable inode/namespace state.
 ///
-/// Format v5 does not persist a regular-file byte length, permissions, timestamps, uid/gid, or a
-/// stored hard-link count. `logical_blocks` therefore reports the exact inode block-vector length,
-/// while `namespace_references` is derived from the durable directory table on each query.
+/// Format v6 persists exact regular-file EOF as `byte_len`. Directory and symlink inodes report
+/// zero byte length here; symlink target length remains part of the independently checksummed symlink
+/// payload format. Permissions, timestamps, uid/gid, and stored hard-link counts remain undefined.
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PathMetadata {
     pub inode_id: u64,
     pub kind: InodeKind,
     pub logical_blocks: usize,
+    pub byte_len: u64,
     pub namespace_references: usize,
 }
 
@@ -116,6 +118,9 @@ fn metadata_for_inode(
         inode_id,
         kind: inode.kind,
         logical_blocks: inode.blocks.len(),
+        byte_len: inode
+            .canonical_byte_len()
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error.to_string()))?,
         namespace_references,
     })
 }

@@ -3,13 +3,15 @@ use std::io;
 use crate::block::{BlockDevice, BLOCK_SIZE};
 use crate::file_data::read_file_block;
 use crate::format::Superblock;
+use crate::inode::InodeKind;
+use crate::inode_table::load_inode_table;
 
 /// Reads a non-empty byte range across existing logical blocks of a durable regular file.
 ///
 /// `start_offset` is relative to `first_block_index`. The range may span multiple logical blocks,
-/// but every touched block must already be referenced by the inode and allocator-owned. Format v5
-/// does not persist a file byte length, so this API intentionally exposes only bytes inside complete
-/// logical blocks that already exist; it does not infer EOF, sparse holes, or extension semantics.
+/// but every touched byte must lie at or before the format-v6 persisted EOF and every touched block
+/// must already be referenced by the inode and allocator-owned. Sparse holes and implicit extension
+/// remain unsupported.
 ///
 /// # Errors
 ///
@@ -29,6 +31,51 @@ pub fn read_file_range(
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "file-data read range must be non-empty and start within a block",
+        ));
+    }
+
+    let absolute_start = first_block_index
+        .checked_mul(BLOCK_SIZE)
+        .and_then(|base| base.checked_add(start_offset))
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "file-data absolute byte offset overflow",
+            )
+        })?;
+    let absolute_end = absolute_start.checked_add(len).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "file-data read range length overflow",
+        )
+    })?;
+
+    let inodes = load_inode_table(device, superblock)?;
+    let inode = inodes
+        .iter()
+        .find(|inode| inode.id == inode_id)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "file-data target inode is missing",
+            )
+        })?;
+    if inode.kind != InodeKind::File {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "file-data target must be a regular file",
+        ));
+    }
+    let byte_len = usize::try_from(inode.byte_len).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "file byte length exceeds platform address space",
+        )
+    })?;
+    if absolute_end > byte_len {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "file-data read range extends beyond EOF",
         ));
     }
 

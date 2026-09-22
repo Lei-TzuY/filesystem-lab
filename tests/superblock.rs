@@ -263,6 +263,17 @@ fn decode_rejects_bad_magic_version_metadata_layout_and_reserved_bytes() {
 }
 
 #[test]
+fn version_five_superblock_is_explicitly_rejected() {
+    let mut encoded = Superblock::new(16).unwrap().encode();
+    encoded[8..12].copy_from_slice(&5_u32.to_le_bytes());
+
+    assert_eq!(
+        Superblock::decode(&encoded).unwrap_err().kind(),
+        io::ErrorKind::InvalidData
+    );
+}
+
+#[test]
 fn format_replaces_stale_journal_bytes_with_canonical_empty_anchor() {
     let mut device = MemoryBlockDevice::new(16);
     for block in &mut device.blocks[1..5] {

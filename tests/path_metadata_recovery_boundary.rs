@@ -26,6 +26,7 @@ fn inode(id: u64, kind: InodeKind) -> PersistedInode {
         id,
         kind,
         blocks: Vec::new(),
+        byte_len: 0,
     }
 }
 
@@ -126,6 +127,7 @@ fn stat_recovers_committed_final_symlink_before_resolution() {
                 inode_id: 2,
                 kind: InodeKind::File,
                 logical_blocks: 0,
+                byte_len: 0,
                 namespace_references: 1,
             }
         );
@@ -172,6 +174,7 @@ fn lstat_recovers_committed_final_symlink_before_no_follow_lookup() {
                 inode_id: link_inode,
                 kind: InodeKind::Symlink,
                 logical_blocks: 1,
+                byte_len: 0,
                 namespace_references: 1,
             }
         );

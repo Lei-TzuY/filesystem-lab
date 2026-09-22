@@ -55,3 +55,32 @@ A version-5 implementation MUST reject invalid magic, version, block size, journ
 Formatting initializes a canonical journal-region v2 empty anchor, allocation image, empty inode-table image, and empty directory-table image before publishing block zero, then writes the superblock and crosses the block-device durability boundary with `flush`. A successfully published version-5 superblock therefore never points at stale journal state or an uninitialized durable metadata reservation.
 
 The journal region remains independently versioned as documented in [`journal-region-format.md`](journal-region-format.md), with records documented in [`journal-record-format.md`](journal-record-format.md). Allocation, inode-table, and directory-table snapshots can all be persisted through the bounded WAL; cross-table inode+directory and allocation+inode+directory transactions are implemented for lifecycle consistency. Validated create, unlink, rename, replay, and v2-anchor checkpoint paths build on those primitives, with deterministic crash matrices and read-only fsck checking their post-recovery invariants. Circular journal head/tail metadata, persisted regular-file byte EOF, and broader POSIX lifecycle behavior remain outside the current v5 durable metadata-core checkpoint.
+
+
+## Version 6
+
+Version 6 keeps the version-5 metadata geometry unchanged but makes regular-file byte EOF part of the
+durable inode schema. The superblock format version at offset 8 is `6`; version-5 and older
+superblocks are rejected rather than silently reinterpreted, and this repository does not claim an
+in-place migration path.
+
+The deterministic metadata prefix remains:
+
+`superblock -> journal -> allocation image -> inode table -> directory table -> data blocks`
+
+The inode table now stores inode-record version 3 as specified in
+[`inode-record-format.md`](inode-record-format.md). Version 3 adds an exact 64-bit regular-file byte
+length. A non-empty regular file must place EOF inside its final referenced logical block; a
+zero-block regular file has EOF zero. Directory and symlink inode records store byte length zero.
+Symlink target length remains part of the independently checksummed symlink payload format.
+
+Format-v6 whole-file reads stop exactly at persisted EOF. Existing overwrite-only byte-range writes
+must remain at or before EOF. Exact-byte truncate supports shrink only: it may release a trailing
+block suffix and, when EOF lands inside the final retained block, zeros the discarded tail in the
+same bounded WAL transaction as allocator and inode metadata changes. File growth, sparse extension,
+and implicit holes remain unsupported.
+
+Formatting initializes the canonical v2 empty journal anchor, allocation image, empty inode table,
+and empty directory table before publishing the version-6 superblock. The bounded journal,
+early-persistence-safe anchor ordering, recovery/checkpoint rules, allocator geometry, and namespace
+table geometry are otherwise unchanged from version 5.

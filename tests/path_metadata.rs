@@ -62,6 +62,7 @@ fn inode(id: u64, kind: InodeKind) -> PersistedInode {
         id,
         kind,
         blocks: Vec::new(),
+        byte_len: 0,
     }
 }
 
@@ -95,7 +96,7 @@ fn setup() -> (MemoryDevice, Superblock, u64, u64) {
 }
 
 #[test]
-fn reports_root_and_regular_file_metadata_without_inventing_byte_length() {
+fn reports_root_and_regular_file_persisted_byte_length() {
     let (mut device, superblock, _, _) = setup();
 
     assert_eq!(
@@ -104,6 +105,7 @@ fn reports_root_and_regular_file_metadata_without_inventing_byte_length() {
             inode_id: 1,
             kind: InodeKind::Directory,
             logical_blocks: 0,
+            byte_len: 0,
             namespace_references: 0,
         }
     );
@@ -113,6 +115,7 @@ fn reports_root_and_regular_file_metadata_without_inventing_byte_length() {
             inode_id: 2,
             kind: InodeKind::File,
             logical_blocks: 1,
+            byte_len: BLOCK_SIZE as u64,
             namespace_references: 2,
         }
     );
@@ -146,6 +149,7 @@ fn stat_follows_final_symlink_while_lstat_reports_the_symlink_inode() {
             inode_id: link_inode,
             kind: InodeKind::Symlink,
             logical_blocks: 1,
+            byte_len: 0,
             namespace_references: 1,
         }
     );
@@ -167,6 +171,7 @@ fn lstat_can_describe_a_dangling_final_symlink() {
             inode_id: dangling_inode,
             kind: InodeKind::Symlink,
             logical_blocks: 1,
+            byte_len: 0,
             namespace_references: 1,
         }
     );

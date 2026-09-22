@@ -62,6 +62,7 @@ fn root_inode(blocks: Vec<u64>) -> PersistedInode {
         id: 1,
         kind: InodeKind::Directory,
         blocks,
+        byte_len: 0,
     }
 }
 

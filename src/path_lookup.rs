@@ -12,7 +12,7 @@ use crate::inode_table::load_inode_table;
 use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::recovery::RecoveryReport;
 use crate::symlink::read_symlink;
-use crate::truncate_tx::truncate_file_to_blocks_journaled;
+use crate::truncate_tx::{truncate_file_to_blocks_journaled, truncate_file_to_bytes_journaled};
 
 pub const MAX_SYMLINK_EXPANSIONS: usize = 40;
 
@@ -88,7 +88,7 @@ pub fn read_symlink_at_path(
 /// [`read_file_range`] implementation, so allocator ownership checks and format-v5 block-range bounds
 /// stay centralized in one data-path primitive.
 ///
-/// Format v5 has no persisted byte length. This operation therefore exposes only byte ranges inside
+/// Format v6 has no persisted byte length. This operation therefore exposes only byte ranges inside
 /// logical blocks already referenced by the resolved regular-file inode; it does not define EOF,
 /// sparse-hole, allocation, or extension semantics.
 ///
@@ -153,6 +153,29 @@ pub fn write_file_range_at_path_journaled(
     )
 }
 
+/// Atomically shrinks the regular file named by an absolute pathname to an exact byte EOF.
+///
+/// Older committed WAL is checked, recovered, and checkpointed before pathname resolution. The
+/// final symlink is followed. The byte-level transaction may preserve the current block count or
+/// release a trailing suffix; a partial final block is zeroed after the new EOF in the same commit.
+///
+/// Growth and sparse extension are intentionally rejected by the low-level transaction.
+///
+/// # Errors
+///
+/// Propagates checked recovery, pathname lookup, exact-byte truncate validation, allocator ownership,
+/// journal-capacity, and durable I/O failures.
+pub fn truncate_file_at_path_to_bytes_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    path: &str,
+    target_bytes: u64,
+) -> io::Result<(Vec<u64>, RecoveryReport)> {
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
+    let inode_id = resolve_path_following_symlinks(device, superblock, path)?;
+    truncate_file_to_bytes_journaled(device, superblock, inode_id, target_bytes)
+}
+
 /// Atomically truncates the regular file named by an absolute pathname to an exact block count.
 ///
 /// Any older committed WAL is recovered and checkpointed before pathname resolution so target
@@ -162,7 +185,7 @@ pub fn write_file_range_at_path_journaled(
 /// [`truncate_file_to_blocks_journaled`], so allocator ownership validation and the allocation+inode
 /// WAL transaction remain centralized in the existing truncate primitive.
 ///
-/// Format v5 does not persist byte length. This operation is therefore deliberately block-granular:
+/// Format v6 does not persist byte length. This operation is therefore deliberately block-granular:
 /// it may shrink only to a count of complete 4 KiB logical blocks and cannot grow, create sparse
 /// holes, or define partial-block EOF semantics.
 ///

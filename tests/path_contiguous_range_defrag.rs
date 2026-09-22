@@ -35,6 +35,7 @@ fn inode(id: u64, kind: InodeKind) -> PersistedInode {
         id,
         kind,
         blocks: Vec::new(),
+        byte_len: 0,
     }
 }
 

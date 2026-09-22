@@ -139,6 +139,7 @@ mod tests {
             id,
             kind: InodeKind::File,
             blocks: vec![block],
+            byte_len: 0,
         }
     }
 
@@ -239,6 +240,7 @@ mod tests {
                 id,
                 kind: InodeKind::File,
                 blocks: Vec::new(),
+                byte_len: 0,
             })
             .collect();
 

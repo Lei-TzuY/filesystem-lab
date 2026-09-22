@@ -20,6 +20,7 @@ fn root_inode() -> PersistedInode {
         id: 1,
         kind: InodeKind::Directory,
         blocks: Vec::new(),
+        byte_len: 0,
     }
 }
 
@@ -39,6 +40,7 @@ fn setup() -> (
             id: 2,
             kind: InodeKind::File,
             blocks: blocks.clone(),
+            byte_len: 0,
         },
     ];
     let entries = vec![PersistedDirectoryEntry {

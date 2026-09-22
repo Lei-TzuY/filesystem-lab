@@ -59,11 +59,13 @@ fn sample_inodes() -> Vec<PersistedInode> {
             id: 1,
             kind: InodeKind::Directory,
             blocks: vec![],
+            byte_len: 0,
         },
         PersistedInode {
             id: 7,
             kind: InodeKind::File,
             blocks: vec![9, 11],
+            byte_len: 0,
         },
     ]
 }
@@ -105,11 +107,13 @@ fn duplicate_inode_ids_are_rejected_before_write() {
             id: 3,
             kind: InodeKind::File,
             blocks: vec![],
+            byte_len: 0,
         },
         PersistedInode {
             id: 3,
             kind: InodeKind::Directory,
             blocks: vec![],
+            byte_len: 0,
         },
     ];
 
