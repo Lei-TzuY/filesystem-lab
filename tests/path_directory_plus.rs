@@ -68,7 +68,6 @@ fn setup() -> (MemoryDevice, Superblock) {
             id: 1,
             kind: InodeKind::Directory,
             blocks: Vec::new(),
-        
             byte_len: 0,
         }],
     )

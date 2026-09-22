@@ -44,7 +44,6 @@ fn setup() -> (
             id: 2,
             kind: InodeKind::File,
             blocks: vec![data_block],
-        
             byte_len: 0,
         },
     ];

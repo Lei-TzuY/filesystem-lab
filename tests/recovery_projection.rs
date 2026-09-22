@@ -86,7 +86,6 @@ fn projects_a_committed_root_inode_without_mutating_home_state() {
         id: 1,
         kind: InodeKind::Directory,
         blocks: Vec::new(),
-    
         byte_len: 0,
     };
     store_inode_table(&mut desired, &superblock, std::slice::from_ref(&root)).unwrap();
