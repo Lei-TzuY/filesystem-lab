@@ -429,8 +429,8 @@ mod tests {
 
         store_journal_image(&mut device, superblock, &entries).unwrap();
 
-        assert_eq!(device.writes, vec![2, 1]);
-        assert_eq!(device.flushes, 1);
+        assert_eq!(device.writes, vec![1, 2, 1]);
+        assert_eq!(device.flushes, 3);
         assert_eq!(
             load_journal_image(&mut device, superblock).unwrap(),
             entries
@@ -465,6 +465,52 @@ mod tests {
     }
 
     #[test]
+    fn empty_store_cannot_discard_an_active_journal() {
+        let superblock = Superblock::with_journal_blocks(16, 2).unwrap();
+        let entries = sample_entries(superblock);
+        let mut device = MemoryDevice::new(16);
+        store_journal_image(&mut device, superblock, &entries).unwrap();
+        let writes_before = device.writes.clone();
+        let flushes_before = device.flushes;
+
+        assert_eq!(
+            store_journal_image(&mut device, superblock, &[])
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::WouldBlock
+        );
+        assert_eq!(device.writes, writes_before);
+        assert_eq!(device.flushes, flushes_before);
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), entries);
+    }
+
+    #[test]
+    fn version_one_active_image_remains_readable() {
+        let superblock = Superblock::with_journal_blocks(16, 2).unwrap();
+        let entries = sample_entries(superblock);
+        let payload = encode_entries(&entries).unwrap();
+        let capacity = region_capacity(superblock).unwrap();
+        let used = HEADER_SIZE + payload.len();
+        let mut region = vec![0_u8; capacity];
+        region[0..4].copy_from_slice(&REGION_MAGIC_V1);
+        region[4..6].copy_from_slice(&REGION_VERSION_V1.to_le_bytes());
+        region[8..16].copy_from_slice(&(payload.len() as u64).to_le_bytes());
+        region[HEADER_SIZE..used].copy_from_slice(&payload);
+        let checksum = crc32(&region[..used]);
+        region[CHECKSUM_OFFSET..CHECKSUM_OFFSET + 4].copy_from_slice(&checksum.to_le_bytes());
+
+        let mut device = MemoryDevice::new(16);
+        for (index, block) in superblock.journal_range().enumerate() {
+            let start = index * BLOCK_SIZE;
+            let end = start + BLOCK_SIZE;
+            device.blocks[usize::try_from(block).unwrap()]
+                .copy_from_slice(&region[start..end]);
+        }
+
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), entries);
+    }
+
+    #[test]
     fn zeroed_fresh_region_is_empty() {
         let superblock = Superblock::with_journal_blocks(8, 2).unwrap();
         let mut device = MemoryDevice::new(8);
@@ -490,10 +536,23 @@ mod tests {
     }
 
     #[test]
-    fn stale_non_zero_padding_is_rejected() {
+    fn empty_anchor_ignores_stale_tail_blocks() {
         let superblock = Superblock::with_journal_blocks(8, 2).unwrap();
         let mut device = MemoryDevice::new(8);
         store_journal_image(&mut device, superblock, &[]).unwrap();
+        device.blocks[2][BLOCK_SIZE - 1] = 1;
+
+        assert!(load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn active_image_still_rejects_non_zero_trailing_padding() {
+        let superblock = Superblock::with_journal_blocks(16, 2).unwrap();
+        let entries = sample_entries(superblock);
+        let mut device = MemoryDevice::new(16);
+        store_journal_image(&mut device, superblock, &entries).unwrap();
         device.blocks[2][BLOCK_SIZE - 1] = 1;
 
         assert_eq!(
