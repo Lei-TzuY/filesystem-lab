@@ -1,7 +1,7 @@
 use std::io;
 
 use crate::allocation_disk::{load_allocator, store_allocator};
-use crate::block::{BlockDevice, BLOCK_SIZE};
+use crate::block::{BlockDevice, BLOCK_SIZE, BLOCK_SIZE_U64};
 use crate::format::Superblock;
 use crate::inode::InodeKind;
 use crate::inode_table::{load_inode_table, store_inode_table};
@@ -18,8 +18,9 @@ use crate::transaction_image::CaptureDevice;
 /// replay makes the new state durable, the fixed journal reservation is checkpointed before success
 /// is returned.
 ///
-/// Format v5 does not persist a byte length, so this API is intentionally block-granular. It does
-/// not provide partial-block writes, sparse files, extents, or POSIX append semantics.
+/// Format v6 preserves exact EOF. Appending whole blocks shifts EOF by exactly the appended block
+/// capacity while preserving any existing unused tail offset in the final block. This API remains
+/// block-granular; exact-byte zero growth is provided by [grow_file_to_bytes_journaled].
 ///
 /// # Errors
 ///
@@ -102,6 +103,159 @@ pub fn append_file_blocks_journaled(
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "multi-block append recovery report is inconsistent",
+        ));
+    }
+
+    Ok((blocks, report))
+}
+
+/// Atomically grows one regular file to an exact larger byte EOF, zero-filling every newly visible
+/// byte without creating sparse holes.
+///
+/// If the new EOF remains inside the current final block, no new block is allocated; bytes after the
+/// old EOF are explicitly zeroed before they become visible. If the target crosses a block boundary,
+/// only the required trailing blocks are allocated and each new block is published as all zeroes.
+/// Allocator ownership, inode block-map/EOF changes, and required data images share one bounded WAL
+/// transaction.
+///
+/// # Errors
+///
+/// Returns InvalidInput for a missing/non-file inode, a target that does not strictly exceed the
+/// current EOF, an unrepresentable target block count, or allocation exhaustion. Returns
+/// InvalidData when the current partial final block is not allocator-owned or recovery reports an
+/// inconsistent committed write count. Encoding, journal-capacity, checkpoint, and device I/O
+/// failures are propagated.
+pub fn grow_file_to_bytes_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    inode_id: u64,
+    target_bytes: u64,
+) -> io::Result<(Vec<u64>, RecoveryReport)> {
+    let mut allocator = load_allocator(device, superblock)?;
+    let mut inodes = load_inode_table(device, superblock)?;
+    let inode = inodes
+        .iter_mut()
+        .find(|inode| inode.id == inode_id)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "byte-grow target inode is missing",
+            )
+        })?;
+    if inode.kind != InodeKind::File {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "byte-grow target must be a regular file",
+        ));
+    }
+
+    let current_bytes = inode
+        .canonical_byte_len()
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error.to_string()))?;
+    if target_bytes <= current_bytes {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "byte-grow target must exceed current EOF",
+        ));
+    }
+
+    let target_blocks_u64 = target_bytes.div_ceil(BLOCK_SIZE_U64);
+    let target_blocks = usize::try_from(target_blocks_u64).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "byte-grow target block count exceeds usize",
+        )
+    })?;
+    let current_blocks = inode.blocks.len();
+    if target_blocks < current_blocks {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "byte-grow target requires fewer blocks than current inode mapping",
+        ));
+    }
+
+    let mut existing_tail_write = None;
+    let tail_offset = usize::try_from(current_bytes % BLOCK_SIZE_U64).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "byte-grow tail offset exceeds usize",
+        )
+    })?;
+    if current_blocks != 0 && tail_offset != 0 {
+        let block = inode.blocks[current_blocks - 1];
+        let owned = allocator
+            .is_owned(block)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+        if !owned {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "byte-grow final block is not allocator-owned",
+            ));
+        }
+
+        let mut image = [0_u8; BLOCK_SIZE];
+        device.read_block(block, &mut image)?;
+        let original = image;
+        image[tail_offset..].fill(0);
+        if image != original {
+            existing_tail_write = Some((block, image));
+        }
+    }
+
+    let additional = target_blocks - current_blocks;
+    let mut blocks = Vec::with_capacity(additional);
+    for _ in 0..additional {
+        let block = allocator
+            .allocate()
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+        blocks.push(block);
+    }
+    if !blocks.is_empty() {
+        inode.replace_block_range(current_blocks..current_blocks, &blocks)?;
+    }
+    inode.set_file_byte_len(target_bytes)?;
+
+    let mut capture = CaptureDevice::new(superblock.total_blocks);
+    store_allocator(&mut capture, superblock, &allocator)?;
+    store_inode_table(&mut capture, superblock, &inodes)?;
+
+    let mut changed = Vec::new();
+    capture.collect_changed_range(
+        device,
+        superblock.allocation_range(),
+        "byte-grow image did not render every allocation metadata block",
+        &mut changed,
+    )?;
+    capture.collect_changed_range(
+        device,
+        superblock.inode_range(),
+        "byte-grow image did not render every inode metadata block",
+        &mut changed,
+    )?;
+    capture.ensure_empty("byte-grow image rendered outside allocation and inode regions")?;
+    if let Some(write) = existing_tail_write {
+        changed.push(write);
+    }
+    changed.extend(
+        blocks
+            .iter()
+            .copied()
+            .map(|block| (block, [0_u8; BLOCK_SIZE])),
+    );
+
+    let mut log = JournalLog::new();
+    let txid = log.begin()?;
+    for (home_block, image) in changed.iter().copied() {
+        log.write(txid, home_block, image)?;
+    }
+    log.commit(txid)?;
+    store_journal_image(device, *superblock, log.entries())?;
+
+    let report = recover_journal_and_checkpoint(device, *superblock)?;
+    if report.committed_transactions != 1 || report.home_writes != changed.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "byte-grow recovery report is inconsistent",
         ));
     }
 
