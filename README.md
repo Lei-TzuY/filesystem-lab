@@ -23,7 +23,7 @@ The implemented core now includes:
 - deterministic write/flush crash enumeration for create, unlink, and rename;
 - idempotent recovery after committed home-write interruption;
 - read-only fsck across superblock geometry, allocation ownership, journal integrity, inode block ownership, namespace references, root reachability, and directory-cycle constraints;
-- crash-consistent exact-byte shrink truncate with partial-final-block tail zeroing, plus focused malformed-image, corruption, insufficient-journal-capacity, and crash-prefix regressions.
+- crash-consistent exact-byte resize: shrink releases only the trailing block suffix and zeroes discarded final-block tail bytes, while growth zero-fills every newly visible byte and allocates only required trailing blocks; plus focused malformed-image, corruption, insufficient-journal-capacity, and crash-prefix regressions.
 
 The transaction paths share one internal metadata-image capture primitive so table encoders are rendered and compared with home blocks under one bounds/zero-fill contract before publication through the WAL.
 
@@ -62,7 +62,7 @@ This repository is now treated as a **crash-consistent durable metadata-core che
 The following are intentionally outside the current checkpoint unless a concrete correctness requirement justifies reopening them:
 
 - circular journal head/tail management and multi-transaction retention beyond the bounded reservation;
-- file growth/extension, sparse files, hole punching, and a general extent data model;
+- sparse files, hole punching, and a general extent data model;
 - persisted hard-link counts, generic orphan reattachment, and recursive deletion;
 - permissions, ACLs, symlinks, mmap, FUSE integration, and broad POSIX compatibility;
 - sector tearing, controller reordering, and partial-block fault models.
