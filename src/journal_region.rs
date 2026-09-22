@@ -571,7 +571,10 @@ mod tests {
             device.blocks[usize::try_from(block).unwrap()].copy_from_slice(&region[start..end]);
         }
 
-        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), entries);
+        assert_eq!(
+            load_journal_image(&mut device, superblock).unwrap(),
+            entries
+        );
     }
 
     #[test]
