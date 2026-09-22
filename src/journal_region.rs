@@ -219,7 +219,9 @@ pub fn load_journal_image(
                     .iter()
                     .any(|byte| *byte != 0)
                 {
-                    return Err(invalid_data("empty journal anchor block padding is non-zero"));
+                    return Err(invalid_data(
+                        "empty journal anchor block padding is non-zero",
+                    ));
                 }
                 let expected_checksum = u32::from_le_bytes(
                     region[CHECKSUM_OFFSET..CHECKSUM_OFFSET + 4]
@@ -272,8 +274,7 @@ pub fn load_journal_image(
 fn is_v2_empty_anchor(block: &[u8; BLOCK_SIZE]) -> io::Result<bool> {
     if block[0..4] != REGION_MAGIC_V2
         || u16::from_le_bytes([block[4], block[5]]) != REGION_VERSION_V2
-        || u16::from_le_bytes([block[STATE_OFFSET], block[STATE_OFFSET + 1]])
-            != REGION_STATE_EMPTY
+        || u16::from_le_bytes([block[STATE_OFFSET], block[STATE_OFFSET + 1]]) != REGION_STATE_EMPTY
     {
         return Ok(false);
     }
@@ -292,7 +293,9 @@ fn is_v2_empty_anchor(block: &[u8; BLOCK_SIZE]) -> io::Result<bool> {
         return Err(invalid_data("empty journal anchor has a payload"));
     }
     if block[HEADER_SIZE..].iter().any(|byte| *byte != 0) {
-        return Err(invalid_data("empty journal anchor block padding is non-zero"));
+        return Err(invalid_data(
+            "empty journal anchor block padding is non-zero",
+        ));
     }
     let expected_checksum = u32::from_le_bytes(
         block[CHECKSUM_OFFSET..CHECKSUM_OFFSET + 4]
@@ -540,7 +543,10 @@ mod tests {
         );
         assert_eq!(device.writes, writes_before);
         assert_eq!(device.flushes, flushes_before);
-        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), entries);
+        assert_eq!(
+            load_journal_image(&mut device, superblock).unwrap(),
+            entries
+        );
     }
 
     #[test]
@@ -562,8 +568,7 @@ mod tests {
         for (index, block) in superblock.journal_range().enumerate() {
             let start = index * BLOCK_SIZE;
             let end = start + BLOCK_SIZE;
-            device.blocks[usize::try_from(block).unwrap()]
-                .copy_from_slice(&region[start..end]);
+            device.blocks[usize::try_from(block).unwrap()].copy_from_slice(&region[start..end]);
         }
 
         assert_eq!(load_journal_image(&mut device, superblock).unwrap(), entries);
