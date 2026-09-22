@@ -12,6 +12,69 @@ pub struct RecoveryReport {
     pub home_writes: usize,
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct RecoveryPlan {
+    writes: Vec<(u64, [u8; BLOCK_SIZE])>,
+    report: RecoveryReport,
+}
+
+impl RecoveryPlan {
+    pub(crate) fn writes(&self) -> &[(u64, [u8; BLOCK_SIZE])] {
+        &self.writes
+    }
+
+    pub(crate) const fn report(&self) -> RecoveryReport {
+        self.report
+    }
+}
+
+pub(crate) fn plan_recovery(entries: &[JournalEntry]) -> io::Result<RecoveryPlan> {
+    let mut active: Option<TransactionId> = None;
+    let mut pending = Vec::<(u64, [u8; BLOCK_SIZE])>::new();
+    let mut writes = Vec::new();
+    let mut committed_transactions = 0_usize;
+
+    for entry in entries {
+        match entry {
+            JournalEntry::Begin { txid } => {
+                if active.is_some() {
+                    return Err(invalid_data("nested journal transaction during recovery"));
+                }
+                active = Some(*txid);
+                pending.clear();
+            }
+            JournalEntry::Write { txid, block, data } => {
+                if active != Some(*txid) {
+                    return Err(invalid_data(
+                        "journal write does not match active recovery transaction",
+                    ));
+                }
+                pending.push((*block, **data));
+            }
+            JournalEntry::Commit { txid } => {
+                if active != Some(*txid) {
+                    return Err(invalid_data(
+                        "journal commit does not match active recovery transaction",
+                    ));
+                }
+                writes.append(&mut pending);
+                committed_transactions = committed_transactions
+                    .checked_add(1)
+                    .ok_or_else(|| invalid_data("transaction count overflowed usize"))?;
+                active = None;
+            }
+        }
+    }
+
+    Ok(RecoveryPlan {
+        report: RecoveryReport {
+            committed_transactions,
+            home_writes: writes.len(),
+        },
+        writes,
+    })
+}
+
 /// Replays committed durable journal transactions to their home blocks.
 ///
 /// Recovery first loads and validates the entire persistent journal image. It then applies writes
@@ -32,49 +95,12 @@ pub fn recover_journal(
     superblock: Superblock,
 ) -> io::Result<RecoveryReport> {
     let entries = load_journal_image(device, superblock)?;
-    let mut active: Option<TransactionId> = None;
-    let mut pending = Vec::<(u64, [u8; BLOCK_SIZE])>::new();
-    let mut report = RecoveryReport::default();
+    let plan = plan_recovery(&entries)?;
 
-    for entry in entries {
-        match entry {
-            JournalEntry::Begin { txid } => {
-                if active.is_some() {
-                    return Err(invalid_data("nested journal transaction during recovery"));
-                }
-                active = Some(txid);
-                pending.clear();
-            }
-            JournalEntry::Write { txid, block, data } => {
-                if active != Some(txid) {
-                    return Err(invalid_data(
-                        "journal write does not match active recovery transaction",
-                    ));
-                }
-                pending.push((block, *data));
-            }
-            JournalEntry::Commit { txid } => {
-                if active != Some(txid) {
-                    return Err(invalid_data(
-                        "journal commit does not match active recovery transaction",
-                    ));
-                }
-                for (block, data) in pending.drain(..) {
-                    device.write_block(block, &data)?;
-                    report.home_writes = report
-                        .home_writes
-                        .checked_add(1)
-                        .ok_or_else(|| invalid_data("home write count overflowed usize"))?;
-                }
-                report.committed_transactions = report
-                    .committed_transactions
-                    .checked_add(1)
-                    .ok_or_else(|| invalid_data("transaction count overflowed usize"))?;
-                active = None;
-            }
-        }
+    for (block, data) in plan.writes() {
+        device.write_block(*block, data)?;
     }
-
+    let report = plan.report();
     if report.home_writes != 0 {
         device.flush()?;
     }
