@@ -59,6 +59,7 @@ fn formatter_reserves_enough_space_for_requested_blockless_inode_capacity() {
             id,
             kind: InodeKind::File,
             blocks: Vec::new(),
+            byte_len: 0,
         })
         .collect();
     store_inode_table(&mut device, &superblock, &inodes).unwrap();
