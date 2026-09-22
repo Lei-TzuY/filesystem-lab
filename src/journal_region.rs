@@ -18,11 +18,10 @@ const RESERVED_OFFSET: usize = 20;
 
 /// Stores one bounded journal image inside the superblock-reserved journal region.
 ///
-/// The image is deterministic and self-delimiting: a 32-byte region header records the encoded
-/// journal-stream length and a CRC-32 covering the header plus payload. Unused bytes in the
-/// reservation are zeroed. Tail blocks are written before the first journal block, so the block
-/// containing the region header is the final on-device anchor before `flush` establishes the
-/// durability boundary.
+/// Version 2 uses a checksummed first-block anchor with explicit empty/active state. Before a new
+/// active image is published, a durable empty anchor is established. Tail blocks are then staged and
+/// flushed before the active anchor is allowed to become durable. This ordering remains correct when
+/// successful `write_block` calls reach stable storage before a later `flush`.
 ///
 /// A new non-empty journal image may only be published when the current reservation is empty. This
 /// prevents a later transaction from overwriting the only durable recovery source for an earlier
@@ -34,8 +33,9 @@ const RESERVED_OFFSET: usize = 20;
 ///
 /// # Errors
 ///
-/// Returns `WouldBlock` when a non-empty journal image already occupies the reservation and the
-/// caller attempts to publish another non-empty image. Returns an error if the superblock does not
+/// Returns `WouldBlock` when a non-empty journal image already occupies the reservation, including
+/// attempts to clear it through this publication API. Recovery/checkpoint owns active-log removal.
+/// Returns an error if the superblock does not
 /// describe this device, the existing or replacement journal image is corrupt, the reservation is
 /// malformed or too large to address, an entry targets a forbidden/out-of-range block, transaction
 /// ordering is malformed, the encoded stream does not fit, or an underlying read/write/flush fails.
