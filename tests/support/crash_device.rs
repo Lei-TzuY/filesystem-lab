@@ -9,6 +9,7 @@ pub struct CrashDevice {
     crash_at: Option<usize>,
     operations: usize,
     armed: bool,
+    write_through: bool,
 }
 
 impl CrashDevice {
@@ -20,7 +21,14 @@ impl CrashDevice {
             crash_at: None,
             operations: 0,
             armed: false,
+            write_through: false,
         }
+    }
+
+    pub fn new_write_through(blocks: usize) -> Self {
+        let mut device = Self::new(blocks);
+        device.write_through = true;
+        device
     }
 
     pub fn arm(&mut self, crash_at: Option<usize>) {
@@ -77,6 +85,9 @@ impl BlockDevice for CrashDevice {
             .volatile
             .get_mut(index)
             .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "invalid block"))? = *buf;
+        if self.write_through {
+            self.durable[index] = *buf;
+        }
         Ok(())
     }
 
