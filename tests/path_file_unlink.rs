@@ -23,7 +23,7 @@ use support::CrashDevice;
 const JOURNAL_BLOCKS: u64 = 8;
 
 fn inode(id: u64, kind: InodeKind, blocks: Vec<u64>) -> PersistedInode {
-    PersistedInode { id, kind, blocks }
+    PersistedInode { id, kind, blocks, byte_len: 0 }
 }
 
 fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {

@@ -18,7 +18,7 @@ use filesystem_lab::rename_exchange_tx::rename_exchange_files_journaled;
 use support::CrashDevice;
 
 fn inode(id: u64, kind: InodeKind, blocks: Vec<u64>) -> PersistedInode {
-    PersistedInode { id, kind, blocks }
+    PersistedInode { id, kind, blocks, byte_len: 0 }
 }
 
 fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
