@@ -57,13 +57,19 @@ fn constructed_inode_round_trips_through_durable_table() {
     let file = PersistedInode::new(
         2,
         InodeKind::File,
-        vec![superblock.reserved_blocks(), superblock.reserved_blocks() + 1],
+        vec![
+            superblock.reserved_blocks(),
+            superblock.reserved_blocks() + 1,
+        ],
     )
     .unwrap();
 
     store_inode_table(&mut device, &superblock, &[root.clone(), file.clone()]).unwrap();
 
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), vec![root, file]);
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        vec![root, file]
+    );
 }
 
 #[test]
