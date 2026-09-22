@@ -7,7 +7,7 @@ use crate::format::Superblock;
 use crate::inode::InodeKind;
 use crate::inode_codec::PersistedInode;
 use crate::inode_table::load_inode_table;
-use crate::journal_checkpoint::recover_journal_and_checkpoint;
+use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::path_lookup::resolve_path_following_symlinks;
 
 /// One durable child entry returned by [`read_dir_at_path`].
@@ -40,7 +40,7 @@ pub fn read_dir_at_path(
     superblock: &Superblock,
     path: &str,
 ) -> io::Result<Vec<PathDirectoryEntry>> {
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let directory_inode = resolve_path_following_symlinks(device, superblock, path)?;
     let inodes = load_inode_table(device, superblock)?;
     let entries = load_directory_table(device, superblock)?;
