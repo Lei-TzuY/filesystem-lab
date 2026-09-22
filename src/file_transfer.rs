@@ -154,8 +154,7 @@ pub fn transfer_file_block_range_journaled(
 
     let removed = inodes[source_pos].replace_block_range(source_index..source_end, &[])?;
     debug_assert_eq!(removed, moved);
-    inodes[destination_pos]
-        .replace_block_range(destination_index..destination_index, &moved)?;
+    inodes[destination_pos].replace_block_range(destination_index..destination_index, &moved)?;
 
     let report = publish_inode_table_transfer(device, superblock, &inodes)?;
     Ok((moved, report))
