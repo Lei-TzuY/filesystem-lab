@@ -53,8 +53,7 @@ fn empty_file() -> (CrashDevice, Superblock) {
 
 fn partial_file() -> (CrashDevice, Superblock, u64) {
     let mut device = CrashDevice::new(64);
-    let superblock =
-        format_device_with_journal_blocks(&mut device, JOURNAL_BLOCKS).unwrap();
+    let superblock = format_device_with_journal_blocks(&mut device, JOURNAL_BLOCKS).unwrap();
     let mut allocator = load_allocator(&mut device, &superblock).unwrap();
     let first = allocator.allocate().unwrap();
     store_allocator(&mut device, &superblock, &allocator).unwrap();
