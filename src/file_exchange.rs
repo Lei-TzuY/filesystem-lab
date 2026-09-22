@@ -277,12 +277,12 @@ pub fn exchange_variable_file_block_ranges_journaled(
 
     let left_blocks = inodes[left_pos].blocks[left.start..left_end].to_vec();
     let right_blocks = inodes[right_pos].blocks[right.start..right_end].to_vec();
-    inodes[left_pos]
-        .blocks
-        .splice(left.start..left_end, right_blocks.iter().copied());
-    inodes[right_pos]
-        .blocks
-        .splice(right.start..right_end, left_blocks.iter().copied());
+    let displaced_left =
+        inodes[left_pos].replace_block_range(left.start..left_end, &right_blocks)?;
+    debug_assert_eq!(displaced_left, left_blocks);
+    let displaced_right =
+        inodes[right_pos].replace_block_range(right.start..right_end, &left_blocks)?;
+    debug_assert_eq!(displaced_right, right_blocks);
 
     publish_exchange_inodes(device, superblock, &inodes)
 }
