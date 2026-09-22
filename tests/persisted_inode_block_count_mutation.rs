@@ -93,7 +93,10 @@ fn invalid_block_count_mutation_is_atomic_before_publication() {
     assert_eq!(outside.kind(), io::ErrorKind::InvalidInput);
     assert_eq!(inode, original);
 
-    let reversed = inode.replace_block_range(2..1, &[19]).unwrap_err();
+    let reversed_start = inode.blocks.len() - 1;
+    let reversed = inode
+        .replace_block_range(reversed_start..1, &[19])
+        .unwrap_err();
     assert_eq!(reversed.kind(), io::ErrorKind::InvalidInput);
     assert_eq!(inode, original);
 }
