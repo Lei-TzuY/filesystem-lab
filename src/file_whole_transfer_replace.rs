@@ -70,9 +70,9 @@ fn publish_whole_file_transfer_replace(
 /// identities, and source block contents remain unchanged. If both files are empty, the operation is
 /// a validated no-op.
 ///
-/// Format v5 has no persisted byte length, so "whole file" means the complete sequence of persisted
-/// 4 KiB logical blocks. This primitive does not define partial-final-block, sparse-hole, extent,
-/// reflink/COW, or byte-EOF semantics.
+/// Format v6 transfers the source block vector together with its persisted byte EOF; the source
+/// becomes a zero-byte file. Sparse holes, extents, and reflink/COW semantics remain outside this
+/// primitive.
 ///
 /// # Errors
 ///
@@ -142,11 +142,13 @@ pub fn transfer_replace_complete_file_blocks_journaled(
         return Ok(RecoveryReport::default());
     }
 
+    let source_byte_len = inodes[source_pos].canonical_byte_len()?;
     let source_len = inodes[source_pos].blocks.len();
     let source_blocks = inodes[source_pos].replace_block_range(0..source_len, &[])?;
     let destination_len = inodes[destination_pos].blocks.len();
     let displaced =
         inodes[destination_pos].replace_block_range(0..destination_len, &source_blocks)?;
+    inodes[destination_pos].set_file_byte_len(source_byte_len)?;
     for block in displaced {
         allocator
             .free(block)
