@@ -43,11 +43,13 @@ For every crash-tested lifecycle operation:
 - a second recovery must be idempotent and produce the same report/state;
 - fsck must accept the final recovered state.
 
-The current fault model enumerates whole-block writes and flush boundaries. It does not claim to model sector tearing, controller reordering, or partial-block writes.
+The current fault model enumerates whole-block writes and flush boundaries. Journal publication and checkpoint also run under a write-through variant where each successful whole-block write may become durable before the next flush, matching the one-way guarantee of the `BlockDevice` flush contract. The model still does not claim sector tearing, controller reordering, or partial-block persistence.
 
 Since the original v5 checkpoint, the executable surface has expanded beyond the initial lifecycle table: journal checkpoint/clearing, hard links, symbolic links, rename overwrite/exchange families, block-granular file range operations, strict bidirectional allocator/inode ownership checks, bounded orphan-allocation repair, and read-only semantic recovery projection are now implemented and covered by the repository's integration gates. High-level regular-file, metadata, and namespace pathname operations additionally use fail-closed checked recovery so a structurally valid WAL that projects to an inconsistent complete filesystem is rejected before home replay. Namespace coverage includes create variants, directory observation, hard-link/symlink lifecycle, rename dispatch/overwrite/exchange, and unlink/rmdir surfaces.
 
 Durable inode construction and block-count mutation now also have explicit invariant boundaries. New production inode values use `PersistedInode::new`; operations that grow, shrink, or transfer logical block counts use `replace_block_range`, which validates the complete candidate mapping before committing the in-memory inode change. This does not add byte-length semantics to format v5, but it closes the mutation fan-out that would otherwise make a future persisted EOF field impossible to update coherently.
+
+The bounded journal region now writes version-2 empty/active anchors. Tail blocks are staged behind a durable empty anchor and flushed before active publication; checkpoint invalidates the log with one checksummed empty-anchor block after home replay is durable. Complete version-1 journal images remain readable. This closes the earlier dependence on pre-flush writes being volatile while leaving the filesystem superblock at format v5.
 
 ## Consolidated transaction-image boundary
 
