@@ -139,6 +139,23 @@ fn accepts_inode_references_that_match_durable_allocation() {
 }
 
 #[test]
+fn rejects_allocated_data_block_without_inode_owner() {
+    let mut device = MemoryDevice::new(16);
+    let superblock = format_device(&mut device).unwrap();
+    let mut allocator =
+        BlockAllocator::new(superblock.total_blocks, superblock.reserved_blocks()).unwrap();
+    let leaked = allocator.allocate().unwrap();
+    store_allocator(&mut device, &superblock, &allocator).unwrap();
+
+    let error = check_device(&mut device).unwrap_err();
+
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error
+        .to_string()
+        .contains(&format!("allocated block {leaked} has no inode owner")));
+}
+
+#[test]
 fn accepts_durable_namespace_with_existing_directory_parent_and_target() {
     let mut device = MemoryDevice::new(16);
     let superblock = format_device(&mut device).unwrap();
