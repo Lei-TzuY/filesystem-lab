@@ -45,6 +45,8 @@ For every crash-tested lifecycle operation:
 
 The current fault model enumerates whole-block writes and flush boundaries. It does not claim to model sector tearing, controller reordering, or partial-block writes.
 
+Since the original v5 checkpoint, the executable surface has expanded beyond the initial lifecycle table: journal checkpoint/clearing, hard links, symbolic links, rename overwrite/exchange families, block-granular file range operations, strict bidirectional allocator/inode ownership checks, bounded orphan-allocation repair, and read-only semantic recovery projection are now implemented and covered by the repository's integration gates. High-level regular-file and metadata pathname operations additionally use fail-closed checked recovery so a structurally valid WAL that projects to an inconsistent complete filesystem is rejected before home replay.
+
 ## Consolidated transaction-image boundary
 
 Metadata transaction modules render their desired table images through a shared internal `transaction_image::CaptureDevice`. The helper centralizes:
@@ -70,12 +72,12 @@ A change belongs inside this checkpoint only if it preserves or tightens the exi
 
 ## Deferred scope
 
-The checkpoint deliberately does not define:
+The checkpoint still deliberately does not define:
 
-- journal checkpoint/clearing or circular log metadata;
-- persisted byte length, general truncate, file-data persistence ordering, sparse files, or extents;
-- hard links, orphan lifecycle, recursive removal, rename overwrite/exchange;
-- permissions, ACLs, symlinks, mmap, FUSE, or broad POSIX behavior;
+- a circular journal with persistent head/tail or multi-transaction retention beyond the bounded reservation;
+- persisted regular-file byte length, partial-final-block EOF, general byte truncate/extension, sparse files, or a general extent data model;
+- persisted hard-link counts, generic inode-orphan namespace reattachment, or recursive removal;
+- permissions, ACLs, mmap, FUSE, or broad POSIX compatibility;
 - stronger hardware fault models such as torn sectors or storage reordering.
 
 Those should be reopened only as separately specified, bounded milestones with their own invariants and crash model. Routine maintenance after this checkpoint should otherwise be patrol-driven: regressions, corruption acceptance, recovery/fsck disagreement, or another concrete correctness defect justify changes; repository activity by itself does not.

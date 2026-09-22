@@ -6,7 +6,7 @@ use crate::directory_table::load_directory_table;
 use crate::format::Superblock;
 use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
-use crate::journal_checkpoint::recover_journal_and_checkpoint;
+use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::path_lookup::{
     resolve_path_following_symlinks, resolve_path_without_following_final_symlink,
 };
@@ -43,7 +43,7 @@ pub fn metadata_at_path(
     superblock: &Superblock,
     path: &str,
 ) -> io::Result<PathMetadata> {
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let inode_id = resolve_path_following_symlinks(device, superblock, path)?;
     metadata_for_inode(device, superblock, inode_id)
 }
@@ -65,7 +65,7 @@ pub fn symlink_metadata_at_path(
     superblock: &Superblock,
     path: &str,
 ) -> io::Result<PathMetadata> {
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let inode_id = resolve_path_without_following_final_symlink(device, superblock, path)?;
     metadata_for_inode(device, superblock, inode_id)
 }
