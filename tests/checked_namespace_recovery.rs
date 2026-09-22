@@ -77,6 +77,8 @@ fn setup_root_with_bad_committed_wal() -> (MemoryDevice, Superblock, u64) {
             id: 1,
             kind: InodeKind::Directory,
             blocks: Vec::new(),
+        
+            byte_len: 0,
         }],
     )
     .unwrap();
@@ -121,6 +123,8 @@ fn assert_bad_wal_remains_unapplied(
             id: 1,
             kind: InodeKind::Directory,
             blocks: Vec::new(),
+        
+            byte_len: 0,
         }]
     );
     assert!(load_directory_table(device, &superblock)
