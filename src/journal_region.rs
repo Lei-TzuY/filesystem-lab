@@ -144,7 +144,15 @@ pub fn load_journal_image(
 
     let block_count = usize::try_from(superblock.journal_blocks)
         .map_err(|_| invalid_data("journal block count exceeds usize"))?;
-    for index in 0..block_count {
+    let mut first_block = [0_u8; BLOCK_SIZE];
+    device.read_block(superblock.journal_start, &mut first_block)?;
+    region[..BLOCK_SIZE].copy_from_slice(&first_block);
+
+    if is_v2_empty_anchor(&first_block)? {
+        return Ok(Vec::new());
+    }
+
+    for index in 1..block_count {
         let index_u64 =
             u64::try_from(index).map_err(|_| invalid_data("journal index exceeds u64"))?;
         let block = superblock
@@ -249,6 +257,44 @@ pub fn load_journal_image(
     let entries = decode_entries(&region[HEADER_SIZE..used])?;
     validate_entries(superblock, &entries)?;
     Ok(entries)
+}
+
+fn is_v2_empty_anchor(block: &[u8; BLOCK_SIZE]) -> io::Result<bool> {
+    if block[0..4] != REGION_MAGIC_V2
+        || u16::from_le_bytes([block[4], block[5]]) != REGION_VERSION_V2
+        || u16::from_le_bytes([block[STATE_OFFSET], block[STATE_OFFSET + 1]])
+            != REGION_STATE_EMPTY
+    {
+        return Ok(false);
+    }
+    if block[RESERVED_OFFSET..HEADER_SIZE]
+        .iter()
+        .any(|byte| *byte != 0)
+    {
+        return Err(invalid_data("journal region reserved bytes are non-zero"));
+    }
+    let payload_len = u64::from_le_bytes(
+        block[8..16]
+            .try_into()
+            .map_err(|_| invalid_data("journal payload length field is malformed"))?,
+    );
+    if payload_len != 0 {
+        return Err(invalid_data("empty journal anchor has a payload"));
+    }
+    if block[HEADER_SIZE..].iter().any(|byte| *byte != 0) {
+        return Err(invalid_data("empty journal anchor block padding is non-zero"));
+    }
+    let expected_checksum = u32::from_le_bytes(
+        block[CHECKSUM_OFFSET..CHECKSUM_OFFSET + 4]
+            .try_into()
+            .map_err(|_| invalid_data("journal region checksum field is malformed"))?,
+    );
+    let mut header = block[..HEADER_SIZE].to_vec();
+    header[CHECKSUM_OFFSET..CHECKSUM_OFFSET + 4].fill(0);
+    if crc32(&header) != expected_checksum {
+        return Err(invalid_data("journal empty-anchor checksum mismatch"));
+    }
+    Ok(true)
 }
 
 fn validate_region(device: &impl BlockDevice, superblock: Superblock) -> io::Result<()> {
