@@ -9,12 +9,8 @@ use support::CrashDevice;
 fn sample_entries(superblock: Superblock) -> Vec<JournalEntry> {
     let mut log = JournalLog::new();
     let txid = log.begin().unwrap();
-    log.write(
-        txid,
-        superblock.reserved_blocks(),
-        [0x6d; BLOCK_SIZE],
-    )
-    .unwrap();
+    log.write(txid, superblock.reserved_blocks(), [0x6d; BLOCK_SIZE])
+        .unwrap();
     log.commit(txid).unwrap();
     log.entries().to_vec()
 }
