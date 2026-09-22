@@ -72,6 +72,7 @@ fn explicit_directory_geometry_supports_namespace_beyond_default_capacity() {
         id: 1,
         kind: InodeKind::Directory,
         blocks: Vec::new(),
+        byte_len: 0,
     }];
     let mut entries = Vec::new();
     for index in 0_u64..80 {
@@ -80,6 +81,7 @@ fn explicit_directory_geometry_supports_namespace_beyond_default_capacity() {
             id: inode_id,
             kind: InodeKind::File,
             blocks: Vec::new(),
+            byte_len: 0,
         });
         entries.push(PersistedDirectoryEntry {
             parent: 1,
