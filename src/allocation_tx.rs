@@ -145,7 +145,9 @@ mod tests {
 
         assert_eq!(report.committed_transactions, 1);
         assert_eq!(report.home_writes, 1);
-        assert_eq!(device.flushes, flushes_before + 2);
+        // v2 publication crosses empty-anchor, staged-tail, and active-anchor barriers before
+        // replay crosses the home durability boundary.
+        assert_eq!(device.flushes, flushes_before + 4);
         let loaded = load_allocator(&mut device, &superblock).unwrap();
         assert!(!loaded.is_owned(first).unwrap());
         assert!(loaded.is_owned(second).unwrap());
