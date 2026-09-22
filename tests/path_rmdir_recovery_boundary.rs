@@ -29,6 +29,7 @@ fn setup() -> (CrashDevice, filesystem_lab::format::Superblock) {
             id: 1,
             kind: InodeKind::Directory,
             blocks: Vec::new(),
+            byte_len: 0,
         }],
     )
     .unwrap();
