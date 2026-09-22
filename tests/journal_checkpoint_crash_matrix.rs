@@ -11,11 +11,8 @@ use support::CrashDevice;
 fn prepared_committed_update_with(
     write_through: bool,
 ) -> (CrashDevice, Superblock, u64, [u8; BLOCK_SIZE]) {
-    let mut device = if write_through {
-        CrashDevice::new_write_through(32)
-    } else {
-        CrashDevice::new(32)
-    };
+    let mut device = CrashDevice::new(32);
+    device.write_through = write_through;
     let superblock = Superblock::with_journal_blocks(32, 2).unwrap();
     let home = superblock.reserved_blocks();
     let old = [0x11; BLOCK_SIZE];
