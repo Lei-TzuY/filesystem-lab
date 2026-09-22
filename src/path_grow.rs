@@ -138,9 +138,10 @@ pub fn resize_file_at_path_to_bytes_journaled(
         )),
     }
 }
+
 /// Atomically resizes one pathname-addressed regular file to an exact format-v6 block count.
 ///
-/// This is the bidirectional block-granular size-control surface for format v5. The pathname is
+/// This is the bidirectional block-granular compatibility surface for format v6. The pathname is
 /// resolved only after older committed WAL has been recovered by [`metadata_at_path`]. Growing
 /// delegates to [`grow_file_at_path_to_blocks_journaled`], which allocates newly owned zero-filled
 /// blocks. Shrinking delegates directly to [`truncate_file_to_blocks_journaled`], which releases
@@ -149,8 +150,8 @@ pub fn resize_file_at_path_to_bytes_journaled(
 /// The returned block vector describes the physical blocks whose ownership changed: newly allocated
 /// blocks for growth, or released trailing blocks for shrink. Equal-size requests are rejected so a
 /// successful call always corresponds to one durable size transition rather than an ambiguous
-/// no-op. Format v6 still has no persisted byte length, so this API does not define partial-block
-/// sparse holes or implicit partial-block allocation semantics.
+/// no-op. Exact-byte resize is provided separately; this block-count API does not create sparse
+/// holes or implicit partial-block allocation semantics.
 ///
 /// # Errors
 ///
