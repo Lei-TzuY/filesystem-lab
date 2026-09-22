@@ -1,6 +1,8 @@
 use std::io;
 
-use filesystem_lab::allocation_disk::{initialize_allocation_region, load_allocator, store_allocator};
+use filesystem_lab::allocation_disk::{
+    initialize_allocation_region, load_allocator, store_allocator,
+};
 use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
 use filesystem_lab::directory_table::{
@@ -79,7 +81,11 @@ fn format_with_journal(device: &mut MemoryDevice) -> Superblock {
     superblock
 }
 
-fn metadata_image(device: &mut MemoryDevice, superblock: &Superblock, block: u64) -> [u8; BLOCK_SIZE] {
+fn metadata_image(
+    device: &mut MemoryDevice,
+    superblock: &Superblock,
+    block: u64,
+) -> [u8; BLOCK_SIZE] {
     let mut data = [0; BLOCK_SIZE];
     device.read_block(block, &mut data).unwrap();
     assert!(
@@ -126,8 +132,12 @@ fn projects_a_committed_create_without_mutating_home_state() {
         superblock.inode_start,
         superblock.directory_start,
     ] {
-        log.write(txid, block, metadata_image(&mut desired, &superblock, block))
-            .unwrap();
+        log.write(
+            txid,
+            block,
+            metadata_image(&mut desired, &superblock, block),
+        )
+        .unwrap();
     }
     log.commit(txid).unwrap();
     store_journal_image(&mut device, superblock, log.entries()).unwrap();
