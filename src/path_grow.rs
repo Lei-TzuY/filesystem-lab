@@ -7,9 +7,7 @@ use crate::format::Superblock;
 use crate::inode::InodeKind;
 use crate::path_metadata::metadata_at_path;
 use crate::recovery::RecoveryReport;
-use crate::truncate_tx::{
-    truncate_file_to_blocks_journaled, truncate_file_to_bytes_journaled,
-};
+use crate::truncate_tx::{truncate_file_to_blocks_journaled, truncate_file_to_bytes_journaled};
 
 /// Atomically grows one regular file to a larger format-v6 logical-block count.
 ///
@@ -85,12 +83,7 @@ pub fn grow_file_at_path_to_bytes_journaled(
         ));
     }
 
-    grow_file_to_bytes_journaled(
-        device,
-        superblock,
-        metadata.inode_id,
-        target_bytes,
-    )
+    grow_file_to_bytes_journaled(device, superblock, metadata.inode_id, target_bytes)
 }
 
 /// Atomically resizes one pathname-addressed regular file to an exact byte EOF.
@@ -121,18 +114,12 @@ pub fn resize_file_at_path_to_bytes_journaled(
     }
 
     match target_bytes.cmp(&metadata.byte_len) {
-        Ordering::Greater => grow_file_to_bytes_journaled(
-            device,
-            superblock,
-            metadata.inode_id,
-            target_bytes,
-        ),
-        Ordering::Less => truncate_file_to_bytes_journaled(
-            device,
-            superblock,
-            metadata.inode_id,
-            target_bytes,
-        ),
+        Ordering::Greater => {
+            grow_file_to_bytes_journaled(device, superblock, metadata.inode_id, target_bytes)
+        }
+        Ordering::Less => {
+            truncate_file_to_bytes_journaled(device, superblock, metadata.inode_id, target_bytes)
+        }
         Ordering::Equal => Err(invalid_input(
             "pathname byte-resize target must differ from current EOF",
         )),
