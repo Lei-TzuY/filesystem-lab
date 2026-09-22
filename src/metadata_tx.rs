@@ -170,14 +170,12 @@ mod tests {
                 id: 1,
                 kind: InodeKind::Directory,
                 blocks: Vec::new(),
-            
                 byte_len: 0,
             },
             PersistedInode {
                 id: 2,
                 kind: InodeKind::File,
                 blocks: Vec::new(),
-            
                 byte_len: 0,
             },
         ];

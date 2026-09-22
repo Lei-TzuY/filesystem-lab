@@ -488,7 +488,6 @@ mod tests {
             id: 1,
             kind: InodeKind::File,
             blocks: vec![block],
-        
             byte_len: 0,
         }];
         assert_eq!(
@@ -502,7 +501,6 @@ mod tests {
                 id: 2,
                 kind: InodeKind::Directory,
                 blocks: vec![block],
-            
                 byte_len: 0,
             },
         ];
@@ -521,14 +519,12 @@ mod tests {
                 id: 1,
                 kind: InodeKind::Directory,
                 blocks: vec![],
-            
                 byte_len: 0,
             },
             PersistedInode {
                 id: 2,
                 kind: InodeKind::File,
                 blocks: vec![],
-            
                 byte_len: 0,
             },
         ];
@@ -565,14 +561,12 @@ mod tests {
             id: ROOT_INODE_ID,
             kind: InodeKind::Directory,
             blocks: vec![],
-        
             byte_len: 0,
         };
         let file = PersistedInode {
             id: 2,
             kind: InodeKind::File,
             blocks: vec![],
-        
             byte_len: 0,
         };
 
@@ -586,7 +580,6 @@ mod tests {
             id: ROOT_INODE_ID,
             kind: InodeKind::File,
             blocks: vec![],
-        
             byte_len: 0,
         }];
         assert!(audit_namespace(&invalid_root, &[])
@@ -614,14 +607,12 @@ mod tests {
                 id: ROOT_INODE_ID,
                 kind: InodeKind::Directory,
                 blocks: vec![],
-            
                 byte_len: 0,
             },
             PersistedInode {
                 id: 2,
                 kind: InodeKind::Directory,
                 blocks: vec![],
-            
                 byte_len: 0,
             },
         ];

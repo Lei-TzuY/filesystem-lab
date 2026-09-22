@@ -12,9 +12,7 @@ use crate::inode_table::load_inode_table;
 use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::recovery::RecoveryReport;
 use crate::symlink::read_symlink;
-use crate::truncate_tx::{
-    truncate_file_to_blocks_journaled, truncate_file_to_bytes_journaled,
-};
+use crate::truncate_tx::{truncate_file_to_blocks_journaled, truncate_file_to_bytes_journaled};
 
 pub const MAX_SYMLINK_EXPANSIONS: usize = 40;
 

@@ -136,7 +136,9 @@ impl PersistedInode {
             .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
         let tail_slack = current_capacity
             .checked_sub(current_byte_len)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "inode EOF exceeds capacity"))?;
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "inode EOF exceeds capacity")
+            })?;
 
         let displaced = self.blocks[range.clone()].to_vec();
         let mut candidate = self.blocks.clone();
@@ -159,14 +161,8 @@ impl PersistedInode {
             0
         };
 
-        validate_inode_fields(
-            self.id,
-            self.kind,
-            &candidate,
-            candidate_byte_len,
-            false,
-        )
-        .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+        validate_inode_fields(self.id, self.kind, &candidate, candidate_byte_len, false)
+            .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
         self.blocks = candidate;
         self.byte_len = candidate_byte_len;
         Ok(displaced)
@@ -213,11 +209,10 @@ pub fn encode_inode(inode: &PersistedInode) -> io::Result<Vec<u8>> {
             "inode block count exceeds codec limit",
         )
     })?;
-    let payload_len = inode
-        .blocks
-        .len()
-        .checked_mul(8)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "inode record size overflow"))?;
+    let payload_len =
+        inode.blocks.len().checked_mul(8).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "inode record size overflow")
+        })?;
     let total_len = INODE_RECORD_HEADER_LEN
         .checked_add(payload_len)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "inode record size overflow"))?;
