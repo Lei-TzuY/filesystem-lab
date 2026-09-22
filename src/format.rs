@@ -9,7 +9,7 @@ use crate::journal_region::initialize_journal_region;
 
 pub const SUPERBLOCK_BLOCK: u64 = 0;
 pub const SUPERBLOCK_MAGIC: [u8; 8] = *b"FSLABFS\0";
-pub const FORMAT_VERSION: u32 = 5;
+pub const FORMAT_VERSION: u32 = 6;
 pub const FORMAT_BLOCK_SIZE: u32 = 4096;
 pub const DEFAULT_JOURNAL_BLOCKS: u64 = 4;
 pub const DEFAULT_INODE_BLOCKS: u64 = 2;
@@ -44,7 +44,7 @@ pub struct Superblock {
 }
 
 impl Superblock {
-    /// Creates a version-5 superblock using the default metadata reservations.
+    /// Creates a version-6 superblock using the default metadata reservations.
     ///
     /// # Errors
     ///
@@ -58,7 +58,7 @@ impl Superblock {
         )
     }
 
-    /// Creates a version-5 superblock with an explicit journal reservation.
+    /// Creates a version-6 superblock with an explicit journal reservation.
     ///
     /// # Errors
     ///
@@ -72,7 +72,7 @@ impl Superblock {
         )
     }
 
-    /// Creates a version-5 superblock with explicit journal and inode reservations.
+    /// Creates a version-6 superblock with explicit journal and inode reservations.
     ///
     /// The default directory-table reservation is retained for compatibility with existing callers.
     ///
@@ -92,7 +92,7 @@ impl Superblock {
         )
     }
 
-    /// Creates a version-5 superblock with explicit journal, inode, and directory reservations.
+    /// Creates a version-6 superblock with explicit journal, inode, and directory reservations.
     ///
     /// Durable metadata occupies one deterministic prefix: superblock, journal, allocation image,
     /// inode table, then directory table. Allocation reservation length is derived from filesystem
@@ -227,12 +227,12 @@ impl Superblock {
         block
     }
 
-    /// Decodes and validates a version-5 superblock block.
+    /// Decodes and validates a version-6 superblock block.
     ///
     /// # Errors
     ///
     /// Returns `InvalidData` for unsupported versions, malformed geometry, or non-zero reserved
-    /// bytes. Version-4 images are intentionally not reinterpreted as version 5.
+    /// bytes. Version-4 images are intentionally not reinterpreted as version 6.
     pub fn decode(block: &[u8; BLOCK_SIZE]) -> io::Result<Self> {
         if block[MAGIC_OFFSET..MAGIC_OFFSET + SUPERBLOCK_MAGIC.len()] != SUPERBLOCK_MAGIC {
             return Err(invalid_data("invalid superblock magic"));
