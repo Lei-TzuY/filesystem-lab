@@ -517,9 +517,54 @@ mod tests {
             id: 9,
             kind: InodeKind::Symlink,
             blocks: vec![31],
+            byte_len: 0,
         };
         let encoded = encode_inode(&inode).unwrap();
         assert_eq!(decode_inode(&encoded).unwrap(), inode);
+    }
+
+    #[test]
+    fn round_trip_preserves_partial_regular_file_eof() {
+        let inode = PersistedInode::new_file_with_size(11, vec![41, 43], 5000).unwrap();
+
+        let encoded = encode_inode(&inode).unwrap();
+        let decoded = decode_inode(&encoded).unwrap();
+
+        assert_eq!(decoded, inode);
+        assert_eq!(decoded.byte_len, 5000);
+        assert_eq!(encoded.len(), INODE_RECORD_HEADER_LEN + 16);
+    }
+
+    #[test]
+    fn rejects_impossible_regular_file_eof() {
+        assert_eq!(
+            PersistedInode::new_file_with_size(11, vec![41], 0)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
+        );
+        assert_eq!(
+            PersistedInode::new_file_with_size(11, vec![41], BLOCK_SIZE_U64 + 1)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
+        );
+        assert_eq!(
+            PersistedInode::new_file_with_size(11, vec![41, 43], BLOCK_SIZE_U64)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
+        );
+    }
+
+    #[test]
+    fn block_range_mutation_preserves_partial_tail_offset() {
+        let mut inode = PersistedInode::new_file_with_size(11, vec![41, 43], 5000).unwrap();
+
+        inode.replace_block_range(0..0, &[47]).unwrap();
+
+        assert_eq!(inode.blocks, vec![47, 41, 43]);
+        assert_eq!(inode.byte_len, 5000 + BLOCK_SIZE_U64);
     }
 
     #[test]
@@ -543,6 +588,7 @@ mod tests {
             id: 3,
             kind: InodeKind::Directory,
             blocks: vec![9, 9],
+            byte_len: 0,
         };
         let error = encode_inode(&inode).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
