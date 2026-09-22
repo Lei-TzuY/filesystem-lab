@@ -126,6 +126,17 @@ fn audit_inode_ownership(
         }
     }
 
+    for block in reserved_blocks..superblock.total_blocks {
+        let allocated = allocator
+            .is_owned(block)
+            .map_err(|error| invalid_data_owned(error.to_string()))?;
+        if allocated && !owners.contains_key(&block) {
+            return Err(invalid_data_owned(format!(
+                "allocated block {block} has no inode owner"
+            )));
+        }
+    }
+
     Ok(referenced_blocks)
 }
 
