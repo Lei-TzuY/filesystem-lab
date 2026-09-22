@@ -77,7 +77,6 @@ fn directory_capacity_planner_persists_namespace_beyond_default_geometry() {
         id: 1,
         kind: InodeKind::Directory,
         blocks: Vec::new(),
-    
         byte_len: 0,
     }];
     let mut entries = Vec::new();
@@ -87,7 +86,6 @@ fn directory_capacity_planner_persists_namespace_beyond_default_geometry() {
             id: inode_id,
             kind: InodeKind::File,
             blocks: Vec::new(),
-        
             byte_len: 0,
         });
         let prefix = format!("file-{index:03}-");

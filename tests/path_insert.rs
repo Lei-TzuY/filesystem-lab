@@ -24,7 +24,12 @@ use support::CrashDevice;
 const INSERT_DATA: [[u8; BLOCK_SIZE]; 2] = [[0xa5; BLOCK_SIZE], [0x5a; BLOCK_SIZE]];
 
 fn inode(id: u64, kind: InodeKind, blocks: Vec<u64>) -> PersistedInode {
-    PersistedInode { id, kind, blocks, byte_len: 0 }
+    PersistedInode {
+        id,
+        kind,
+        blocks,
+        byte_len: 0,
+    }
 }
 
 fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {

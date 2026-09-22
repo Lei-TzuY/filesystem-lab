@@ -42,7 +42,6 @@ fn initialize_root(device: &mut CrashDevice, superblock: &Superblock) {
             id: 1,
             kind: InodeKind::Directory,
             blocks: Vec::new(),
-        
             byte_len: 0,
         }],
     )

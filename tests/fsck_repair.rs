@@ -16,7 +16,12 @@ use filesystem_lab::recovery::RecoveryReport;
 use support::CrashDevice;
 
 fn inode(id: u64, kind: InodeKind, blocks: Vec<u64>) -> PersistedInode {
-    PersistedInode { id, kind, blocks, byte_len: 0 }
+    PersistedInode {
+        id,
+        kind,
+        blocks,
+        byte_len: 0,
+    }
 }
 
 fn setup_with_orphan() -> (CrashDevice, Superblock, u64, u64) {

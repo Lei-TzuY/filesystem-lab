@@ -89,7 +89,6 @@ fn inode_table_remains_defensive_against_legacy_direct_literals() {
         id: 2,
         kind: InodeKind::File,
         blocks: vec![superblock.reserved_blocks(), superblock.reserved_blocks()],
-    
         byte_len: 0,
     };
 
