@@ -109,9 +109,8 @@ pub fn clone_file_to_path_journaled(
     if metadata.logical_blocks == 0 {
         create_empty_file_at_path_journaled(device, superblock, destination)
     } else {
-        let len = usize::try_from(metadata.byte_len).map_err(|_| {
-            invalid_input("pathname whole-file clone byte length exceeds usize")
-        })?;
+        let len = usize::try_from(metadata.byte_len)
+            .map_err(|_| invalid_input("pathname whole-file clone byte length exceeds usize"))?;
         let source_inode = resolve_path_following_symlinks(device, superblock, source)?;
         let snapshot = read_file_range(device, superblock, source_inode, 0, 0, len)?;
         let mut blocks = Vec::with_capacity(metadata.logical_blocks);
