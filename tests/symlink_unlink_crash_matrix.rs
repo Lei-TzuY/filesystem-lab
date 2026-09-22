@@ -26,6 +26,7 @@ fn root_inode() -> PersistedInode {
         kind: InodeKind::Directory,
         blocks: Vec::new(),
     }
+        byte_len: 0,
 }
 
 fn setup_link() -> (CrashDevice, Superblock, u64, u64) {
