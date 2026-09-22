@@ -109,29 +109,14 @@ fn partial_eof_is_observable_and_bounds_pathname_reads_and_writes() {
         io::ErrorKind::InvalidInput
     );
 
-    write_file_range_at_path_journaled(
-        &mut device,
-        &superblock,
-        "/file",
-        1,
-        900,
-        b"tail",
-    )
-    .unwrap();
+    write_file_range_at_path_journaled(&mut device, &superblock, "/file", 1, 900, b"tail").unwrap();
     let after_valid_write = read_file_blocks_at_path(&mut device, &superblock, "/file").unwrap();
     assert_eq!(&after_valid_write[4996..5000], b"tail");
 
     assert_eq!(
-        write_file_range_at_path_journaled(
-            &mut device,
-            &superblock,
-            "/file",
-            1,
-            900,
-            b"tails",
-        )
-        .unwrap_err()
-        .kind(),
+        write_file_range_at_path_journaled(&mut device, &superblock, "/file", 1, 900, b"tails",)
+            .unwrap_err()
+            .kind(),
         io::ErrorKind::InvalidInput
     );
     assert_eq!(
