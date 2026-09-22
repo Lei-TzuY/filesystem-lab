@@ -166,10 +166,7 @@ fn byte_len_to_block_count(target_bytes: u64) -> io::Result<usize> {
     })
 }
 
-fn validate_released_ownership(
-    allocator: &BlockAllocator,
-    released: &[u64],
-) -> io::Result<()> {
+fn validate_released_ownership(allocator: &BlockAllocator, released: &[u64]) -> io::Result<()> {
     for block in released {
         let owned = allocator
             .is_owned(*block)
