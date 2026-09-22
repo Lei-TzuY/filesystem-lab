@@ -2,7 +2,7 @@ use std::io;
 
 use crate::block::BlockDevice;
 use crate::format::Superblock;
-use crate::journal_checkpoint::recover_journal_and_checkpoint;
+use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::path_lookup::{read_symlink_at_path, resolve_path_following_symlinks};
 use crate::recovery::RecoveryReport;
 use crate::symlink::create_symlink_journaled;
@@ -27,7 +27,7 @@ pub fn create_symlink_at_path_journaled(
     target: &str,
 ) -> io::Result<(u64, RecoveryReport)> {
     let (parent_path, name) = split_destination(destination)?;
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
     create_symlink_journaled(device, superblock, parent, name, target)
 }
@@ -76,7 +76,7 @@ pub fn unlink_symlink_at_path_journaled(
     path: &str,
 ) -> io::Result<RecoveryReport> {
     let (parent_path, name) = split_destination(path)?;
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
     unlink_symlink_journaled(device, superblock, parent, name)
 }
