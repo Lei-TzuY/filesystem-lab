@@ -73,14 +73,7 @@ pub fn write_file_block_range_journaled(
             "partial file-data write must be non-empty and stay within one block",
         ));
     }
-    write_file_range_journaled(
-        device,
-        superblock,
-        inode_id,
-        file_block_index,
-        offset,
-        data,
-    )
+    write_file_range_journaled(device, superblock, inode_id, file_block_index, offset, data)
 }
 
 /// Atomically writes a byte range across one or more already-existing logical file blocks.
@@ -129,7 +122,12 @@ pub fn write_file_range_journaled(
     let inode = inodes
         .iter()
         .find(|inode| inode.id == inode_id)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "file-data target inode is missing"))?;
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "file-data target inode is missing",
+            )
+        })?;
     if inode.kind != InodeKind::File {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
