@@ -45,7 +45,7 @@ For every crash-tested lifecycle operation:
 
 The current fault model enumerates whole-block writes and flush boundaries. It does not claim to model sector tearing, controller reordering, or partial-block writes.
 
-Since the original v5 checkpoint, the executable surface has expanded beyond the initial lifecycle table: journal checkpoint/clearing, hard links, symbolic links, rename overwrite/exchange families, block-granular file range operations, strict bidirectional allocator/inode ownership checks, bounded orphan-allocation repair, and read-only semantic recovery projection are now implemented and covered by the repository's integration gates. High-level regular-file and metadata pathname operations additionally use fail-closed checked recovery so a structurally valid WAL that projects to an inconsistent complete filesystem is rejected before home replay.
+Since the original v5 checkpoint, the executable surface has expanded beyond the initial lifecycle table: journal checkpoint/clearing, hard links, symbolic links, rename overwrite/exchange families, block-granular file range operations, strict bidirectional allocator/inode ownership checks, bounded orphan-allocation repair, and read-only semantic recovery projection are now implemented and covered by the repository's integration gates. High-level regular-file, metadata, and namespace pathname operations additionally use fail-closed checked recovery so a structurally valid WAL that projects to an inconsistent complete filesystem is rejected before home replay. Namespace coverage includes create variants, directory observation, hard-link/symlink lifecycle, rename dispatch/overwrite/exchange, and unlink/rmdir surfaces.
 
 ## Consolidated transaction-image boundary
 
