@@ -5,12 +5,13 @@ use crate::block::BlockDevice;
 use crate::directory_table::initialize_directory_table_region;
 use crate::format::{Superblock, SUPERBLOCK_BLOCK};
 use crate::inode_table::initialize_inode_table_region;
+use crate::journal_region::initialize_journal_region;
 
-/// Writes a fresh format-v5 filesystem using an explicit journal reservation.
+/// Writes a fresh format-v6 filesystem using an explicit journal reservation.
 ///
-/// This preserves the version-5 on-disk layout while allowing callers to reserve enough WAL space
+/// This preserves the version-6 on-disk layout while allowing callers to reserve enough WAL space
 /// for bounded transactions whose complete redo image exceeds the default journal geometry.
-/// Allocation, inode, and directory regions are initialized before the superblock is published.
+/// Journal, allocation, inode, and directory regions are initialized before the superblock is published.
 ///
 /// # Errors
 ///
@@ -29,13 +30,14 @@ pub fn format_device_with_journal_blocks(
     )
 }
 
-/// Writes a fresh format-v5 filesystem using explicit journal, inode, and directory reservations.
+/// Writes a fresh format-v6 filesystem using explicit journal, inode, and directory reservations.
 ///
-/// This is the format-time entry point for bounded namespace scaling experiments. The persisted v5
+/// This is the format-time entry point for bounded namespace scaling experiments. The persisted v6
 /// superblock already carries all three reservation lengths; exposing them here lets callers create
 /// larger inode or directory tables without manually publishing partially initialized geometry.
-/// Allocation, inode, and directory regions are initialized before block zero is written, preserving
-/// the existing metadata-prefix publication rule.
+/// Journal, allocation, inode, and directory regions are initialized before block zero is written,
+/// preserving the existing metadata-prefix publication rule and preventing stale WAL bytes from
+/// surviving a successful reformat.
 ///
 /// # Errors
 ///
@@ -54,6 +56,7 @@ pub fn format_device_with_metadata_blocks(
         inode_blocks,
         directory_blocks,
     )?;
+    initialize_journal_region(device, superblock)?;
     initialize_allocation_region(device, &superblock)?;
     initialize_inode_table_region(device, &superblock)?;
     initialize_directory_table_region(device, &superblock)?;
