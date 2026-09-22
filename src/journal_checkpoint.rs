@@ -66,10 +66,11 @@ pub fn recover_journal_and_checkpoint(
 ///
 /// This higher-level boundary is for callers that require a complete filesystem state rather than a
 /// low-level table transaction. It first verifies that the supplied superblock matches block zero,
-/// then runs strict fsck against the in-memory post-replay projection. If that projected state is
-/// inconsistent, the operation returns before issuing any home write or checkpoint mutation.
+/// then inspects the durable journal. An already empty journal is a no-op. Otherwise strict fsck
+/// runs against the in-memory post-replay projection before any home write or checkpoint mutation.
 ///
-/// Once the projection is valid, the ordinary recovery/checkpoint path performs the durable replay.
+/// Once a non-empty journal projection is valid, the ordinary recovery/checkpoint path performs the
+/// durable replay.
 /// The actual recovery report must match the preflight plan, and strict fsck must accept the final
 /// checkpointed home state before success is reported.
 ///
@@ -88,6 +89,10 @@ pub fn recover_journal_and_checkpoint_checked(
             io::ErrorKind::InvalidInput,
             "checked recovery superblock does not match durable filesystem superblock",
         ));
+    }
+
+    if load_journal_image(device, superblock)?.is_empty() {
+        return Ok(RecoveryReport::default());
     }
 
     let projected = check_device_after_recovery_projection(device)?;
