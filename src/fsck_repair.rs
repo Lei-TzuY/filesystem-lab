@@ -30,8 +30,8 @@ pub struct OrphanAllocationRepairReport {
 ///
 /// # Errors
 ///
-/// Returns InvalidInput when the supplied superblock does not match the durable superblock or when
-/// the bounded journal cannot contain the repaired allocator image. Returns InvalidData for any
+/// Returns `InvalidInput` when the supplied superblock does not match the durable superblock or when
+/// the bounded journal cannot contain the repaired allocator image. Returns `InvalidData` for any
 /// corruption other than unreferenced allocated data blocks, allocator/freeing disagreement,
 /// an inconsistent repair transaction/checkpoint result, or a post-repair fsck failure. Recovery,
 /// journal, checkpoint, and block-device I/O failures are propagated.
