@@ -106,14 +106,12 @@ fn accepts_inode_references_that_match_durable_allocation() {
                 id: 1,
                 kind: InodeKind::Directory,
                 blocks: vec![],
-            
                 byte_len: 0,
             },
             PersistedInode {
                 id: 2,
                 kind: InodeKind::File,
                 blocks: vec![block],
-            
                 byte_len: 0,
             },
         ],
@@ -171,14 +169,12 @@ fn accepts_durable_namespace_with_existing_directory_parent_and_target() {
                 id: 1,
                 kind: InodeKind::Directory,
                 blocks: vec![],
-            
                 byte_len: 0,
             },
             PersistedInode {
                 id: 2,
                 kind: InodeKind::File,
                 blocks: vec![],
-            
                 byte_len: 0,
             },
         ],
@@ -216,7 +212,6 @@ fn rejects_directory_entry_with_missing_parent() {
             id: 2,
             kind: InodeKind::File,
             blocks: vec![],
-        
             byte_len: 0,
         }],
     )
@@ -248,7 +243,6 @@ fn rejects_directory_entry_with_missing_target() {
             id: 1,
             kind: InodeKind::Directory,
             blocks: vec![],
-        
             byte_len: 0,
         }],
     )
@@ -281,14 +275,12 @@ fn rejects_directory_entry_whose_parent_is_not_a_directory() {
                 id: 1,
                 kind: InodeKind::File,
                 blocks: vec![],
-            
                 byte_len: 0,
             },
             PersistedInode {
                 id: 2,
                 kind: InodeKind::File,
                 blocks: vec![],
-            
                 byte_len: 0,
             },
         ],
@@ -319,14 +311,12 @@ fn rejects_nonempty_inode_table_without_directory_root() {
             id: 2,
             kind: InodeKind::File,
             blocks: vec![],
-        
             byte_len: 0,
         }],
         vec![PersistedInode {
             id: 1,
             kind: InodeKind::File,
             blocks: vec![],
-        
             byte_len: 0,
         }],
     ] {
@@ -352,14 +342,12 @@ fn rejects_unreachable_inode_from_root() {
                 id: 1,
                 kind: InodeKind::Directory,
                 blocks: vec![],
-            
                 byte_len: 0,
             },
             PersistedInode {
                 id: 2,
                 kind: InodeKind::File,
                 blocks: vec![],
-            
                 byte_len: 0,
             },
         ],
@@ -385,14 +373,12 @@ fn rejects_directory_cycle_even_when_all_inodes_are_reachable() {
                 id: 1,
                 kind: InodeKind::Directory,
                 blocks: vec![],
-            
                 byte_len: 0,
             },
             PersistedInode {
                 id: 2,
                 kind: InodeKind::Directory,
                 blocks: vec![],
-            
                 byte_len: 0,
             },
         ],
@@ -432,7 +418,6 @@ fn rejects_inode_reference_to_unallocated_block() {
             id: 7,
             kind: InodeKind::File,
             blocks: vec![superblock.reserved_blocks()],
-        
             byte_len: 0,
         }],
     )
@@ -459,14 +444,12 @@ fn rejects_cross_inode_double_ownership() {
                 id: 1,
                 kind: InodeKind::File,
                 blocks: vec![block],
-            
                 byte_len: 0,
             },
             PersistedInode {
                 id: 2,
                 kind: InodeKind::Directory,
                 blocks: vec![block],
-            
                 byte_len: 0,
             },
         ],
@@ -490,7 +473,6 @@ fn rejects_reserved_and_out_of_range_inode_references() {
                 id: 3,
                 kind: InodeKind::File,
                 blocks: vec![bad_block],
-            
                 byte_len: 0,
             }],
         )

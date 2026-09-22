@@ -74,7 +74,6 @@ fn publish_root_inode(device: &mut MemoryDevice, superblock: Superblock) {
         id: 1,
         kind: InodeKind::Directory,
         blocks: Vec::new(),
-    
         byte_len: 0,
     };
     store_inode_table(&mut desired, &superblock, std::slice::from_ref(&root)).unwrap();
@@ -131,7 +130,6 @@ fn checked_recovery_installs_valid_projection_and_checkpoints() {
             id: 1,
             kind: InodeKind::Directory,
             blocks: Vec::new(),
-        
             byte_len: 0,
         }]
     );
