@@ -169,6 +169,7 @@ fn prepare_mapping(
             .free(*block)
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     }
-    inode.blocks.splice(start..end, new_blocks.iter().copied());
+    let replaced = inode.replace_block_range(start..end, &new_blocks)?;
+    debug_assert_eq!(replaced, displaced_blocks);
     Ok((new_blocks, displaced_blocks))
 }
