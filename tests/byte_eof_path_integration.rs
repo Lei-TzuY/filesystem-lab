@@ -154,8 +154,7 @@ fn whole_file_operations_preserve_partial_eof_semantics() {
         &[[0x33; BLOCK_SIZE]],
     )
     .unwrap();
-    exchange_complete_files_at_path_journaled(&mut device, &superblock, "/file", "/other")
-        .unwrap();
+    exchange_complete_files_at_path_journaled(&mut device, &superblock, "/file", "/other").unwrap();
 
     assert_eq!(
         metadata_at_path(&mut device, &superblock, "/other")
