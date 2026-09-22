@@ -38,6 +38,7 @@ pub mod format;
 pub mod format_capacity;
 pub mod format_geometry;
 pub mod fsck;
+pub mod fsck_repair;
 pub mod hard_link_tx;
 pub mod hard_unlink_tx;
 pub mod inode;
