@@ -1,11 +1,12 @@
 use std::io;
 use std::ops::Range;
 
+use crate::block::BLOCK_SIZE_U64;
 use crate::inode::{Inode, InodeKind};
 
 pub const INODE_RECORD_MAGIC: [u8; 4] = *b"INO1";
-pub const INODE_RECORD_VERSION: u16 = 2;
-pub const INODE_RECORD_HEADER_LEN: usize = 32;
+pub const INODE_RECORD_VERSION: u16 = 3;
+pub const INODE_RECORD_HEADER_LEN: usize = 40;
 
 const KIND_FILE: u16 = 1;
 const KIND_DIRECTORY: u16 = 2;
@@ -16,55 +17,108 @@ const KIND_OFFSET: usize = 6;
 const TOTAL_LEN_OFFSET: usize = 8;
 const INODE_ID_OFFSET: usize = 12;
 const BLOCK_COUNT_OFFSET: usize = 20;
-const CRC_OFFSET: usize = 24;
-const RESERVED_OFFSET: usize = 28;
+const BYTE_LEN_OFFSET: usize = 24;
+const CRC_OFFSET: usize = 32;
+const RESERVED_OFFSET: usize = 36;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct PersistedInode {
     pub id: u64,
     pub kind: InodeKind,
     pub blocks: Vec<u64>,
+    /// Exact regular-file EOF in bytes.
+    ///
+    /// New production values and decoded v3 records are canonical. A zero value on a non-empty
+    /// regular file is accepted only as an in-memory compatibility shorthand for older direct
+    /// struct literals and is canonicalized to full block capacity before persistence.
+    pub byte_len: u64,
 }
+
+impl PartialEq for PersistedInode {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.kind == other.kind
+            && self.blocks == other.blocks
+            && self.canonical_byte_len().ok() == other.canonical_byte_len().ok()
+    }
+}
+
+impl Eq for PersistedInode {}
 
 impl PersistedInode {
     /// Constructs one persistence-safe inode value.
     ///
-    /// This is the production construction boundary for durable inode records. Keeping creation
-    /// behind one invariant gate allows future record revisions to add persisted fields without
-    /// duplicating validation policy across pathname and lifecycle code.
+    /// Regular files created through this compatibility constructor use their complete logical-block
+    /// capacity as EOF. Directory and symlink records use byte length zero.
     ///
     /// # Errors
     ///
-    /// Returns `InvalidInput` when the inode identifier is zero or the block vector contains a
-    /// duplicate physical block reference.
+    /// Returns `InvalidInput` when the inode identifier is zero, block references are duplicated,
+    /// or the derived regular-file size overflows.
     pub fn new(id: u64, kind: InodeKind, blocks: Vec<u64>) -> io::Result<Self> {
-        validate_inode_fields(id, &blocks)
+        let byte_len = default_byte_len(kind, &blocks)
             .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
-        Ok(Self { id, kind, blocks })
+        validate_inode_fields(id, kind, &blocks, byte_len, false)
+            .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+        Ok(Self {
+            id,
+            kind,
+            blocks,
+            byte_len,
+        })
+    }
+
+    /// Constructs a regular-file inode with an exact persisted EOF.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidInput` when the identifier or block mapping is invalid, when a zero-block
+    /// file has non-zero size, or when EOF does not lie inside the final referenced block.
+    pub fn new_file_with_size(id: u64, blocks: Vec<u64>, byte_len: u64) -> io::Result<Self> {
+        validate_inode_fields(id, InodeKind::File, &blocks, byte_len, false)
+            .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+        Ok(Self {
+            id,
+            kind: InodeKind::File,
+            blocks,
+            byte_len,
+        })
+    }
+
+    /// Returns the canonical exact byte length represented by this inode.
+    ///
+    /// The zero-on-nonempty compatibility shorthand is normalized to full block capacity here.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidInput` when durable inode invariants are invalid.
+    pub fn canonical_byte_len(&self) -> io::Result<u64> {
+        validate_inode_fields(self.id, self.kind, &self.blocks, self.byte_len, true)
+            .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))
     }
 
     /// Validates invariants that must hold before an inode can be encoded durably.
     ///
     /// # Errors
     ///
-    /// Returns `InvalidInput` for an invalid identifier or duplicate block references.
+    /// Returns `InvalidInput` for an invalid identifier, duplicate block references, or an invalid
+    /// regular-file EOF.
     pub fn validate_for_persistence(&self) -> io::Result<()> {
-        validate_inode_fields(self.id, &self.blocks)
-            .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))
+        self.canonical_byte_len().map(|_| ())
     }
 
-    /// Replaces one logical block range while preserving durable inode invariants.
+    /// Replaces one logical block range while preserving durable inode invariants and EOF position.
     ///
-    /// The mutation is prepared on a candidate vector and committed to `self.blocks` only after
-    /// the complete resulting mapping validates. This makes block-count-changing operations share
-    /// one mutation boundary instead of editing the public compatibility vector in place.
+    /// Block-granular insert/remove operations preserve the current unused tail length in the final
+    /// block. Equal-length replacements therefore preserve EOF exactly; inserting or removing whole
+    /// blocks shifts EOF by the same whole-block byte count.
     ///
     /// The returned vector contains the displaced blocks in logical order.
     ///
     /// # Errors
     ///
-    /// Returns `InvalidInput` when the range is reversed or outside the current block vector, or
-    /// when the resulting mapping would contain duplicate physical block references.
+    /// Returns `InvalidInput` when the range is reversed or outside the current block vector, the
+    /// resulting mapping contains duplicate block references, or byte-length arithmetic overflows.
     pub fn replace_block_range(
         &mut self,
         range: Range<usize>,
@@ -77,44 +131,93 @@ impl PersistedInode {
             ));
         }
 
+        let current_byte_len = self.canonical_byte_len()?;
+        let current_capacity = block_capacity(&self.blocks)
+            .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+        let tail_slack = current_capacity
+            .checked_sub(current_byte_len)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "inode EOF exceeds capacity"))?;
+
         let displaced = self.blocks[range.clone()].to_vec();
         let mut candidate = self.blocks.clone();
         candidate.splice(range, replacements.iter().copied());
-        validate_inode_fields(self.id, &candidate)
-            .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+
+        let candidate_byte_len = if self.kind == InodeKind::File {
+            if candidate.is_empty() {
+                0
+            } else {
+                let capacity = block_capacity(&candidate)
+                    .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+                capacity.checked_sub(tail_slack).ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "inode block mutation cannot preserve EOF tail offset",
+                    )
+                })?
+            }
+        } else {
+            0
+        };
+
+        validate_inode_fields(
+            self.id,
+            self.kind,
+            &candidate,
+            candidate_byte_len,
+            false,
+        )
+        .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
         self.blocks = candidate;
+        self.byte_len = candidate_byte_len;
         Ok(displaced)
+    }
+
+    /// Sets an exact regular-file EOF without changing the block mapping.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidInput` for non-file inodes or an EOF not representable by the current
+    /// non-sparse block mapping.
+    pub fn set_file_byte_len(&mut self, byte_len: u64) -> io::Result<()> {
+        if self.kind != InodeKind::File {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "only regular files have byte EOF",
+            ));
+        }
+        validate_inode_fields(self.id, self.kind, &self.blocks, byte_len, false)
+            .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+        self.byte_len = byte_len;
+        Ok(())
     }
 }
 
 impl From<&Inode> for PersistedInode {
     fn from(inode: &Inode) -> Self {
-        Self {
-            id: inode.id().get(),
-            kind: inode.kind(),
-            blocks: inode.blocks().to_vec(),
-        }
+        Self::new(inode.id().get(), inode.kind(), inode.blocks().to_vec())
+            .expect("validated in-memory inode converts to persisted inode")
     }
 }
 
-/// Encodes one inode into a self-delimiting, checksummed little-endian record.
+/// Encodes one inode into a self-delimiting, checksummed little-endian version-3 record.
 ///
 /// # Errors
 ///
-/// Returns `InvalidInput` when the inode identifier is zero, the block count cannot fit in the
-/// record header, the encoded length overflows, or the same block is referenced more than once.
+/// Returns `InvalidInput` when inode invariants fail, the block count cannot fit in the record
+/// header, or encoded-length arithmetic overflows.
 pub fn encode_inode(inode: &PersistedInode) -> io::Result<Vec<u8>> {
-    inode.validate_for_persistence()?;
+    let byte_len = inode.canonical_byte_len()?;
     let block_count = u32::try_from(inode.blocks.len()).map_err(|_| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
             "inode block count exceeds codec limit",
         )
     })?;
-    let payload_len =
-        inode.blocks.len().checked_mul(8).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "inode record size overflow")
-        })?;
+    let payload_len = inode
+        .blocks
+        .len()
+        .checked_mul(8)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "inode record size overflow"))?;
     let total_len = INODE_RECORD_HEADER_LEN
         .checked_add(payload_len)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "inode record size overflow"))?;
@@ -132,6 +235,7 @@ pub fn encode_inode(inode: &PersistedInode) -> io::Result<Vec<u8>> {
     bytes[TOTAL_LEN_OFFSET..TOTAL_LEN_OFFSET + 4].copy_from_slice(&total_len_u32.to_le_bytes());
     bytes[INODE_ID_OFFSET..INODE_ID_OFFSET + 8].copy_from_slice(&inode.id.to_le_bytes());
     bytes[BLOCK_COUNT_OFFSET..BLOCK_COUNT_OFFSET + 4].copy_from_slice(&block_count.to_le_bytes());
+    bytes[BYTE_LEN_OFFSET..BYTE_LEN_OFFSET + 8].copy_from_slice(&byte_len.to_le_bytes());
 
     for (index, block) in inode.blocks.iter().enumerate() {
         let offset = INODE_RECORD_HEADER_LEN + index * 8;
@@ -143,13 +247,13 @@ pub fn encode_inode(inode: &PersistedInode) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
-/// Decodes and validates exactly one inode record.
+/// Decodes and validates exactly one version-3 inode record.
 ///
 /// # Errors
 ///
-/// Returns `UnexpectedEof` for a torn header or payload and `InvalidData` for bad magic, version,
-/// kind, reserved fields, inconsistent lengths, checksum mismatch, inode id zero, or duplicate block
-/// references.
+/// Returns `UnexpectedEof` for a torn header or payload and `InvalidData` for bad magic/version,
+/// kind, reserved fields, inconsistent lengths, checksum mismatch, inode id zero, duplicate block
+/// references, or an impossible byte EOF.
 pub fn decode_inode(bytes: &[u8]) -> io::Result<PersistedInode> {
     if bytes.len() < INODE_RECORD_HEADER_LEN {
         return Err(io::Error::new(
@@ -229,28 +333,83 @@ pub fn decode_inode(bytes: &[u8]) -> io::Result<PersistedInode> {
             ))
         }
     };
+    let byte_len = read_u64(bytes, BYTE_LEN_OFFSET);
 
     let mut blocks = Vec::with_capacity(block_count);
     for index in 0..block_count {
         let offset = INODE_RECORD_HEADER_LEN + index * 8;
         blocks.push(read_u64(bytes, offset));
     }
-    validate_inode_fields(id, &blocks)
+    validate_inode_fields(id, kind, &blocks, byte_len, false)
         .map_err(|message| io::Error::new(io::ErrorKind::InvalidData, message))?;
 
-    Ok(PersistedInode { id, kind, blocks })
+    Ok(PersistedInode {
+        id,
+        kind,
+        blocks,
+        byte_len,
+    })
 }
 
-fn validate_inode_fields(id: u64, blocks: &[u64]) -> Result<(), &'static str> {
+fn default_byte_len(kind: InodeKind, blocks: &[u64]) -> Result<u64, &'static str> {
+    if kind == InodeKind::File {
+        block_capacity(blocks)
+    } else {
+        Ok(0)
+    }
+}
+
+fn block_capacity(blocks: &[u64]) -> Result<u64, &'static str> {
+    let count = u64::try_from(blocks.len()).map_err(|_| "inode block count exceeds u64")?;
+    count
+        .checked_mul(BLOCK_SIZE_U64)
+        .ok_or("inode byte capacity overflow")
+}
+
+fn validate_inode_fields(
+    id: u64,
+    kind: InodeKind,
+    blocks: &[u64],
+    byte_len: u64,
+    allow_full_capacity_sentinel: bool,
+) -> Result<u64, &'static str> {
     if id == 0 {
         return Err("inode identifier zero is reserved");
     }
+
     let mut sorted = blocks.to_vec();
     sorted.sort_unstable();
     if sorted.windows(2).any(|pair| pair[0] == pair[1]) {
         return Err("inode record contains duplicate block references");
     }
-    Ok(())
+
+    if kind != InodeKind::File {
+        if byte_len != 0 {
+            return Err("non-file inode byte length must be zero");
+        }
+        return Ok(0);
+    }
+
+    let capacity = block_capacity(blocks)?;
+    if blocks.is_empty() {
+        if byte_len != 0 {
+            return Err("zero-block regular file must have zero byte length");
+        }
+        return Ok(0);
+    }
+
+    let canonical = if byte_len == 0 && allow_full_capacity_sentinel {
+        capacity
+    } else {
+        byte_len
+    };
+    if canonical == 0 || canonical > capacity {
+        return Err("regular-file byte length exceeds block capacity");
+    }
+    if canonical <= capacity - BLOCK_SIZE_U64 {
+        return Err("regular-file EOF must lie inside its final referenced block");
+    }
+    Ok(canonical)
 }
 
 const fn kind_code(kind: InodeKind) -> u16 {
