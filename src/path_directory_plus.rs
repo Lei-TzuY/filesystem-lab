@@ -17,6 +17,7 @@ pub struct PathDirectoryEntryMetadata {
     pub inode_id: u64,
     pub kind: InodeKind,
     pub logical_blocks: usize,
+    pub byte_len: u64,
     pub namespace_references: usize,
 }
 
@@ -36,9 +37,8 @@ pub struct PathDirectoryMetadataPage {
 /// than followed. `namespace_references` is derived from the complete durable directory table, so
 /// hard-linked files and symlinks expose their exact persisted reference count for this snapshot.
 ///
-/// Format v5 does not persist byte length, uid/gid, permissions, timestamps, or a stored link-count
-/// field. This API deliberately reports only metadata that can be derived truthfully from durable v5
-/// state and does not change the on-disk format.
+/// Format v6 persists exact regular-file EOF in `byte_len`. Directory and symlink inode metadata
+/// report zero here; permissions, timestamps, uid/gid, and stored link counts remain undefined.
 ///
 /// # Errors
 ///
@@ -204,6 +204,9 @@ fn enumerate_directory_with_metadata(
             inode_id: entry.target,
             kind: target.kind,
             logical_blocks: target.blocks.len(),
+            byte_len: target
+                .canonical_byte_len()
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error.to_string()))?,
             namespace_references,
         });
     }
@@ -221,6 +224,7 @@ mod tests {
             id,
             kind,
             blocks: blocks.to_vec(),
+            byte_len: 0,
         }
     }
 
@@ -230,6 +234,7 @@ mod tests {
             inode_id,
             kind: InodeKind::File,
             logical_blocks: 0,
+            byte_len: 0,
             namespace_references: 1,
         }
     }
@@ -267,6 +272,7 @@ mod tests {
                     inode_id: 2,
                     kind: InodeKind::File,
                     logical_blocks: 2,
+                    byte_len: 8192,
                     namespace_references: 2,
                 },
                 PathDirectoryEntryMetadata {
@@ -274,6 +280,7 @@ mod tests {
                     inode_id: 3,
                     kind: InodeKind::Directory,
                     logical_blocks: 0,
+                    byte_len: 0,
                     namespace_references: 1,
                 },
             ]
