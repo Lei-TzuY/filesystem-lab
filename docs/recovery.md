@@ -27,7 +27,9 @@ The journal-region loader validates checksums, record framing, transaction order
 
 Recovery is designed to converge idempotently: repeated replay of a retained committed journal writes identical full-block images, and once checkpoint has durably cleared the journal, another recover-and-checkpoint pass is a no-op.
 
-Read-only fsck remains independent of recovery and checks the post-recovery allocation/inode/namespace invariants. Deterministic crash tests exercise create, unlink, rename, truncate-to-zero, file-block overwrite, and journal checkpoint boundaries.
+Read-only fsck remains independent of mutating recovery. `recovery_projection::check_device_after_recovery_projection` now overlays only committed WAL home writes in memory and runs strict fsck against that projected state without issuing a device write or flush. The projection reuses the same recovery-plan interpreter as real replay, so incomplete tails are ignored identically and later committed writes to the same home block win in the same order. This allows structurally valid but semantically inconsistent committed WAL to be detected before a caller chooses to mutate home locations.
+
+Deterministic crash tests exercise create, unlink, rename, truncate-to-zero, file-block overwrite, and journal checkpoint boundaries.
 
 ## Current limits
 
