@@ -95,7 +95,8 @@ pub fn replace_file_blocks_journaled(
             .free(*block)
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     }
-    inode.blocks.splice(start..end, new_blocks.iter().copied());
+    let replaced = inode.replace_block_range(start..end, &new_blocks)?;
+    debug_assert_eq!(replaced, displaced_blocks);
 
     let mut capture = CaptureDevice::new(superblock.total_blocks);
     store_allocator(&mut capture, superblock, &allocator)?;
