@@ -149,19 +149,28 @@ pub fn load_journal_image(
     superblock: Superblock,
 ) -> io::Result<Vec<JournalEntry>> {
     validate_region(device, superblock)?;
-    let capacity = region_capacity(superblock)?;
-    let mut region = vec![0_u8; capacity];
 
-    let block_count = usize::try_from(superblock.journal_blocks)
-        .map_err(|_| invalid_data("journal block count exceeds usize"))?;
     let mut first_block = [0_u8; BLOCK_SIZE];
     device.read_block(superblock.journal_start, &mut first_block)?;
-    region[..BLOCK_SIZE].copy_from_slice(&first_block);
-
     if is_v2_empty_anchor(&first_block)? {
         return Ok(Vec::new());
     }
 
+    let region = read_complete_journal_region(device, superblock, &first_block)?;
+    decode_journal_region(superblock, &region)
+}
+
+fn read_complete_journal_region(
+    device: &mut impl BlockDevice,
+    superblock: Superblock,
+    first_block: &[u8; BLOCK_SIZE],
+) -> io::Result<Vec<u8>> {
+    let capacity = region_capacity(superblock)?;
+    let mut region = vec![0_u8; capacity];
+    region[..BLOCK_SIZE].copy_from_slice(first_block);
+
+    let block_count = usize::try_from(superblock.journal_blocks)
+        .map_err(|_| invalid_data("journal block count exceeds usize"))?;
     for index in 1..block_count {
         let index_u64 =
             u64::try_from(index).map_err(|_| invalid_data("journal index exceeds u64"))?;
@@ -179,7 +188,13 @@ pub fn load_journal_image(
         device.read_block(block, &mut block_data)?;
         region[start..end].copy_from_slice(&block_data);
     }
+    Ok(region)
+}
 
+fn decode_journal_region(
+    superblock: Superblock,
+    region: &[u8],
+) -> io::Result<Vec<JournalEntry>> {
     if region.iter().all(|byte| *byte == 0) {
         return Ok(Vec::new());
     }
@@ -210,45 +225,21 @@ pub fn load_journal_image(
                 return Err(invalid_data("unsupported journal region v1 flags"));
             }
         }
-        (REGION_MAGIC_V2, REGION_VERSION_V2) => match state {
-            REGION_STATE_EMPTY => {
-                if payload_len != 0 {
-                    return Err(invalid_data("empty journal anchor has a payload"));
-                }
-                if region[HEADER_SIZE..BLOCK_SIZE]
-                    .iter()
-                    .any(|byte| *byte != 0)
-                {
-                    return Err(invalid_data(
-                        "empty journal anchor block padding is non-zero",
-                    ));
-                }
-                let expected_checksum = u32::from_le_bytes(
-                    region[CHECKSUM_OFFSET..CHECKSUM_OFFSET + 4]
-                        .try_into()
-                        .map_err(|_| invalid_data("journal region checksum field is malformed"))?,
-                );
-                let mut header = region[..HEADER_SIZE].to_vec();
-                header[CHECKSUM_OFFSET..CHECKSUM_OFFSET + 4].fill(0);
-                if crc32(&header) != expected_checksum {
-                    return Err(invalid_data("journal empty-anchor checksum mismatch"));
-                }
-                return Ok(Vec::new());
+        (REGION_MAGIC_V2, REGION_VERSION_V2) => {
+            if state != REGION_STATE_ACTIVE {
+                return Err(invalid_data("unsupported journal region v2 state"));
             }
-            REGION_STATE_ACTIVE => {
-                if payload_len == 0 {
-                    return Err(invalid_data("active journal anchor has an empty payload"));
-                }
+            if payload_len == 0 {
+                return Err(invalid_data("active journal anchor has an empty payload"));
             }
-            _ => return Err(invalid_data("unsupported journal region v2 state")),
-        },
+        }
         _ => return Err(invalid_data("unsupported journal region magic/version")),
     }
 
     let used = HEADER_SIZE
         .checked_add(payload_len)
         .ok_or_else(|| invalid_data("journal region used length overflow"))?;
-    if used > capacity {
+    if used > region.len() {
         return Err(invalid_data("journal payload exceeds reserved region"));
     }
     if region[used..].iter().any(|byte| *byte != 0) {
