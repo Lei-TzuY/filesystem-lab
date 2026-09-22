@@ -111,15 +111,7 @@ fn assert_unique_file_ownership(device: &mut CrashDevice, superblock: &Superbloc
 fn assert_data_preserved(device: &mut CrashDevice, superblock: &Superblock) {
     for (logical, image) in DATA.iter().enumerate() {
         assert_eq!(
-            read_file_range_at_path(
-                device,
-                superblock,
-                "/file",
-                logical,
-                0,
-                BLOCK_SIZE,
-            )
-            .unwrap(),
+            read_file_range_at_path(device, superblock, "/file", logical, 0, BLOCK_SIZE,).unwrap(),
             *image
         );
     }
@@ -131,14 +123,9 @@ fn defragments_only_the_selected_fragmented_range() {
     let allocator_before = load_allocator(&mut device, &superblock).unwrap();
     let before = file_blocks(&mut device, &superblock);
 
-    let (new_range, report) = defragment_file_range_contiguous_at_path_journaled(
-        &mut device,
-        &superblock,
-        "/file",
-        1,
-        2,
-    )
-    .unwrap();
+    let (new_range, report) =
+        defragment_file_range_contiguous_at_path_journaled(&mut device, &superblock, "/file", 1, 2)
+            .unwrap();
 
     let after = file_blocks(&mut device, &superblock);
     assert_eq!(new_range.len(), 2);
@@ -175,14 +162,9 @@ fn contiguous_selected_range_is_an_idempotent_noop() {
     assert_eq!(before[3], before[2] + 1);
     let allocator_before = load_allocator(&mut device, &superblock).unwrap();
 
-    let (range, report) = defragment_file_range_contiguous_at_path_journaled(
-        &mut device,
-        &superblock,
-        "/file",
-        2,
-        2,
-    )
-    .unwrap();
+    let (range, report) =
+        defragment_file_range_contiguous_at_path_journaled(&mut device, &superblock, "/file", 2, 2)
+            .unwrap();
 
     assert_eq!(range, before[2..4]);
     assert_eq!(file_blocks(&mut device, &superblock), before);
@@ -198,14 +180,8 @@ fn contiguous_selected_range_is_an_idempotent_noop() {
 fn every_range_defragmentation_crash_point_recovers_old_or_complete_new_state() {
     let (mut probe, superblock) = setup_fragmented_range();
     probe.arm(None);
-    defragment_file_range_contiguous_at_path_journaled(
-        &mut probe,
-        &superblock,
-        "/file",
-        1,
-        2,
-    )
-    .unwrap();
+    defragment_file_range_contiguous_at_path_journaled(&mut probe, &superblock, "/file", 1, 2)
+        .unwrap();
     let operations = probe.operations();
 
     for crash_at in 0..operations {
