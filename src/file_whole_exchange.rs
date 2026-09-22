@@ -131,11 +131,9 @@ pub fn exchange_complete_file_blocks_journaled(
     let right_blocks = inodes[right_pos].blocks.clone();
     let left_len = left_blocks.len();
     let right_len = right_blocks.len();
-    let displaced_left =
-        inodes[left_pos].replace_block_range(0..left_len, &right_blocks)?;
+    let displaced_left = inodes[left_pos].replace_block_range(0..left_len, &right_blocks)?;
     debug_assert_eq!(displaced_left, left_blocks);
-    let displaced_right =
-        inodes[right_pos].replace_block_range(0..right_len, &left_blocks)?;
+    let displaced_right = inodes[right_pos].replace_block_range(0..right_len, &left_blocks)?;
     debug_assert_eq!(displaced_right, right_blocks);
 
     publish_whole_file_exchange(device, superblock, &inodes)
