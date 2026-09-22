@@ -7,6 +7,7 @@ use filesystem_lab::fsck::check_device;
 use filesystem_lab::inode::InodeKind;
 use filesystem_lab::inode_codec::PersistedInode;
 use filesystem_lab::inode_table::store_inode_table;
+use filesystem_lab::path_clone_create::clone_file_to_path_journaled;
 use filesystem_lab::path_create::create_file_with_blocks_at_path_journaled;
 use filesystem_lab::path_file_read::read_file_blocks_at_path;
 use filesystem_lab::path_lookup::{
@@ -14,6 +15,8 @@ use filesystem_lab::path_lookup::{
     write_file_range_at_path_journaled,
 };
 use filesystem_lab::path_metadata::metadata_at_path;
+use filesystem_lab::path_whole_exchange::exchange_complete_files_at_path_journaled;
+use filesystem_lab::path_whole_transfer_replace::transfer_replace_complete_file_at_path_journaled;
 
 struct MemoryDevice {
     blocks: Vec<[u8; BLOCK_SIZE]>,
@@ -122,6 +125,88 @@ fn partial_eof_is_observable_and_bounds_pathname_reads_and_writes() {
     assert_eq!(
         read_file_blocks_at_path(&mut device, &superblock, "/file").unwrap(),
         after_valid_write
+    );
+    check_device(&mut device).unwrap();
+}
+
+#[test]
+fn whole_file_operations_preserve_partial_eof_semantics() {
+    let (mut device, superblock) = setup();
+    truncate_file_at_path_to_bytes_journaled(&mut device, &superblock, "/file", 5000).unwrap();
+    let original = read_file_blocks_at_path(&mut device, &superblock, "/file").unwrap();
+
+    clone_file_to_path_journaled(&mut device, &superblock, "/file", "/clone").unwrap();
+    assert_eq!(
+        metadata_at_path(&mut device, &superblock, "/clone")
+            .unwrap()
+            .byte_len,
+        5000
+    );
+    assert_eq!(
+        read_file_blocks_at_path(&mut device, &superblock, "/clone").unwrap(),
+        original
+    );
+
+    create_file_with_blocks_at_path_journaled(
+        &mut device,
+        &superblock,
+        "/other",
+        &[[0x33; BLOCK_SIZE]],
+    )
+    .unwrap();
+    exchange_complete_files_at_path_journaled(&mut device, &superblock, "/file", "/other")
+        .unwrap();
+
+    assert_eq!(
+        metadata_at_path(&mut device, &superblock, "/other")
+            .unwrap()
+            .byte_len,
+        5000
+    );
+    assert_eq!(
+        read_file_blocks_at_path(&mut device, &superblock, "/other").unwrap(),
+        original
+    );
+    assert_eq!(
+        metadata_at_path(&mut device, &superblock, "/file")
+            .unwrap()
+            .byte_len,
+        BLOCK_SIZE as u64
+    );
+
+    create_file_with_blocks_at_path_journaled(
+        &mut device,
+        &superblock,
+        "/destination",
+        &[[0x44; BLOCK_SIZE]],
+    )
+    .unwrap();
+    transfer_replace_complete_file_at_path_journaled(
+        &mut device,
+        &superblock,
+        "/other",
+        "/destination",
+    )
+    .unwrap();
+
+    assert_eq!(
+        metadata_at_path(&mut device, &superblock, "/other")
+            .unwrap()
+            .byte_len,
+        0
+    );
+    assert!(read_file_blocks_at_path(&mut device, &superblock, "/other")
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        metadata_at_path(&mut device, &superblock, "/destination")
+            .unwrap()
+            .byte_len,
+        5000
+    );
+    assert_eq!(
+        read_file_blocks_at_path(&mut device, &superblock, "/destination").unwrap(),
+        original
     );
     check_device(&mut device).unwrap();
 }
