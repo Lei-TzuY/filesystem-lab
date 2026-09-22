@@ -9,7 +9,7 @@ use crate::file_range_read::read_file_range;
 use crate::format::Superblock;
 use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
-use crate::journal_checkpoint::recover_journal_and_checkpoint;
+use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::recovery::RecoveryReport;
 use crate::symlink::read_symlink;
 use crate::truncate_tx::truncate_file_to_blocks_journaled;
@@ -74,7 +74,7 @@ pub fn read_symlink_at_path(
     superblock: &Superblock,
     path: &str,
 ) -> io::Result<String> {
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let inode_id = resolve_path_without_following_final_symlink(device, superblock, path)?;
     read_symlink(device, superblock, inode_id)
 }
@@ -104,7 +104,7 @@ pub fn read_file_range_at_path(
     start_offset: usize,
     len: usize,
 ) -> io::Result<Vec<u8>> {
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let inode_id = resolve_path_following_symlinks(device, superblock, path)?;
     read_file_range(
         device,
@@ -141,7 +141,7 @@ pub fn write_file_range_at_path_journaled(
     start_offset: usize,
     data: &[u8],
 ) -> io::Result<RecoveryReport> {
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let inode_id = resolve_path_following_symlinks(device, superblock, path)?;
     write_file_range_journaled(
         device,
@@ -176,7 +176,7 @@ pub fn truncate_file_at_path_to_blocks_journaled(
     path: &str,
     target_blocks: usize,
 ) -> io::Result<(Vec<u64>, RecoveryReport)> {
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let inode_id = resolve_path_following_symlinks(device, superblock, path)?;
     truncate_file_to_blocks_journaled(device, superblock, inode_id, target_blocks)
 }
