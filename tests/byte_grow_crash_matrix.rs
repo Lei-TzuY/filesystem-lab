@@ -21,11 +21,7 @@ use filesystem_lab::path_metadata::metadata_at_path;
 use filesystem_lab::recovery::RecoveryReport;
 use support::CrashDevice;
 
-fn install_namespace(
-    device: &mut CrashDevice,
-    superblock: &Superblock,
-    file: PersistedInode,
-) {
+fn install_namespace(device: &mut CrashDevice, superblock: &Superblock, file: PersistedInode) {
     let root = PersistedInode::new(1, InodeKind::Directory, Vec::new()).unwrap();
     store_inode_table(device, superblock, &[root, file]).unwrap();
     store_directory_table(
@@ -167,8 +163,7 @@ fn byte_growth_crash_matrix_recovers_old_or_complete_new_state() {
         let mut device = prepared.clone();
         device.arm(Some(crash_at));
         assert!(
-            grow_file_at_path_to_bytes_journaled(&mut device, &superblock, "/file", 5000)
-                .is_err(),
+            grow_file_at_path_to_bytes_journaled(&mut device, &superblock, "/file", 5000).is_err(),
             "crash_at={crash_at}"
         );
 
