@@ -6,6 +6,7 @@ use filesystem_lab::format::{
     DEFAULT_DIRECTORY_BLOCKS, DEFAULT_INODE_BLOCKS, DEFAULT_JOURNAL_BLOCKS, FORMAT_VERSION,
     SUPERBLOCK_MAGIC,
 };
+use filesystem_lab::journal_region::load_journal_image;
 
 #[derive(Debug)]
 struct MemoryBlockDevice {
@@ -259,6 +260,20 @@ fn decode_rejects_bad_magic_version_metadata_layout_and_reserved_bytes() {
         Superblock::decode(&bad_reserved).unwrap_err().kind(),
         io::ErrorKind::InvalidData
     );
+}
+
+#[test]
+fn format_replaces_stale_journal_bytes_with_canonical_empty_anchor() {
+    let mut device = MemoryBlockDevice::new(16);
+    for block in &mut device.blocks[1..5] {
+        block.fill(0xa5);
+    }
+
+    let superblock = format_device(&mut device).unwrap();
+
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
