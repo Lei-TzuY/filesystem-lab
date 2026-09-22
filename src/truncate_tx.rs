@@ -55,7 +55,9 @@ pub fn truncate_file_to_zero_journaled(
         return Ok(RecoveryReport::default());
     }
 
-    for block in target.blocks.drain(..) {
+    let current_blocks = target.blocks.len();
+    let released = target.replace_block_range(0..current_blocks, &[])?;
+    for block in released {
         allocator
             .free(block)
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
@@ -116,7 +118,8 @@ pub fn truncate_file_to_blocks_journaled(
         return Ok((Vec::new(), RecoveryReport::default()));
     }
 
-    let released = target.blocks.split_off(target_blocks);
+    let current_blocks = target.blocks.len();
+    let released = target.replace_block_range(target_blocks..current_blocks, &[])?;
     for block in &released {
         allocator
             .free(*block)
@@ -170,12 +173,14 @@ pub fn truncate_file_last_block_journaled(
         ));
     }
 
-    let block = target.blocks.pop().ok_or_else(|| {
+    let last_index = target.blocks.len().checked_sub(1).ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
             "truncate target already has zero blocks",
         )
     })?;
+    let block = target.blocks[last_index];
+    target.replace_block_range(last_index..last_index + 1, &[])?;
     allocator
         .free(block)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
