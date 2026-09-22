@@ -82,7 +82,7 @@ pub fn collapse_file_block_range_journaled(
         }
     }
 
-    let released: Vec<u64> = inode.blocks.drain(start_index..end_index).collect();
+    let released = inode.replace_block_range(start_index..end_index, &[])?;
     for block in &released {
         allocator
             .free(*block)

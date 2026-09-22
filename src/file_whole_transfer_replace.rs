@@ -142,8 +142,11 @@ pub fn transfer_replace_complete_file_blocks_journaled(
         return Ok(RecoveryReport::default());
     }
 
-    let source_blocks = std::mem::take(&mut inodes[source_pos].blocks);
-    let displaced = std::mem::replace(&mut inodes[destination_pos].blocks, source_blocks);
+    let source_len = inodes[source_pos].blocks.len();
+    let source_blocks = inodes[source_pos].replace_block_range(0..source_len, &[])?;
+    let destination_len = inodes[destination_pos].blocks.len();
+    let displaced =
+        inodes[destination_pos].replace_block_range(0..destination_len, &source_blocks)?;
     for block in displaced {
         allocator
             .free(block)

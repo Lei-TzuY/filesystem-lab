@@ -71,9 +71,7 @@ pub fn insert_file_blocks_journaled(
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
         blocks.push(block);
     }
-    inode
-        .blocks
-        .splice(insert_index..insert_index, blocks.iter().copied());
+    inode.replace_block_range(insert_index..insert_index, &blocks)?;
 
     let mut capture = CaptureDevice::new(superblock.total_blocks);
     store_allocator(&mut capture, superblock, &allocator)?;

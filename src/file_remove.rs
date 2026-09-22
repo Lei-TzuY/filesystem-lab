@@ -56,7 +56,8 @@ pub fn remove_file_block_journaled(
         ));
     }
 
-    let block = inode.blocks.remove(remove_index);
+    let block = inode.blocks[remove_index];
+    inode.replace_block_range(remove_index..remove_index + 1, &[])?;
     allocator
         .free(block)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;

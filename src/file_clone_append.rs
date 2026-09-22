@@ -116,9 +116,8 @@ pub fn clone_file_blocks_append_journaled(
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
         new_blocks.push(block);
     }
-    inodes[destination_index]
-        .blocks
-        .extend(new_blocks.iter().copied());
+    let append_at = inodes[destination_index].blocks.len();
+    inodes[destination_index].replace_block_range(append_at..append_at, &new_blocks)?;
 
     let mut capture = CaptureDevice::new(superblock.total_blocks);
     store_allocator(&mut capture, superblock, &allocator)?;

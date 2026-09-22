@@ -194,7 +194,8 @@ pub fn append_file_block_journaled(
     let block = allocator
         .allocate()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
-    inode.blocks.push(block);
+    let append_at = inode.blocks.len();
+    inode.replace_block_range(append_at..append_at, &[block])?;
     let mut capture = CaptureDevice::new(superblock.total_blocks);
     store_allocator(&mut capture, superblock, &allocator)?;
     store_inode_table(&mut capture, superblock, &inodes)?;

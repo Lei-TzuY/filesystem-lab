@@ -1,4 +1,5 @@
 use std::io;
+use std::ops::Range;
 
 use crate::inode::{Inode, InodeKind};
 
@@ -50,6 +51,39 @@ impl PersistedInode {
     pub fn validate_for_persistence(&self) -> io::Result<()> {
         validate_inode_fields(self.id, &self.blocks)
             .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))
+    }
+
+    /// Replaces one logical block range while preserving durable inode invariants.
+    ///
+    /// The mutation is prepared on a candidate vector and committed to `self.blocks` only after
+    /// the complete resulting mapping validates. This makes block-count-changing operations share
+    /// one mutation boundary instead of editing the public compatibility vector in place.
+    ///
+    /// The returned vector contains the displaced blocks in logical order.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidInput` when the range is reversed or outside the current block vector, or
+    /// when the resulting mapping would contain duplicate physical block references.
+    pub fn replace_block_range(
+        &mut self,
+        range: Range<usize>,
+        replacements: &[u64],
+    ) -> io::Result<Vec<u64>> {
+        if range.start > range.end || range.end > self.blocks.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "inode block mutation range is outside the current mapping",
+            ));
+        }
+
+        let displaced = self.blocks[range.clone()].to_vec();
+        let mut candidate = self.blocks.clone();
+        candidate.splice(range, replacements.iter().copied());
+        validate_inode_fields(self.id, &candidate)
+            .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+        self.blocks = candidate;
+        Ok(displaced)
     }
 }
 
@@ -285,6 +319,30 @@ mod tests {
 
         let duplicate = PersistedInode::new(3, InodeKind::Directory, vec![9, 9]).unwrap_err();
         assert_eq!(duplicate.kind(), io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn block_range_mutation_is_atomic_and_returns_displaced_blocks() {
+        let mut inode = sample();
+
+        let displaced = inode.replace_block_range(1..2, &[41, 43]).unwrap();
+
+        assert_eq!(displaced, vec![19]);
+        assert_eq!(inode.blocks, vec![11, 41, 43, 27]);
+    }
+
+    #[test]
+    fn block_range_mutation_rejects_invalid_candidate_without_changing_inode() {
+        let mut inode = sample();
+        let original = inode.clone();
+
+        let duplicate = inode.replace_block_range(1..1, &[11]).unwrap_err();
+        assert_eq!(duplicate.kind(), io::ErrorKind::InvalidInput);
+        assert_eq!(inode, original);
+
+        let outside = inode.replace_block_range(4..4, &[31]).unwrap_err();
+        assert_eq!(outside.kind(), io::ErrorKind::InvalidInput);
+        assert_eq!(inode, original);
     }
 
     #[test]

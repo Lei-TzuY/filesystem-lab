@@ -59,7 +59,7 @@ pub fn insert_file_block_journaled(
     let block = allocator
         .allocate()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
-    inode.blocks.insert(insert_index, block);
+    inode.replace_block_range(insert_index..insert_index, &[block])?;
 
     let mut capture = CaptureDevice::new(superblock.total_blocks);
     store_allocator(&mut capture, superblock, &allocator)?;
