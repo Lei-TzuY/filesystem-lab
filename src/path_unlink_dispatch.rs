@@ -8,7 +8,7 @@ use crate::hard_unlink_tx::{
 };
 use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
-use crate::journal_checkpoint::recover_journal_and_checkpoint;
+use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::path_unlink::unlink_file_journaled;
 use crate::recovery::RecoveryReport;
@@ -40,7 +40,7 @@ pub fn unlink_at_path_journaled(
     path: &str,
 ) -> io::Result<RecoveryReport> {
     let (parent_path, name) = split_path(path)?;
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
 
     let entries = load_directory_table(device, superblock)?;

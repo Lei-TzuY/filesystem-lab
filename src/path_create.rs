@@ -11,7 +11,7 @@ use crate::format::Superblock;
 use crate::inode::InodeKind;
 use crate::inode_codec::PersistedInode;
 use crate::inode_table::load_inode_table;
-use crate::journal_checkpoint::recover_journal_and_checkpoint;
+use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 
@@ -59,7 +59,7 @@ pub fn create_one_block_file_at_path_journaled(
     data: &[u8; BLOCK_SIZE],
 ) -> io::Result<(u64, RecoveryReport)> {
     let (parent_path, name) = split_destination(destination)?;
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
 
     let mut allocator = load_allocator(device, superblock)?;
@@ -121,7 +121,7 @@ pub fn create_file_with_blocks_at_path_journaled(
     }
 
     let (parent_path, name) = split_destination(destination)?;
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
 
     let mut allocator = load_allocator(device, superblock)?;
@@ -203,7 +203,7 @@ fn create_blockless_inode_at_path_journaled(
     kind: InodeKind,
 ) -> io::Result<(u64, RecoveryReport)> {
     let (parent_path, name) = split_destination(destination)?;
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
 
     let allocator = load_allocator(device, superblock)?;

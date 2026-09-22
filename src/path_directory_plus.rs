@@ -7,7 +7,7 @@ use crate::fsck::check_device;
 use crate::inode::InodeKind;
 use crate::inode_codec::PersistedInode;
 use crate::inode_table::load_inode_table;
-use crate::journal_checkpoint::recover_journal_and_checkpoint;
+use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::path_lookup::resolve_path_following_symlinks;
 
 /// One durable child entry with metadata derived from one recovered namespace snapshot.
@@ -50,7 +50,7 @@ pub fn list_directory_with_metadata_at_path(
     superblock: &Superblock,
     path: &str,
 ) -> io::Result<Vec<PathDirectoryEntryMetadata>> {
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     check_device(device)?;
 
     let directory_inode_id = resolve_path_following_symlinks(device, superblock, path)?;
@@ -93,7 +93,7 @@ pub fn list_directory_with_metadata_page_at_path(
         ));
     }
 
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     check_device(device)?;
 
     let directory_inode_id = resolve_path_following_symlinks(device, superblock, path)?;

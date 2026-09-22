@@ -3,7 +3,7 @@ use std::io;
 use crate::block::{BlockDevice, BLOCK_SIZE};
 use crate::file_range_read::read_file_range;
 use crate::format::Superblock;
-use crate::journal_checkpoint::recover_journal_and_checkpoint;
+use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::path_contiguous_create::create_contiguous_file_with_blocks_at_path_journaled;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
@@ -45,7 +45,7 @@ pub fn clone_file_blocks_contiguous_to_path_journaled(
         invalid_input("contiguous pathname clone-create block count overflows byte length")
     })?;
 
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let source_inode = resolve_path_following_symlinks(device, superblock, source)?;
     let snapshot = read_file_range(
         device,

@@ -5,7 +5,7 @@ use crate::directory_table::load_directory_table;
 use crate::format::Superblock;
 use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
-use crate::journal_checkpoint::recover_journal_and_checkpoint;
+use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::path_rename::rename_at_path_journaled;
 use crate::path_rename_overwrite::rename_overwrite_at_path_journaled;
@@ -44,7 +44,7 @@ pub fn rename_posix_at_path_journaled(
     let (destination_parent_path, destination_name) =
         split_path(normalized_destination, "rename destination")?;
 
-    let recovery = recover_journal_and_checkpoint(device, *superblock)?;
+    let recovery = recover_journal_and_checkpoint_checked(device, *superblock)?;
     let source_parent = resolve_path_following_symlinks(device, superblock, source_parent_path)?;
     let destination_parent =
         resolve_path_following_symlinks(device, superblock, destination_parent_path)?;
