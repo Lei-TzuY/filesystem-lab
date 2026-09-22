@@ -84,11 +84,11 @@ pub fn create_contiguous_file_with_blocks_at_path_journaled(
         name: name.to_owned(),
     };
     encode_directory_entry(&new_entry)?;
-    inodes.push(PersistedInode {
-        id: inode_id,
-        kind: InodeKind::File,
-        blocks: inode_blocks,
-    });
+    inodes.push(PersistedInode::new(
+        inode_id,
+        InodeKind::File,
+        inode_blocks,
+    )?);
     entries.push(new_entry);
 
     let report = store_create_with_blocks_journaled(
