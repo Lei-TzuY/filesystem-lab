@@ -65,11 +65,11 @@ pub fn create_symlink_journaled(
         );
     }
 
-    inodes.push(PersistedInode {
-        id: inode_id,
-        kind: InodeKind::Symlink,
-        blocks: blocks.clone(),
-    });
+    inodes.push(PersistedInode::new(
+        inode_id,
+        InodeKind::Symlink,
+        blocks.clone(),
+    )?);
     entries.push(PersistedDirectoryEntry {
         parent,
         target: inode_id,
