@@ -283,8 +283,7 @@ mod tests {
         let zero = PersistedInode::new(0, InodeKind::File, Vec::new()).unwrap_err();
         assert_eq!(zero.kind(), io::ErrorKind::InvalidInput);
 
-        let duplicate =
-            PersistedInode::new(3, InodeKind::Directory, vec![9, 9]).unwrap_err();
+        let duplicate = PersistedInode::new(3, InodeKind::Directory, vec![9, 9]).unwrap_err();
         assert_eq!(duplicate.kind(), io::ErrorKind::InvalidInput);
     }
 
