@@ -60,10 +60,39 @@ pub fn check_device(device: &mut impl BlockDevice) -> io::Result<FsckReport> {
     let inodes = load_inode_table(device, &superblock)
         .map_err(|error| with_context("inode table", &error))?;
     let referenced_blocks = audit_inode_ownership(&superblock, &allocator, &inodes)?;
-    audit_inode_payloads(device, &inodes)?;
+    finish_device_audit(device, superblock, &allocator, &inodes, referenced_blocks)
+}
+
+pub(crate) fn check_device_allowing_orphaned_allocations(
+    device: &mut impl BlockDevice,
+) -> io::Result<(FsckReport, Vec<u64>)> {
+    let superblock = read_superblock(device).map_err(|error| with_context("superblock", &error))?;
+    let allocator =
+        load_allocator(device, &superblock).map_err(|error| with_context("allocation", &error))?;
+    let inodes = load_inode_table(device, &superblock)
+        .map_err(|error| with_context("inode table", &error))?;
+    let ownership = scan_inode_ownership(&superblock, &allocator, &inodes)?;
+    let report = finish_device_audit(
+        device,
+        superblock,
+        &allocator,
+        &inodes,
+        ownership.referenced_blocks,
+    )?;
+    Ok((report, ownership.orphaned_allocations))
+}
+
+fn finish_device_audit(
+    device: &mut impl BlockDevice,
+    superblock: Superblock,
+    allocator: &BlockAllocator,
+    inodes: &[PersistedInode],
+    referenced_blocks: usize,
+) -> io::Result<FsckReport> {
+    audit_inode_payloads(device, inodes)?;
     let directory_entries = load_directory_table(device, &superblock)
         .map_err(|error| with_context("directory table", &error))?;
-    audit_namespace(&inodes, &directory_entries)?;
+    audit_namespace(inodes, &directory_entries)?;
     let entries =
         load_journal_image(device, superblock).map_err(|error| with_context("journal", &error))?;
     audit_journal(
@@ -88,11 +117,30 @@ fn audit_inode_payloads(
     Ok(())
 }
 
+struct OwnershipAudit {
+    referenced_blocks: usize,
+    orphaned_allocations: Vec<u64>,
+}
+
 fn audit_inode_ownership(
     superblock: &Superblock,
     allocator: &BlockAllocator,
     inodes: &[PersistedInode],
 ) -> io::Result<usize> {
+    let ownership = scan_inode_ownership(superblock, allocator, inodes)?;
+    if let Some(block) = ownership.orphaned_allocations.first() {
+        return Err(invalid_data_owned(format!(
+            "allocated block {block} has no inode owner"
+        )));
+    }
+    Ok(ownership.referenced_blocks)
+}
+
+fn scan_inode_ownership(
+    superblock: &Superblock,
+    allocator: &BlockAllocator,
+    inodes: &[PersistedInode],
+) -> io::Result<OwnershipAudit> {
     let reserved_blocks = superblock.reserved_blocks();
     let mut owners = BTreeMap::<u64, u64>::new();
     let mut referenced_blocks = 0_usize;
@@ -126,18 +174,20 @@ fn audit_inode_ownership(
         }
     }
 
+    let mut orphaned_allocations = Vec::new();
     for block in reserved_blocks..superblock.total_blocks {
         let allocated = allocator
             .is_owned(block)
             .map_err(|error| invalid_data_owned(error.to_string()))?;
         if allocated && !owners.contains_key(&block) {
-            return Err(invalid_data_owned(format!(
-                "allocated block {block} has no inode owner"
-            )));
+            orphaned_allocations.push(block);
         }
     }
 
-    Ok(referenced_blocks)
+    Ok(OwnershipAudit {
+        referenced_blocks,
+        orphaned_allocations,
+    })
 }
 
 fn audit_namespace(
