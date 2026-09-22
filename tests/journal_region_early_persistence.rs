@@ -20,7 +20,8 @@ fn write_through_publication_is_always_empty_or_complete_after_reboot() {
     let superblock = Superblock::with_journal_blocks(32, 2).unwrap();
     let entries = sample_entries(superblock);
 
-    let mut probe = CrashDevice::new_write_through(32);
+    let mut probe = CrashDevice::new(32);
+    probe.write_through = true;
     probe.arm(None);
     store_journal_image(&mut probe, superblock, &entries).unwrap();
     let mutation_count = probe.operations();
@@ -29,7 +30,8 @@ fn write_through_publication_is_always_empty_or_complete_after_reboot() {
     assert_eq!(load_journal_image(&mut probe, superblock).unwrap(), entries);
 
     for crash_at in 0..mutation_count {
-        let mut device = CrashDevice::new_write_through(32);
+        let mut device = CrashDevice::new(32);
+        device.write_through = true;
         device.arm(Some(crash_at));
         assert!(
             store_journal_image(&mut device, superblock, &entries).is_err(),
