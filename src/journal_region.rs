@@ -191,10 +191,7 @@ fn read_complete_journal_region(
     Ok(region)
 }
 
-fn decode_journal_region(
-    superblock: Superblock,
-    region: &[u8],
-) -> io::Result<Vec<JournalEntry>> {
+fn decode_journal_region(superblock: Superblock, region: &[u8]) -> io::Result<Vec<JournalEntry>> {
     if region.iter().all(|byte| *byte == 0) {
         return Ok(Vec::new());
     }
