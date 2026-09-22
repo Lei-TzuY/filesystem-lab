@@ -27,10 +27,11 @@ The allocation, inode, and directory home regions have independent codecs and in
 | unlink | allocation, inode, directory | removed namespace, inode lifecycle, and released ownership describe exactly one removal |
 | rename | directory | exactly one namespace key changes while the target inode is preserved |
 | truncate-to-zero | allocation, inode | the file inode survives with zero block references and exactly its prior blocks become free |
+| exact-byte grow | allocation, inode, data | EOF advances atomically, only required trailing blocks become owned, and every newly visible byte is zero |
 
 `create`, `unlink`, `rename`, and `truncate-to-zero` have deterministic integration tests that enumerate every block-device `write_block`/`flush` mutation point of a successful bounded operation.
 
-`truncate-to-zero` remains as a block-granular compatibility path. Format v6 additionally persists exact regular-file byte EOF and supports crash-consistent exact-byte shrink, including partial-final-block tail zeroing and trailing-block release in the same WAL transaction. Growth and sparse extension remain separately deferred.
+`truncate-to-zero` remains as a block-granular compatibility path. Format v6 additionally persists exact regular-file byte EOF and supports crash-consistent exact-byte resize in both directions: shrink zeroes discarded tail bytes and releases only the trailing block suffix, while grow zero-fills the newly visible range and allocates only the required trailing blocks. Sparse extension remains separately deferred.
 
 ## Crash-state contract
 
@@ -56,13 +57,15 @@ The bounded journal region now writes version-2 empty/active anchors. Tail block
 Filesystem format v6 promotes exact regular-file EOF into inode-record version 3. Whole-file and
 range reads stop at that persisted EOF, overwrite-only byte writes cannot extend it, and exact-byte
 truncate can shrink into a partial final block while zeroing discarded tail bytes and releasing only
-the trailing block suffix. The tail zero, allocator image, and inode-table update share one bounded
-WAL transaction and deterministic crash tests require recovery to converge to the complete old or
-complete new state.
+the trailing block suffix. Exact-byte growth may remain inside the current final block or allocate the
+minimum required trailing blocks; every newly visible byte is zero. Grow and shrink each publish their
+data/allocator/inode changes in one bounded WAL transaction, and deterministic crash tests require
+recovery to converge to the complete old or complete new state.
 
 Whole-file clone, exchange, and transfer-replace carry exact EOF together with file contents, so a
-partial-final-block file remains semantically whole across those operations. The filesystem still
-does not claim growth, sparse holes, or general extent semantics.
+partial-final-block file remains semantically whole across those operations. The filesystem now
+supports non-sparse exact-byte growth but still does not claim sparse holes or general extent
+semantics.
 
 ## Consolidated transaction-image boundary
 
@@ -92,7 +95,7 @@ A change belongs inside this checkpoint only if it preserves or tightens the exi
 The checkpoint still deliberately does not define:
 
 - a circular journal with persistent head/tail or multi-transaction retention beyond the bounded reservation;
-- regular-file growth/extension, sparse files, hole punching, or a general extent data model;
+- sparse files, hole punching, or a general extent data model;
 - persisted hard-link counts, generic inode-orphan namespace reattachment, or recursive removal;
 - permissions, ACLs, mmap, FUSE, or broad POSIX compatibility;
 - stronger hardware fault models such as torn sectors or storage reordering.
