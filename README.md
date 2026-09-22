@@ -17,7 +17,7 @@ The implemented core now includes:
 - independently versioned persisted inode records and checksummed inode-table images;
 - independently versioned persisted directory entries and checksummed directory-table images;
 - buffer-cache `Clean` / `Dirty` / `Writeback` state semantics and durability-aware eviction rules;
-- logical WAL transactions with Begin/full-block Write/Commit records, persistent record and journal-region codecs, and committed-only replay;
+- logical WAL transactions with Begin/full-block Write/Commit records, versioned journal-region anchors, committed-only replay, and checkpoint invalidation that remains safe when whole-block writes persist before flush;
 - bounded journaled updates for allocation, inode, directory, inode+directory, and allocation+inode+directory metadata snapshots;
 - validated atomic create, unlink, and bounded rename lifecycle operations;
 - deterministic write/flush crash enumeration for create, unlink, and rename;
@@ -61,7 +61,7 @@ This repository is now treated as a **crash-consistent durable metadata-core che
 
 The following are intentionally outside the current checkpoint unless a concrete correctness requirement justifies reopening them:
 
-- checkpointing, journal clearing, and circular journal head/tail management;
+- circular journal head/tail management and multi-transaction retention beyond the bounded reservation;
 - persistent file-data write semantics, truncate, sparse files, and complex extents;
 - hard-link counts, orphan handling, recursive deletion, rename overwrite/exchange semantics;
 - permissions, ACLs, symlinks, mmap, FUSE integration, and broad POSIX compatibility;
