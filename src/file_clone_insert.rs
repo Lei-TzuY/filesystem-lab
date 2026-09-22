@@ -125,10 +125,10 @@ pub fn clone_file_blocks_insert_journaled(
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
         new_blocks.push(block);
     }
-    inodes[destination_index].blocks.splice(
+    inodes[destination_index].replace_block_range(
         destination_logical_index..destination_logical_index,
-        new_blocks.iter().copied(),
-    );
+        &new_blocks,
+    )?;
 
     let mut capture = CaptureDevice::new(superblock.total_blocks);
     store_allocator(&mut capture, superblock, &allocator)?;
