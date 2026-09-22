@@ -9,7 +9,7 @@ pub struct CrashDevice {
     crash_at: Option<usize>,
     operations: usize,
     armed: bool,
-    write_through: bool,
+    pub write_through: bool,
 }
 
 impl CrashDevice {
@@ -23,12 +23,6 @@ impl CrashDevice {
             armed: false,
             write_through: false,
         }
-    }
-
-    pub fn new_write_through(blocks: usize) -> Self {
-        let mut device = Self::new(blocks);
-        device.write_through = true;
-        device
     }
 
     pub fn arm(&mut self, crash_at: Option<usize>) {
