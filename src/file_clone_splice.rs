@@ -207,10 +207,9 @@ pub fn clone_file_blocks_splice_journaled(
             .free(*block)
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     }
-    inodes[destination_index].blocks.splice(
-        destination.start..destination_end,
-        new_blocks.iter().copied(),
-    );
+    let replaced = inodes[destination_index]
+        .replace_block_range(destination.start..destination_end, &new_blocks)?;
+    debug_assert_eq!(replaced, displaced_blocks);
 
     let report = publish_splice(
         device,
