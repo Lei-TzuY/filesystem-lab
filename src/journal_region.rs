@@ -108,17 +108,27 @@ pub(crate) fn store_empty_journal_anchor(
     device: &mut impl BlockDevice,
     superblock: Superblock,
 ) -> io::Result<()> {
-    validate_region(device, superblock)?;
+    initialize_journal_region(device, superblock)?;
+    device.flush()
+}
 
+pub(crate) fn initialize_journal_region(
+    device: &mut impl BlockDevice,
+    superblock: Superblock,
+) -> io::Result<()> {
+    validate_region(device, superblock)?;
+    let block = empty_anchor_block();
+    device.write_block(superblock.journal_start, &block)
+}
+
+fn empty_anchor_block() -> [u8; BLOCK_SIZE] {
     let mut block = [0_u8; BLOCK_SIZE];
     block[0..4].copy_from_slice(&REGION_MAGIC_V2);
     block[4..6].copy_from_slice(&REGION_VERSION_V2.to_le_bytes());
     block[STATE_OFFSET..STATE_OFFSET + 2].copy_from_slice(&REGION_STATE_EMPTY.to_le_bytes());
     let checksum = crc32(&block[..HEADER_SIZE]);
     block[CHECKSUM_OFFSET..CHECKSUM_OFFSET + 4].copy_from_slice(&checksum.to_le_bytes());
-
-    device.write_block(superblock.journal_start, &block)?;
-    device.flush()
+    block
 }
 
 /// Loads and validates the bounded journal image from the reserved journal region.
