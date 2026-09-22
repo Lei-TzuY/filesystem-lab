@@ -21,6 +21,7 @@ fn root_inode() -> PersistedInode {
         kind: InodeKind::Directory,
         blocks: Vec::new(),
     }
+    byte_len: 0,
 }
 
 fn setup() -> (
@@ -43,6 +44,8 @@ fn setup() -> (
             id: 2,
             kind: InodeKind::File,
             blocks: vec![data_block],
+        
+            byte_len: 0,
         },
     ];
     store_inode_table(&mut device, &superblock, &inodes).unwrap();
