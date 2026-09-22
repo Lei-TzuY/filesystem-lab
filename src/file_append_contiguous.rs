@@ -78,9 +78,10 @@ pub fn append_file_blocks_contiguous_journaled(
                 "contiguous allocation run overflowed block address space",
             )
         })?;
-        inode.blocks.push(block);
         blocks.push(block);
     }
+    let append_at = inode.blocks.len();
+    inode.replace_block_range(append_at..append_at, &blocks)?;
 
     let mut capture = CaptureDevice::new(superblock.total_blocks);
     store_allocator(&mut capture, superblock, &allocator)?;
