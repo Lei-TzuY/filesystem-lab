@@ -51,8 +51,8 @@ checksum offsets, requires flags at offset 6 to be zero, and requires zero trail
 whole reservation. This permits recovery/checkpoint of existing complete v1 images without silently
 reinterpreting them. New writes use version 2.
 
-A completely zeroed reservation also remains the canonical freshly formatted / never-written empty
-state.
+A completely zeroed reservation remains accepted as a legacy/uninitialized empty state. Successful
+current formatting writes the canonical v2 empty anchor instead.
 
 Journal writes may target ordinary data blocks and allocation/inode/directory home regions. They may
 never target the superblock or the journal reservation itself.
