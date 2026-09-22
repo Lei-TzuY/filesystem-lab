@@ -26,6 +26,7 @@ fn inode(id: u64) -> PersistedInode {
         kind: InodeKind::Directory,
         blocks: Vec::new(),
     }
+        byte_len: 0,
 }
 
 fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
