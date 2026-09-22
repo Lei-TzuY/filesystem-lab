@@ -488,6 +488,8 @@ mod tests {
             id: 1,
             kind: InodeKind::File,
             blocks: vec![block],
+        
+            byte_len: 0,
         }];
         assert_eq!(
             audit_inode_ownership(&superblock, &allocator, &inodes).unwrap(),
@@ -500,6 +502,8 @@ mod tests {
                 id: 2,
                 kind: InodeKind::Directory,
                 blocks: vec![block],
+            
+                byte_len: 0,
             },
         ];
         assert_eq!(
@@ -517,11 +521,15 @@ mod tests {
                 id: 1,
                 kind: InodeKind::Directory,
                 blocks: vec![],
+            
+                byte_len: 0,
             },
             PersistedInode {
                 id: 2,
                 kind: InodeKind::File,
                 blocks: vec![],
+            
+                byte_len: 0,
             },
         ];
         let entry = PersistedDirectoryEntry {
@@ -557,11 +565,15 @@ mod tests {
             id: ROOT_INODE_ID,
             kind: InodeKind::Directory,
             blocks: vec![],
+        
+            byte_len: 0,
         };
         let file = PersistedInode {
             id: 2,
             kind: InodeKind::File,
             blocks: vec![],
+        
+            byte_len: 0,
         };
 
         let missing_root = vec![file.clone()];
@@ -574,6 +586,8 @@ mod tests {
             id: ROOT_INODE_ID,
             kind: InodeKind::File,
             blocks: vec![],
+        
+            byte_len: 0,
         }];
         assert!(audit_namespace(&invalid_root, &[])
             .unwrap_err()
@@ -600,11 +614,15 @@ mod tests {
                 id: ROOT_INODE_ID,
                 kind: InodeKind::Directory,
                 blocks: vec![],
+            
+                byte_len: 0,
             },
             PersistedInode {
                 id: 2,
                 kind: InodeKind::Directory,
                 blocks: vec![],
+            
+                byte_len: 0,
             },
         ];
         let entries = vec![
