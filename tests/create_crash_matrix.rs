@@ -21,8 +21,8 @@ fn root_inode() -> PersistedInode {
         id: 1,
         kind: InodeKind::Directory,
         blocks: Vec::new(),
+        byte_len: 0,
     }
-    byte_len: 0,
 }
 
 fn setup() -> (CrashDevice, Superblock) {
