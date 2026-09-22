@@ -63,7 +63,6 @@ fn root_inode(blocks: Vec<u64>) -> PersistedInode {
         kind: InodeKind::Directory,
         blocks,
     }
-        byte_len: 0,
 }
 
 fn setup() -> (MemoryDevice, Superblock) {
