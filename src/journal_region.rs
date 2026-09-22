@@ -58,11 +58,6 @@ pub fn store_journal_image(
         return store_empty_journal_anchor(device, superblock);
     }
 
-    // Establish a durable empty anchor before any tail block is staged. The BlockDevice contract
-    // permits an issued write to become durable before flush, so a crash during tail publication
-    // must still decode as an empty journal rather than as an old header plus new tail bytes.
-    store_empty_journal_anchor(device, superblock)?;
-
     let payload = encode_entries(entries)?;
     let capacity = region_capacity(superblock)?;
     let used = HEADER_SIZE
@@ -83,6 +78,10 @@ pub fn store_journal_image(
 
     let checksum = crc32(&region[..used]);
     region[CHECKSUM_OFFSET..CHECKSUM_OFFSET + 4].copy_from_slice(&checksum.to_le_bytes());
+
+    // Establish a durable empty anchor only after the replacement image has passed all local
+    // validation and capacity checks. Invalid input therefore has no journal-side effect.
+    store_empty_journal_anchor(device, superblock)?;
 
     let block_count = usize::try_from(superblock.journal_blocks)
         .map_err(|_| invalid_input("journal block count exceeds usize"))?;
@@ -216,7 +215,11 @@ pub fn load_journal_image(
                 }
                 return Ok(Vec::new());
             }
-            REGION_STATE_ACTIVE => {}
+            REGION_STATE_ACTIVE => {
+                if payload_len == 0 {
+                    return Err(invalid_data("active journal anchor has an empty payload"));
+                }
+            }
             _ => return Err(invalid_data("unsupported journal region v2 state")),
         },
         _ => return Err(invalid_data("unsupported journal region magic/version")),
