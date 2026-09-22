@@ -138,6 +138,23 @@ fn checked_recovery_installs_valid_projection_and_checkpoints() {
 }
 
 #[test]
+fn checked_recovery_is_a_noop_when_no_journal_needs_replay() {
+    let mut device = MemoryDevice::new(64);
+    let superblock = format_device(&mut device).unwrap();
+    let mut allocator = load_allocator(&mut device, &superblock).unwrap();
+    allocator.allocate().unwrap();
+    store_allocator(&mut device, &superblock, &allocator).unwrap();
+    let writes_before = device.writes;
+    let flushes_before = device.flushes;
+
+    let report = recover_journal_and_checkpoint_checked(&mut device, superblock).unwrap();
+
+    assert_eq!(report, RecoveryReport::default());
+    assert_eq!(device.writes, writes_before);
+    assert_eq!(device.flushes, flushes_before);
+}
+
+#[test]
 fn checked_recovery_rejects_semantic_corruption_before_any_mutation() {
     let mut device = MemoryDevice::new(64);
     let superblock = format_device(&mut device).unwrap();
