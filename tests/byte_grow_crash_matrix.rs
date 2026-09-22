@@ -41,8 +41,7 @@ fn install_namespace(device: &mut CrashDevice, superblock: &Superblock, file: Pe
 
 fn empty_file() -> (CrashDevice, Superblock) {
     let mut device = CrashDevice::new(64);
-    let superblock =
-        format_device_with_journal_blocks(&mut device, JOURNAL_BLOCKS).unwrap();
+    let superblock = format_device_with_journal_blocks(&mut device, JOURNAL_BLOCKS).unwrap();
     install_namespace(
         &mut device,
         &superblock,
@@ -98,7 +97,9 @@ fn default_journal_rejects_large_growth_without_home_mutation() {
         grow_file_at_path_to_bytes_journaled(&mut device, &superblock, "/file", 5000).unwrap_err();
 
     assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
-    assert!(error.to_string().contains("journal image exceeds reserved region"));
+    assert!(error
+        .to_string()
+        .contains("journal image exceeds reserved region"));
     assert_eq!(
         load_allocator(&mut device, &superblock).unwrap(),
         allocator_before
@@ -111,11 +112,9 @@ fn default_journal_rejects_large_growth_without_home_mutation() {
         load_directory_table(&mut device, &superblock).unwrap(),
         directory_before
     );
-    assert!(
-        load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(load_journal_image(&mut device, superblock)
+        .unwrap()
+        .is_empty());
     check_device(&mut device).unwrap();
 }
 
