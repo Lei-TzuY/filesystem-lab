@@ -1,32 +1,61 @@
 # Journal region image format
 
-The filesystem version-2 superblock introduced a contiguous journal region. Later filesystem formats retain that reservation while adding allocation, inode, and directory metadata regions after it. This document defines the first bounded persistent journal image stored inside the reservation. The region-image format is versioned independently from both the filesystem superblock and the journal-record codec.
+The filesystem reserves one bounded journal region. The region codec is versioned independently from
+the filesystem superblock and from the journal-record codec.
 
-## Version 1
+## Version 2
 
-The first 32 bytes of the reserved journal region form a little-endian header:
+Writers publish version 2. The first 32 bytes of the first journal block form a little-endian anchor:
 
-| Offset | Size | Field | Version 1 value |
+| Offset | Size | Field | Version 2 |
 | ---: | ---: | --- | --- |
-| 0 | 4 | magic | `JRG1` |
-| 4 | 2 | region version | `1` |
-| 6 | 2 | flags | `0` |
-| 8 | 8 | encoded payload length | number of journal-record bytes after the header |
-| 16 | 4 | CRC-32 | IEEE CRC-32 over header + payload with this field treated as zero |
+| 0 | 4 | magic | `JRG2` |
+| 4 | 2 | region version | `2` |
+| 6 | 2 | state | `0` = empty, `1` = active |
+| 8 | 8 | encoded payload length | zero for empty; journal-record bytes for active |
+| 16 | 4 | CRC-32 | IEEE CRC-32 with this field treated as zero |
 | 20 | 12 | reserved | all zero |
-| 32 | variable | payload | journal-record codec stream |
-| after payload | remainder | padding | all zero |
+| 32 | variable | payload | journal-record stream when active |
 
-A completely zeroed reservation is the canonical freshly formatted / never-written journal state and decodes as an empty journal.
+A v2 empty anchor has zero payload length. Its checksum covers the 32-byte anchor, and the remainder
+of the first journal block is zero. Bytes in later journal blocks are explicitly non-authoritative
+while the empty anchor is present; they may contain stale bytes from the previous active image.
 
-The payload must fit completely inside the superblock-declared journal reservation. Non-zero trailing padding is invalid; this makes stale or partially overwritten tails observable rather than silently ignored. The decoder also validates the journal-record codec and transaction ordering after the region checksum succeeds.
+An active v2 image retains strict padding and checksum rules. The complete active payload must fit the
+reservation, all bytes after the used image are zero, the checksum covers anchor plus payload, and the
+decoded record stream must satisfy journal transaction and target-block validation.
 
-Journal writes may target ordinary data home blocks or blocks in the allocation, inode, and directory metadata home regions. They may never target block zero or any block in the journal reservation itself. This lets all currently durable metadata snapshots participate in the same WAL/recovery protocol without permitting recovery to overwrite the superblock geometry or the log that drives replay.
+## Publication ordering
 
-## Write ordering
+The `BlockDevice` contract guarantees that `flush` makes prior writes durable but does not guarantee
+that writes were non-durable before that point. Publication therefore uses an anchor protocol:
 
-A bounded image is materialized in memory with zero-filled padding. When more than one journal block is reserved, blocks after the first journal block are issued from the tail toward the front. The first journal block, which contains the region header and the initial payload bytes, is written last. Only after all region blocks have been issued does the implementation call the block-device `flush` durability boundary.
+1. publish and flush a v2 empty anchor;
+2. write all journal blocks after the first from tail toward the front;
+3. flush those staged tail blocks;
+4. write the first block containing the active anchor and initial payload;
+5. flush the active anchor.
 
-This ordering deliberately makes the header-bearing block the final anchor for a new image. Recovery does not assume that a crash produced a valid image: an old anchor combined with new tail blocks, a new anchor combined with stale/torn payload, checksum corruption, non-zero stale padding, or malformed records are all rejected deterministically.
+If a crash occurs before step 4 becomes durable, the journal is authoritatively empty even if some
+tail writes persisted early. If the active anchor is durable, every tail block it references has
+already crossed a durability barrier.
 
-This is a bounded image, not yet a circular journal. Version 1 defines no head/tail wraparound, checkpoint sequence, generation counter, or journal clearing. Home-location replay exists for allocation, inode, directory, and ordinary data blocks in filesystem format v5, but the journal remains intentionally bounded and persistent until a later checkpointing milestone.
+Checkpoint is the inverse transition after home replay is durable: only the first block is replaced
+with a checksummed empty anchor and flushed. Stale tail bytes are intentionally ignored until a later
+publication stages a complete replacement image.
+
+## Version 1 compatibility
+
+Readers continue to accept complete `JRG1` / version-1 images. Version 1 uses the same length and
+checksum offsets, requires flags at offset 6 to be zero, and requires zero trailing padding across the
+whole reservation. This permits recovery/checkpoint of existing complete v1 images without silently
+reinterpreting them. New writes use version 2.
+
+A completely zeroed reservation also remains the canonical freshly formatted / never-written empty
+state.
+
+Journal writes may target ordinary data blocks and allocation/inode/directory home regions. They may
+never target the superblock or the journal reservation itself.
+
+The journal is still bounded rather than circular; persistent head/tail wraparound and multi-
+transaction retention remain outside this milestone.
