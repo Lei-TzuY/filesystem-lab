@@ -5,7 +5,7 @@ use crate::directory_table::load_directory_table;
 use crate::format::Superblock;
 use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
-use crate::journal_checkpoint::recover_journal_and_checkpoint;
+use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::path_directory_rename_overwrite::rename_overwrite_directory_journaled;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
@@ -211,7 +211,7 @@ fn resolve_rename_overwrite_parents<'a>(
 ) -> io::Result<(u64, &'a str, u64, &'a str)> {
     let (old_parent_path, old_name) = split_path(source, "rename-overwrite source")?;
     let (new_parent_path, new_name) = split_path(destination, "rename-overwrite destination")?;
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let old_parent = resolve_path_following_symlinks(device, superblock, old_parent_path)?;
     let new_parent = resolve_path_following_symlinks(device, superblock, new_parent_path)?;
     Ok((old_parent, old_name, new_parent, new_name))
