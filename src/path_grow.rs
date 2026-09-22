@@ -62,7 +62,7 @@ pub fn grow_file_at_path_to_blocks_journaled(
 ///
 /// # Errors
 ///
-/// Returns InvalidInput for non-file targets or a target that does not exceed the current EOF.
+/// Returns `InvalidInput` for non-file targets or a target that does not exceed the current EOF.
 /// Allocation exhaustion, inode/allocator disagreement, journal-capacity, recovery/checkpoint, and
 /// durable I/O failures are propagated.
 pub fn grow_file_at_path_to_bytes_journaled(
@@ -97,7 +97,7 @@ pub fn grow_file_at_path_to_bytes_journaled(
 ///
 /// # Errors
 ///
-/// Returns InvalidInput for non-file targets or equal-size requests. Growth/shrink validation,
+/// Returns `InvalidInput` for non-file targets or equal-size requests. Growth/shrink validation,
 /// allocator ownership, bounded-journal capacity, recovery/checkpoint, and durable I/O errors are
 /// propagated.
 pub fn resize_file_at_path_to_bytes_journaled(
