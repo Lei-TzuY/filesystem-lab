@@ -5,9 +5,14 @@ use crate::format::{Superblock, SUPERBLOCK_BLOCK};
 use crate::journal::{JournalEntry, TransactionId};
 use crate::journal_codec::{decode_entries, encode_entries};
 
-const REGION_MAGIC: [u8; 4] = *b"JRG1";
-const REGION_VERSION: u16 = 1;
+const REGION_MAGIC_V1: [u8; 4] = *b"JRG1";
+const REGION_MAGIC_V2: [u8; 4] = *b"JRG2";
+const REGION_VERSION_V1: u16 = 1;
+const REGION_VERSION_V2: u16 = 2;
+const REGION_STATE_EMPTY: u16 = 0;
+const REGION_STATE_ACTIVE: u16 = 1;
 const HEADER_SIZE: usize = 32;
+const STATE_OFFSET: usize = 6;
 const CHECKSUM_OFFSET: usize = 16;
 const RESERVED_OFFSET: usize = 20;
 
@@ -42,12 +47,21 @@ pub fn store_journal_image(
     validate_region(device, superblock)?;
     validate_entries(superblock, entries)?;
 
-    if !entries.is_empty() && !load_journal_image(device, superblock)?.is_empty() {
+    if !load_journal_image(device, superblock)?.is_empty() {
         return Err(io::Error::new(
             io::ErrorKind::WouldBlock,
             "journal contains an older transaction; recover and checkpoint before replacement",
         ));
     }
+
+    if entries.is_empty() {
+        return store_empty_journal_anchor(device, superblock);
+    }
+
+    // Establish a durable empty anchor before any tail block is staged. The BlockDevice contract
+    // permits an issued write to become durable before flush, so a crash during tail publication
+    // must still decode as an empty journal rather than as an old header plus new tail bytes.
+    store_empty_journal_anchor(device, superblock)?;
 
     let payload = encode_entries(entries)?;
     let capacity = region_capacity(superblock)?;
@@ -59,9 +73,9 @@ pub fn store_journal_image(
     }
 
     let mut region = vec![0_u8; capacity];
-    region[0..4].copy_from_slice(&REGION_MAGIC);
-    region[4..6].copy_from_slice(&REGION_VERSION.to_le_bytes());
-    region[6..8].copy_from_slice(&0_u16.to_le_bytes());
+    region[0..4].copy_from_slice(&REGION_MAGIC_V2);
+    region[4..6].copy_from_slice(&REGION_VERSION_V2.to_le_bytes());
+    region[STATE_OFFSET..STATE_OFFSET + 2].copy_from_slice(&REGION_STATE_ACTIVE.to_le_bytes());
     let payload_len = u64::try_from(payload.len())
         .map_err(|_| invalid_input("journal payload length exceeds u64"))?;
     region[8..16].copy_from_slice(&payload_len.to_le_bytes());
@@ -75,22 +89,52 @@ pub fn store_journal_image(
     for index in (1..block_count).rev() {
         write_region_block(device, superblock, &region, index)?;
     }
+    if block_count > 1 {
+        // Once the active anchor is allowed to become durable, every referenced tail byte must
+        // already be durable. This flush is therefore a publication barrier, not merely a final
+        // completion flush.
+        device.flush()?;
+    }
     write_region_block(device, superblock, &region, 0)?;
+    device.flush()
+}
+
+/// Publishes the v2 empty journal anchor after the caller has made any replayed home state durable.
+///
+/// Only the header-bearing first journal block is rewritten. Older tail bytes deliberately remain
+/// untouched and are non-authoritative while the empty anchor is present. A successful block write
+/// may become durable before the following flush; either the previous complete active anchor or the
+/// new complete empty anchor is therefore recoverable under the repository's whole-block model.
+pub(crate) fn store_empty_journal_anchor(
+    device: &mut impl BlockDevice,
+    superblock: Superblock,
+) -> io::Result<()> {
+    validate_region(device, superblock)?;
+
+    let mut block = [0_u8; BLOCK_SIZE];
+    block[0..4].copy_from_slice(&REGION_MAGIC_V2);
+    block[4..6].copy_from_slice(&REGION_VERSION_V2.to_le_bytes());
+    block[STATE_OFFSET..STATE_OFFSET + 2].copy_from_slice(&REGION_STATE_EMPTY.to_le_bytes());
+    let checksum = crc32(&block[..HEADER_SIZE]);
+    block[CHECKSUM_OFFSET..CHECKSUM_OFFSET + 4].copy_from_slice(&checksum.to_le_bytes());
+
+    device.write_block(superblock.journal_start, &block)?;
     device.flush()
 }
 
 /// Loads and validates the bounded journal image from the reserved journal region.
 ///
-/// A completely zeroed reservation is treated as an empty journal, which is the state of a newly
-/// formatted filesystem before the first journal image is stored. Any non-zero malformed image is
-/// rejected rather than guessed or truncated.
+/// Completely zeroed reservations remain accepted for freshly formatted filesystems. Version-1
+/// images remain readable for compatibility. Version 2 adds an explicit empty anchor; when that
+/// anchor is present, stale bytes in later journal blocks are intentionally ignored because they
+/// are outside the authoritative log state.
 ///
 /// # Errors
 ///
 /// Returns an error if the superblock/device relation is invalid, region I/O fails, the persistent
-/// header/version/flags/reserved bytes are invalid, the payload length exceeds the reservation,
-/// trailing padding is non-zero, the checksum fails, a record is corrupt/torn, transaction ordering
-/// is malformed, or a write entry targets a forbidden/out-of-range block.
+/// header/version/state/reserved bytes are invalid, the payload length exceeds the reservation,
+/// active-image trailing padding is non-zero, the checksum fails, a record is corrupt/torn,
+/// transaction ordering is malformed, or a write entry targets a forbidden/out-of-range block.
 pub fn load_journal_image(
     device: &mut impl BlockDevice,
     superblock: Superblock,
@@ -122,16 +166,12 @@ pub fn load_journal_image(
     if region.iter().all(|byte| *byte == 0) {
         return Ok(Vec::new());
     }
-    if region[0..4] != REGION_MAGIC {
-        return Err(invalid_data("invalid journal region magic"));
-    }
+
+    let magic: [u8; 4] = region[0..4]
+        .try_into()
+        .map_err(|_| invalid_data("journal region magic is malformed"))?;
     let version = u16::from_le_bytes([region[4], region[5]]);
-    if version != REGION_VERSION {
-        return Err(invalid_data("unsupported journal region version"));
-    }
-    if region[6] != 0 || region[7] != 0 {
-        return Err(invalid_data("unsupported journal region flags"));
-    }
+    let state = u16::from_le_bytes([region[STATE_OFFSET], region[STATE_OFFSET + 1]]);
     if region[RESERVED_OFFSET..HEADER_SIZE]
         .iter()
         .any(|byte| *byte != 0)
@@ -146,6 +186,42 @@ pub fn load_journal_image(
     );
     let payload_len = usize::try_from(payload_len_u64)
         .map_err(|_| invalid_data("journal payload length exceeds usize"))?;
+
+    match (magic, version) {
+        (REGION_MAGIC_V1, REGION_VERSION_V1) => {
+            if state != 0 {
+                return Err(invalid_data("unsupported journal region v1 flags"));
+            }
+        }
+        (REGION_MAGIC_V2, REGION_VERSION_V2) => match state {
+            REGION_STATE_EMPTY => {
+                if payload_len != 0 {
+                    return Err(invalid_data("empty journal anchor has a payload"));
+                }
+                if region[HEADER_SIZE..BLOCK_SIZE]
+                    .iter()
+                    .any(|byte| *byte != 0)
+                {
+                    return Err(invalid_data("empty journal anchor block padding is non-zero"));
+                }
+                let expected_checksum = u32::from_le_bytes(
+                    region[CHECKSUM_OFFSET..CHECKSUM_OFFSET + 4]
+                        .try_into()
+                        .map_err(|_| invalid_data("journal region checksum field is malformed"))?,
+                );
+                let mut header = region[..HEADER_SIZE].to_vec();
+                header[CHECKSUM_OFFSET..CHECKSUM_OFFSET + 4].fill(0);
+                if crc32(&header) != expected_checksum {
+                    return Err(invalid_data("journal empty-anchor checksum mismatch"));
+                }
+                return Ok(Vec::new());
+            }
+            REGION_STATE_ACTIVE => {}
+            _ => return Err(invalid_data("unsupported journal region v2 state")),
+        },
+        _ => return Err(invalid_data("unsupported journal region magic/version")),
+    }
+
     let used = HEADER_SIZE
         .checked_add(payload_len)
         .ok_or_else(|| invalid_data("journal region used length overflow"))?;
