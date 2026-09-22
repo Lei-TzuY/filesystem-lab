@@ -25,6 +25,34 @@ pub struct PersistedInode {
     pub blocks: Vec<u64>,
 }
 
+impl PersistedInode {
+    /// Constructs one persistence-safe inode value.
+    ///
+    /// This is the production construction boundary for durable inode records. Keeping creation
+    /// behind one invariant gate allows future record revisions to add persisted fields without
+    /// duplicating validation policy across pathname and lifecycle code.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidInput` when the inode identifier is zero or the block vector contains a
+    /// duplicate physical block reference.
+    pub fn new(id: u64, kind: InodeKind, blocks: Vec<u64>) -> io::Result<Self> {
+        validate_inode_fields(id, &blocks)
+            .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+        Ok(Self { id, kind, blocks })
+    }
+
+    /// Validates invariants that must hold before an inode can be encoded durably.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidInput` for an invalid identifier or duplicate block references.
+    pub fn validate_for_persistence(&self) -> io::Result<()> {
+        validate_inode_fields(self.id, &self.blocks)
+            .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))
+    }
+}
+
 impl From<&Inode> for PersistedInode {
     fn from(inode: &Inode) -> Self {
         Self {
@@ -42,12 +70,7 @@ impl From<&Inode> for PersistedInode {
 /// Returns `InvalidInput` when the inode identifier is zero, the block count cannot fit in the
 /// record header, the encoded length overflows, or the same block is referenced more than once.
 pub fn encode_inode(inode: &PersistedInode) -> io::Result<Vec<u8>> {
-    if inode.id == 0 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "inode identifier zero is reserved",
-        ));
-    }
+    inode.validate_for_persistence()?;
     let block_count = u32::try_from(inode.blocks.len()).map_err(|_| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -67,15 +90,6 @@ pub fn encode_inode(inode: &PersistedInode) -> io::Result<Vec<u8>> {
             "inode record length exceeds codec limit",
         )
     })?;
-
-    let mut sorted = inode.blocks.clone();
-    sorted.sort_unstable();
-    if sorted.windows(2).any(|pair| pair[0] == pair[1]) {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "inode record contains duplicate block references",
-        ));
-    }
 
     let mut bytes = vec![0_u8; total_len];
     bytes[MAGIC_OFFSET..MAGIC_OFFSET + 4].copy_from_slice(&INODE_RECORD_MAGIC);
@@ -170,12 +184,6 @@ pub fn decode_inode(bytes: &[u8]) -> io::Result<PersistedInode> {
     }
 
     let id = read_u64(bytes, INODE_ID_OFFSET);
-    if id == 0 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "inode identifier zero is reserved",
-        ));
-    }
     let kind = match read_u16(bytes, KIND_OFFSET) {
         KIND_FILE => InodeKind::File,
         KIND_DIRECTORY => InodeKind::Directory,
@@ -193,16 +201,22 @@ pub fn decode_inode(bytes: &[u8]) -> io::Result<PersistedInode> {
         let offset = INODE_RECORD_HEADER_LEN + index * 8;
         blocks.push(read_u64(bytes, offset));
     }
-    let mut sorted = blocks.clone();
-    sorted.sort_unstable();
-    if sorted.windows(2).any(|pair| pair[0] == pair[1]) {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "inode record contains duplicate block references",
-        ));
-    }
+    validate_inode_fields(id, &blocks)
+        .map_err(|message| io::Error::new(io::ErrorKind::InvalidData, message))?;
 
     Ok(PersistedInode { id, kind, blocks })
+}
+
+fn validate_inode_fields(id: u64, blocks: &[u64]) -> Result<(), &'static str> {
+    if id == 0 {
+        return Err("inode identifier zero is reserved");
+    }
+    let mut sorted = blocks.to_vec();
+    sorted.sort_unstable();
+    if sorted.windows(2).any(|pair| pair[0] == pair[1]) {
+        return Err("inode record contains duplicate block references");
+    }
+    Ok(())
 }
 
 const fn kind_code(kind: InodeKind) -> u16 {
@@ -261,11 +275,17 @@ mod tests {
     use super::*;
 
     fn sample() -> PersistedInode {
-        PersistedInode {
-            id: 7,
-            kind: InodeKind::File,
-            blocks: vec![11, 19, 27],
-        }
+        PersistedInode::new(7, InodeKind::File, vec![11, 19, 27]).unwrap()
+    }
+
+    #[test]
+    fn constructor_rejects_invalid_persistence_invariants() {
+        let zero = PersistedInode::new(0, InodeKind::File, Vec::new()).unwrap_err();
+        assert_eq!(zero.kind(), io::ErrorKind::InvalidInput);
+
+        let duplicate =
+            PersistedInode::new(3, InodeKind::Directory, vec![9, 9]).unwrap_err();
+        assert_eq!(duplicate.kind(), io::ErrorKind::InvalidInput);
     }
 
     #[test]
