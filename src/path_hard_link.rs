@@ -5,7 +5,7 @@ use crate::format::Superblock;
 use crate::hard_link_tx::{hard_link_file_journaled, hard_link_symlink_journaled};
 use crate::inode::InodeKind;
 use crate::inode_table::load_inode_table;
-use crate::journal_checkpoint::recover_journal_and_checkpoint;
+use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::path_lookup::{
     resolve_path_following_symlinks, resolve_path_without_following_final_symlink,
 };
@@ -51,7 +51,7 @@ pub fn hard_link_at_path_with_source_follow_journaled(
         return Err(invalid_input("hard-link source must be an absolute path"));
     }
 
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let target = match follow {
         HardLinkSourceFollow::NoFollowFinal => {
             resolve_path_without_following_final_symlink(device, superblock, source)?
@@ -146,7 +146,7 @@ pub fn hard_link_file_at_path_journaled(
         return Err(invalid_input("hard-link source must be an absolute path"));
     }
 
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let target = resolve_path_following_symlinks(device, superblock, source)?;
     let (parent_path, name) = split_destination(destination)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
@@ -178,7 +178,7 @@ pub fn hard_link_symlink_at_path_journaled(
         return Err(invalid_input("hard-link source must be an absolute path"));
     }
 
-    recover_journal_and_checkpoint(device, *superblock)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
     let target = resolve_path_without_following_final_symlink(device, superblock, source)?;
     let (parent_path, name) = split_destination(destination)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
