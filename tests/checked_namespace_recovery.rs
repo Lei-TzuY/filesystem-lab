@@ -123,7 +123,9 @@ fn assert_bad_wal_remains_unapplied(
             blocks: Vec::new(),
         }]
     );
-    assert!(load_directory_table(device, &superblock).unwrap().is_empty());
+    assert!(load_directory_table(device, &superblock)
+        .unwrap()
+        .is_empty());
     assert!(!load_journal_image(device, superblock).unwrap().is_empty());
     assert!(orphan >= superblock.reserved_blocks());
 }
@@ -134,8 +136,7 @@ fn namespace_create_rejects_semantic_bad_wal_before_home_replay() {
     let writes_before = device.writes;
     let flushes_before = device.flushes;
 
-    let error =
-        create_empty_file_at_path_journaled(&mut device, &superblock, "/new").unwrap_err();
+    let error = create_empty_file_at_path_journaled(&mut device, &superblock, "/new").unwrap_err();
 
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     assert!(error
