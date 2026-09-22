@@ -77,11 +77,11 @@ pub fn create_one_block_file_at_path_journaled(
         name: name.to_owned(),
     };
     encode_directory_entry(&new_entry)?;
-    inodes.push(PersistedInode {
-        id: inode_id,
-        kind: InodeKind::File,
-        blocks: vec![data_block],
-    });
+    inodes.push(PersistedInode::new(
+        inode_id,
+        InodeKind::File,
+        vec![data_block],
+    )?);
     entries.push(new_entry);
 
     let report = store_create_with_data_journaled(
@@ -146,11 +146,11 @@ pub fn create_file_with_blocks_at_path_journaled(
         name: name.to_owned(),
     };
     encode_directory_entry(&new_entry)?;
-    inodes.push(PersistedInode {
-        id: inode_id,
-        kind: InodeKind::File,
-        blocks: inode_blocks,
-    });
+    inodes.push(PersistedInode::new(
+        inode_id,
+        InodeKind::File,
+        inode_blocks,
+    )?);
     entries.push(new_entry);
 
     let report = store_create_with_blocks_journaled(
@@ -219,11 +219,7 @@ fn create_blockless_inode_at_path_journaled(
     };
     encode_directory_entry(&new_entry)?;
 
-    inodes.push(PersistedInode {
-        id: inode_id,
-        kind,
-        blocks: Vec::new(),
-    });
+    inodes.push(PersistedInode::new(inode_id, kind, Vec::new())?);
     entries.push(new_entry);
 
     let report =
