@@ -94,6 +94,7 @@ fn reports_recovered_child_metadata_and_global_reference_counts() {
                 inode_id: file_inode,
                 kind: InodeKind::File,
                 logical_blocks: 2,
+                byte_len: (2 * BLOCK_SIZE) as u64,
                 namespace_references: 2,
             },
             PathDirectoryEntryMetadata {
@@ -101,6 +102,7 @@ fn reports_recovered_child_metadata_and_global_reference_counts() {
                 inode_id: directory_inode,
                 kind: InodeKind::Directory,
                 logical_blocks: 0,
+                byte_len: 0,
                 namespace_references: 1,
             },
         ]
@@ -113,6 +115,7 @@ fn reports_recovered_child_metadata_and_global_reference_counts() {
             inode_id: file_inode,
             kind: InodeKind::File,
             logical_blocks: 2,
+            byte_len: (2 * BLOCK_SIZE) as u64,
             namespace_references: 2,
         }]
     );
@@ -144,6 +147,7 @@ fn pages_recovered_metadata_with_stable_exclusive_name_cursor() {
                     inode_id: alpha_inode,
                     kind: InodeKind::File,
                     logical_blocks: 1,
+                    byte_len: BLOCK_SIZE as u64,
                     namespace_references: 2,
                 },
                 PathDirectoryEntryMetadata {
@@ -151,6 +155,7 @@ fn pages_recovered_metadata_with_stable_exclusive_name_cursor() {
                     inode_id: alpha_inode,
                     kind: InodeKind::File,
                     logical_blocks: 1,
+                    byte_len: BLOCK_SIZE as u64,
                     namespace_references: 2,
                 },
             ],
@@ -175,6 +180,7 @@ fn pages_recovered_metadata_with_stable_exclusive_name_cursor() {
                     inode_id: charlie_inode,
                     kind: InodeKind::File,
                     logical_blocks: 1,
+                    byte_len: BLOCK_SIZE as u64,
                     namespace_references: 1,
                 },
                 PathDirectoryEntryMetadata {
@@ -182,6 +188,7 @@ fn pages_recovered_metadata_with_stable_exclusive_name_cursor() {
                     inode_id: echo_inode,
                     kind: InodeKind::File,
                     logical_blocks: 1,
+                    byte_len: BLOCK_SIZE as u64,
                     namespace_references: 1,
                 },
             ],
@@ -198,6 +205,7 @@ fn pages_recovered_metadata_with_stable_exclusive_name_cursor() {
                 inode_id: charlie_inode,
                 kind: InodeKind::File,
                 logical_blocks: 1,
+                byte_len: BLOCK_SIZE as u64,
                 namespace_references: 1,
             }],
             next_after: Some("charlie".to_owned()),
