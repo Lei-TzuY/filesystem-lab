@@ -5,8 +5,9 @@ use std::io;
 use filesystem_lab::allocation_disk::{load_allocator, store_allocator};
 use filesystem_lab::block::{BlockDevice, BLOCK_SIZE};
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
-use filesystem_lab::directory_table::store_directory_table;
+use filesystem_lab::directory_table::{load_directory_table, store_directory_table};
 use filesystem_lab::format::{format_device, Superblock};
+use filesystem_lab::format_geometry::format_device_with_journal_blocks;
 use filesystem_lab::fsck::check_device;
 use filesystem_lab::inode::InodeKind;
 use filesystem_lab::inode_codec::PersistedInode;
@@ -20,6 +21,8 @@ use filesystem_lab::path_grow::{
 use filesystem_lab::path_metadata::metadata_at_path;
 use filesystem_lab::recovery::RecoveryReport;
 use support::CrashDevice;
+
+const JOURNAL_BLOCKS: u64 = 10;
 
 fn install_namespace(device: &mut CrashDevice, superblock: &Superblock, file: PersistedInode) {
     let root = PersistedInode::new(1, InodeKind::Directory, Vec::new()).unwrap();
@@ -38,7 +41,8 @@ fn install_namespace(device: &mut CrashDevice, superblock: &Superblock, file: Pe
 
 fn empty_file() -> (CrashDevice, Superblock) {
     let mut device = CrashDevice::new(64);
-    let superblock = format_device(&mut device).unwrap();
+    let superblock =
+        format_device_with_journal_blocks(&mut device, JOURNAL_BLOCKS).unwrap();
     install_namespace(
         &mut device,
         &superblock,
@@ -50,7 +54,8 @@ fn empty_file() -> (CrashDevice, Superblock) {
 
 fn partial_file() -> (CrashDevice, Superblock, u64) {
     let mut device = CrashDevice::new(64);
-    let superblock = format_device(&mut device).unwrap();
+    let superblock =
+        format_device_with_journal_blocks(&mut device, JOURNAL_BLOCKS).unwrap();
     let mut allocator = load_allocator(&mut device, &superblock).unwrap();
     let first = allocator.allocate().unwrap();
     store_allocator(&mut device, &superblock, &allocator).unwrap();
@@ -73,6 +78,45 @@ fn read_block(device: &mut CrashDevice, block: u64) -> [u8; BLOCK_SIZE] {
     let mut image = [0_u8; BLOCK_SIZE];
     device.read_block(block, &mut image).unwrap();
     image
+}
+
+#[test]
+fn default_journal_rejects_large_growth_without_home_mutation() {
+    let mut device = CrashDevice::new(64);
+    let superblock = format_device(&mut device).unwrap();
+    install_namespace(
+        &mut device,
+        &superblock,
+        PersistedInode::new(2, InodeKind::File, Vec::new()).unwrap(),
+    );
+
+    let allocator_before = load_allocator(&mut device, &superblock).unwrap();
+    let inodes_before = load_inode_table(&mut device, &superblock).unwrap();
+    let directory_before = load_directory_table(&mut device, &superblock).unwrap();
+
+    let error =
+        grow_file_at_path_to_bytes_journaled(&mut device, &superblock, "/file", 5000).unwrap_err();
+
+    assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+    assert!(error.to_string().contains("journal image exceeds reserved region"));
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
+    assert_eq!(
+        load_directory_table(&mut device, &superblock).unwrap(),
+        directory_before
+    );
+    assert!(
+        load_journal_image(&mut device, superblock)
+            .unwrap()
+            .is_empty()
+    );
+    check_device(&mut device).unwrap();
 }
 
 #[test]
