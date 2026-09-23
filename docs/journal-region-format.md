@@ -91,3 +91,11 @@ transition. Stale bank bytes are then non-authoritative.
 This is still a bounded snapshot journal. Bank capacity is half of the reservation after the anchor
 block, and there is no persistent circular head/tail, wraparound reuse, or arbitrary-duration
 transaction retention.
+
+## Retained-prefix checkpoint and reclamation
+
+A v3 retained snapshot can advance its logical head without replaying the entire retained stream. The prefix-checkpoint path selects a complete-transaction prefix, projects only that prefix through strict fsck, and refuses mutation if the projected durable home state would be inconsistent. Once accepted, prefix home writes are issued and flushed before the journal anchor is changed.
+
+If transactions remain, the suffix is written as a complete replacement snapshot into the inactive bank, flushed, and then made authoritative by the next anchor generation. If no suffix remains, checkpoint collapses the retained journal to the canonical v2 empty anchor. A crash before the replacement anchor becomes durable leaves the previous full retained snapshot authoritative; replaying the already-durable prefix again is idempotent. A crash after the new anchor becomes durable exposes only the suffix, after the prefix home writes are already durable.
+
+This permits bounded bank capacity to be reclaimed incrementally and lets later complete transactions append after an older prefix has been consumed. It is logical head advancement over dual-bank snapshots, not yet a physical circular head/tail ring or wraparound record allocator.

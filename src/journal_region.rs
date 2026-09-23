@@ -173,8 +173,67 @@ pub fn append_retained_journal_entries(
         };
 
     combined.extend_from_slice(entries);
-    validate_complete_entries(superblock, &combined)?;
-    let payload = encode_entries(&combined)?;
+    publish_v3_snapshot(
+        device,
+        superblock,
+        layout,
+        target_bank,
+        generation,
+        &combined,
+    )
+}
+
+pub(crate) fn load_retained_journal_entries(
+    device: &mut impl BlockDevice,
+    superblock: Superblock,
+) -> io::Result<Option<Vec<JournalEntry>>> {
+    validate_region(device, superblock)?;
+    let mut first_block = [0_u8; BLOCK_SIZE];
+    device.read_block(superblock.journal_start, &mut first_block)?;
+    let Some(anchor) = decode_v3_anchor(&first_block)? else {
+        return Ok(None);
+    };
+    let layout = v3_bank_layout(superblock)?;
+    let entries = read_v3_entries(device, superblock, layout, anchor)?;
+    validate_complete_entries(superblock, &entries)?;
+    Ok(Some(entries))
+}
+
+pub(crate) fn replace_retained_journal_entries(
+    device: &mut impl BlockDevice,
+    superblock: Superblock,
+    entries: &[JournalEntry],
+) -> io::Result<()> {
+    validate_region(device, superblock)?;
+    if entries.is_empty() {
+        return store_empty_journal_anchor(device, superblock);
+    }
+    validate_complete_entries(superblock, entries)?;
+
+    let layout = v3_bank_layout(superblock)?;
+    let mut first_block = [0_u8; BLOCK_SIZE];
+    device.read_block(superblock.journal_start, &mut first_block)?;
+    let anchor = decode_v3_anchor(&first_block)?.ok_or_else(|| {
+        invalid_input("retained journal replacement requires an active v3 snapshot")
+    })?;
+    let target_bank = usize::from(anchor.bank == 0);
+    let generation = anchor
+        .generation
+        .checked_add(1)
+        .ok_or_else(|| invalid_input("journal v3 generation exhausted"))?;
+    publish_v3_snapshot(device, superblock, layout, target_bank, generation, entries)
+}
+
+fn publish_v3_snapshot(
+    device: &mut impl BlockDevice,
+    superblock: Superblock,
+    layout: V3BankLayout,
+    target_bank: usize,
+    generation: u64,
+    entries: &[JournalEntry],
+) -> io::Result<()> {
+    validate_complete_entries(superblock, entries)?;
+    let payload = encode_entries(entries)?;
     if payload.len() > layout.capacity {
         return Err(invalid_input("retained journal image exceeds one v3 bank"));
     }
