@@ -25,6 +25,7 @@ The implemented core now includes:
 - read-only fsck across superblock geometry, allocation ownership, journal integrity, inode block ownership, namespace references, root reachability, and directory-cycle constraints, plus bounded crash-consistent repair for allocation leaks and otherwise-valid unreachable namespace components;
 - crash-consistent exact-byte resize: shrink releases only the trailing block suffix and zeroes discarded final-block tail bytes, while growth zero-fills every newly visible byte and allocates only required trailing blocks;
 - atomic non-sparse extending byte writes that commit gap zero-fill, payload, new block ownership, block mapping, and EOF in one bounded WAL transaction; plus focused malformed-image, corruption, insufficient-journal-capacity, and crash-prefix regressions.
+- bounded crash-consistent recursive directory-tree removal that preserves externally hard-linked files/symlinks, rejects externally referenced subtree directories, and retires ownership only for inodes losing their final namespace reference;
 
 The transaction paths share one internal metadata-image capture primitive so table encoders are rendered and compared with home blocks under one bounds/zero-fill contract before publication through the WAL.
 
@@ -64,7 +65,7 @@ The following are intentionally outside the current checkpoint unless a concrete
 
 - circular journal head/tail management and multi-transaction retention beyond the bounded reservation;
 - sparse files, hole punching, and a general extent data model;
-- persisted hard-link counts and recursive deletion;
+- persisted hard-link counts;
 - permissions, ACLs, symlinks, mmap, FUSE integration, and broad POSIX compatibility;
 - sector tearing, controller reordering, and partial-block fault models.
 
