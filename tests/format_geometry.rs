@@ -59,7 +59,10 @@ impl BlockDevice for MemoryDevice {
     }
 }
 
-fn assert_clean_metadata(device: &mut MemoryDevice, superblock: filesystem_lab::format::Superblock) {
+fn assert_clean_metadata(
+    device: &mut MemoryDevice,
+    superblock: filesystem_lab::format::Superblock,
+) {
     assert_eq!(read_superblock(device).unwrap(), superblock);
     assert!(load_journal_image(device, superblock).unwrap().is_empty());
     assert_eq!(
@@ -69,7 +72,9 @@ fn assert_clean_metadata(device: &mut MemoryDevice, superblock: filesystem_lab::
         0
     );
     assert!(load_inode_table(device, &superblock).unwrap().is_empty());
-    assert!(load_directory_table(device, &superblock).unwrap().is_empty());
+    assert!(load_directory_table(device, &superblock)
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -90,8 +95,7 @@ fn custom_metadata_geometry_replaces_stale_journal_bytes() {
     let journal_blocks = 7_u64;
     device.poison_blocks(1, 1 + usize::try_from(journal_blocks).unwrap());
 
-    let superblock =
-        format_device_with_metadata_blocks(&mut device, journal_blocks, 3, 4).unwrap();
+    let superblock = format_device_with_metadata_blocks(&mut device, journal_blocks, 3, 4).unwrap();
 
     assert_eq!(superblock.journal_blocks, journal_blocks);
     assert_eq!(superblock.inode_blocks, 3);
