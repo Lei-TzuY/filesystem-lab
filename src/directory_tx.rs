@@ -54,19 +54,19 @@ where
         ));
     }
 
-    let current_entries =
-        if let Some(entries) = load_retained_journal_entries(device, *superblock)? {
-            entries
-        } else {
-            let existing = load_journal_image(device, *superblock)?;
-            if !existing.is_empty() {
-                return Err(io::Error::new(
-                    io::ErrorKind::WouldBlock,
-                    "active v1/v2 journal must be checkpointed before retained directory update",
-                ));
-            }
-            Vec::new()
-        };
+    let current_entries = if let Some(entries) = load_retained_journal_entries(device, *superblock)?
+    {
+        entries
+    } else {
+        let existing = load_journal_image(device, *superblock)?;
+        if !existing.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "active v1/v2 journal must be checkpointed before retained directory update",
+            ));
+        }
+        Vec::new()
+    };
 
     let (mut projected, current_report) = projected_device_after_entries(device, &current_entries)?;
     let mut desired_entries = load_directory_table(&mut projected, superblock)?;
