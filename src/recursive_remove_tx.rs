@@ -98,10 +98,10 @@ fn build_recursive_remove_plan(
         ));
     }
 
-    let subtree_directories = collect_subtree_directories(target, &inode_kinds, &entries);
+    let subtree_directories = collect_subtree_directories(target, &inode_kinds, entries);
     let removed_entry_indices =
-        collect_removed_entry_indices(selected_index, &subtree_directories, &entries);
-    reject_external_directory_references(&subtree_directories, &removed_entry_indices, &entries)?;
+        collect_removed_entry_indices(selected_index, &subtree_directories, entries);
+    reject_external_directory_references(&subtree_directories, &removed_entry_indices, entries)?;
 
     let desired_entries = entries
         .iter()
@@ -113,7 +113,7 @@ fn build_recursive_remove_plan(
     let removed_inodes = collect_removed_inodes(
         &subtree_directories,
         &removed_entry_indices,
-        &entries,
+        entries,
         &desired_entries,
     );
     let removed_set = removed_inodes.iter().copied().collect::<BTreeSet<_>>();
@@ -122,7 +122,7 @@ fn build_recursive_remove_plan(
         .filter(|inode| !removed_set.contains(&inode.id))
         .cloned()
         .collect::<Vec<_>>();
-    let released_blocks = release_removed_inode_blocks(&mut allocator, &inodes, &removed_set)?;
+    let released_blocks = release_removed_inode_blocks(&mut allocator, inodes, &removed_set)?;
 
     Ok(RecursiveRemovePlan {
         allocator,
