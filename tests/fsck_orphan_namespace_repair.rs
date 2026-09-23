@@ -60,9 +60,9 @@ fn assert_repaired(
     expected_name: &str,
 ) {
     let entries = load_directory_table(device, superblock).unwrap();
-    assert!(entries.iter().any(|entry| {
-        entry.parent == 1 && entry.target == 2 && entry.name == expected_name
-    }));
+    assert!(entries
+        .iter()
+        .any(|entry| { entry.parent == 1 && entry.target == 2 && entry.name == expected_name }));
     assert!(entries
         .iter()
         .any(|entry| entry.parent == 2 && entry.target == 3 && entry.name == "child"));
@@ -106,12 +106,7 @@ fn repair_uses_deterministic_collision_suffix() {
     assert_eq!(report.reattached.len(), 1);
     assert_eq!(report.reattached[0].inode_id, 2);
     assert_eq!(report.reattached[0].name, ".fsck-orphan-2-1");
-    assert_repaired(
-        &mut device,
-        &superblock,
-        file_block,
-        ".fsck-orphan-2-1",
-    );
+    assert_repaired(&mut device, &superblock, file_block, ".fsck-orphan-2-1");
 }
 
 #[test]
@@ -174,12 +169,7 @@ fn every_repair_crash_point_converges_to_same_clean_namespace() {
 
         device.reboot();
         repair_unreachable_inodes_journaled(&mut device, &superblock).unwrap();
-        assert_repaired(
-            &mut device,
-            &superblock,
-            file_block,
-            ".fsck-orphan-2",
-        );
+        assert_repaired(&mut device, &superblock, file_block, ".fsck-orphan-2");
 
         let second = repair_unreachable_inodes_journaled(&mut device, &superblock).unwrap();
         assert!(second.reattached.is_empty(), "crash_at={crash_at}");
