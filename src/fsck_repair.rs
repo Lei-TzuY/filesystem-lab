@@ -5,7 +5,7 @@ use crate::allocation_disk::load_allocator;
 use crate::allocation_tx::store_allocator_journaled;
 use crate::block::BlockDevice;
 use crate::directory_codec::PersistedDirectoryEntry;
-use crate::directory_table::{load_directory_table, store_directory_table};
+use crate::directory_table::load_directory_table;
 use crate::directory_tx::store_directory_table_journaled;
 use crate::format::{read_superblock, Superblock};
 use crate::fsck::{
