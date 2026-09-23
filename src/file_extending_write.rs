@@ -1,10 +1,12 @@
 use std::io;
 
+use crate::allocation::BlockAllocator;
 use crate::allocation_disk::{load_allocator, store_allocator};
 use crate::block::{BlockDevice, BLOCK_SIZE, BLOCK_SIZE_U64};
 use crate::file_data::write_file_range_journaled;
 use crate::format::Superblock;
 use crate::inode::InodeKind;
+use crate::inode_codec::PersistedInode;
 use crate::inode_table::{load_inode_table, store_inode_table};
 use crate::journal::JournalLog;
 use crate::journal_checkpoint::recover_journal_and_checkpoint;
@@ -40,13 +42,58 @@ pub fn write_file_range_extending_journaled(
     if data.is_empty() {
         return Err(invalid_input("extending write requires non-empty data"));
     }
-
     let data_len = u64::try_from(data.len())
         .map_err(|_| invalid_input("extending write length exceeds u64"))?;
     let end_offset = start_offset
         .checked_add(data_len)
         .ok_or_else(|| invalid_input("extending write end offset overflow"))?;
 
+    match prepare_write_plan(device, superblock, inode_id, start_offset, end_offset, data)? {
+        WritePlan::Overwrite {
+            first_block_index,
+            block_offset,
+        } => {
+            let report = write_file_range_journaled(
+                device,
+                superblock,
+                inode_id,
+                first_block_index,
+                block_offset,
+                data,
+            )?;
+            Ok((Vec::new(), report))
+        }
+        WritePlan::Extend(plan) => {
+            let changed = render_changed_homes(device, superblock, &plan)?;
+            let report = publish_extending_write(device, *superblock, &changed)?;
+            Ok((plan.allocated, report))
+        }
+    }
+}
+
+enum WritePlan {
+    Overwrite {
+        first_block_index: usize,
+        block_offset: usize,
+    },
+    Extend(ExtendingWritePlan),
+}
+
+struct ExtendingWritePlan {
+    allocator: BlockAllocator,
+    inodes: Vec<PersistedInode>,
+    allocated: Vec<u64>,
+    data_writes: Vec<(u64, [u8; BLOCK_SIZE])>,
+}
+
+fn prepare_write_plan(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    inode_id: u64,
+    start_offset: u64,
+    end_offset: u64,
+    data: &[u8],
+) -> io::Result<WritePlan> {
     let mut allocator = load_allocator(device, superblock)?;
     let mut inodes = load_inode_table(device, superblock)?;
     let inode_index = inodes
@@ -63,19 +110,12 @@ pub fn write_file_range_extending_journaled(
         .canonical_byte_len()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error.to_string()))?;
     if end_offset <= current_eof {
-        let first_block_index = usize::try_from(start_offset / BLOCK_SIZE_U64)
-            .map_err(|_| invalid_input("extending write logical block index exceeds usize"))?;
-        let block_offset = usize::try_from(start_offset % BLOCK_SIZE_U64)
-            .map_err(|_| invalid_input("extending write block offset exceeds usize"))?;
-        let report = write_file_range_journaled(
-            device,
-            superblock,
-            inode_id,
-            first_block_index,
-            block_offset,
-            data,
-        )?;
-        return Ok((Vec::new(), report));
+        return Ok(WritePlan::Overwrite {
+            first_block_index: usize::try_from(start_offset / BLOCK_SIZE_U64)
+                .map_err(|_| invalid_input("extending write logical block index exceeds usize"))?,
+            block_offset: usize::try_from(start_offset % BLOCK_SIZE_U64)
+                .map_err(|_| invalid_input("extending write block offset exceeds usize"))?,
+        });
     }
 
     let target_blocks = byte_len_to_block_count(end_offset)?;
@@ -99,30 +139,45 @@ pub fn write_file_range_extending_journaled(
     }
     inodes[inode_index].set_file_byte_len(end_offset)?;
 
+    let data_writes = prepare_data_writes(
+        device,
+        &allocator,
+        &inodes[inode_index],
+        current_blocks,
+        current_eof,
+        start_offset,
+        end_offset,
+        data,
+    )?;
+
+    Ok(WritePlan::Extend(ExtendingWritePlan {
+        allocator,
+        inodes,
+        allocated,
+        data_writes,
+    }))
+}
+
+fn prepare_data_writes(
+    device: &mut impl BlockDevice,
+    allocator: &BlockAllocator,
+    inode: &PersistedInode,
+    current_blocks: usize,
+    current_eof: u64,
+    start_offset: u64,
+    end_offset: u64,
+    data: &[u8],
+) -> io::Result<Vec<(u64, [u8; BLOCK_SIZE])>> {
     let first_changed_byte = current_eof.min(start_offset);
     let first_changed_block = usize::try_from(first_changed_byte / BLOCK_SIZE_U64)
         .map_err(|_| invalid_input("extending write first block exceeds usize"))?;
-    let end_block = target_blocks;
+    let end_block = byte_len_to_block_count(end_offset)?;
+    let mut writes = Vec::with_capacity(end_block.saturating_sub(first_changed_block));
 
-    let mut data_writes = Vec::with_capacity(end_block.saturating_sub(first_changed_block));
     for logical_index in first_changed_block..end_block {
-        let physical_block = inodes[inode_index].blocks[logical_index];
-        let mut image = if logical_index < current_blocks {
-            let owned = allocator
-                .is_owned(physical_block)
-                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-            if !owned {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "extending write existing block is not allocator-owned",
-                ));
-            }
-            let mut current = [0_u8; BLOCK_SIZE];
-            device.read_block(physical_block, &mut current)?;
-            current
-        } else {
-            [0_u8; BLOCK_SIZE]
-        };
+        let physical_block = inode.blocks[logical_index];
+        let (mut image, current_image) =
+            load_candidate_block(device, allocator, physical_block, logical_index, current_blocks)?;
 
         let block_start = u64::try_from(logical_index)
             .map_err(|_| invalid_input("extending write block index exceeds u64"))?
@@ -149,25 +204,50 @@ pub fn write_file_range_extending_journaled(
             end_offset,
             data,
         )?;
-
         if end_offset < block_end {
             zero_intersection(&mut image, block_start, block_end, end_offset, block_end)?;
         }
 
-        if logical_index >= current_blocks {
-            data_writes.push((physical_block, image));
-        } else {
-            let mut current = [0_u8; BLOCK_SIZE];
-            device.read_block(physical_block, &mut current)?;
-            if current != image {
-                data_writes.push((physical_block, image));
-            }
+        if current_image.is_none_or(|current| current != image) {
+            writes.push((physical_block, image));
         }
     }
+    Ok(writes)
+}
 
+fn load_candidate_block(
+    device: &mut impl BlockDevice,
+    allocator: &BlockAllocator,
+    physical_block: u64,
+    logical_index: usize,
+    current_blocks: usize,
+) -> io::Result<([u8; BLOCK_SIZE], Option<[u8; BLOCK_SIZE]>)> {
+    if logical_index >= current_blocks {
+        return Ok(([0_u8; BLOCK_SIZE], None));
+    }
+
+    let owned = allocator
+        .is_owned(physical_block)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    if !owned {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "extending write existing block is not allocator-owned",
+        ));
+    }
+    let mut current = [0_u8; BLOCK_SIZE];
+    device.read_block(physical_block, &mut current)?;
+    Ok((current, Some(current)))
+}
+
+fn render_changed_homes(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    plan: &ExtendingWritePlan,
+) -> io::Result<Vec<(u64, [u8; BLOCK_SIZE])>> {
     let mut capture = CaptureDevice::new(superblock.total_blocks);
-    store_allocator(&mut capture, superblock, &allocator)?;
-    store_inode_table(&mut capture, superblock, &inodes)?;
+    store_allocator(&mut capture, superblock, &plan.allocator)?;
+    store_inode_table(&mut capture, superblock, &plan.inodes)?;
 
     let mut changed = Vec::new();
     capture.collect_changed_range(
@@ -183,25 +263,31 @@ pub fn write_file_range_extending_journaled(
         &mut changed,
     )?;
     capture.ensure_empty("extending write image rendered outside allocation and inode regions")?;
-    changed.extend(data_writes);
+    changed.extend(plan.data_writes.iter().copied());
+    Ok(changed)
+}
 
+fn publish_extending_write(
+    device: &mut impl BlockDevice,
+    superblock: Superblock,
+    changed: &[(u64, [u8; BLOCK_SIZE])],
+) -> io::Result<RecoveryReport> {
     let mut log = JournalLog::new();
     let txid = log.begin()?;
     for (home_block, image) in changed.iter().copied() {
         log.write(txid, home_block, image)?;
     }
     log.commit(txid)?;
-    store_journal_image(device, *superblock, log.entries())?;
+    store_journal_image(device, superblock, log.entries())?;
 
-    let report = recover_journal_and_checkpoint(device, *superblock)?;
+    let report = recover_journal_and_checkpoint(device, superblock)?;
     if report.committed_transactions != 1 || report.home_writes != changed.len() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "extending write recovery report is inconsistent",
         ));
     }
-
-    Ok((allocated, report))
+    Ok(report)
 }
 
 fn byte_len_to_block_count(byte_len: u64) -> io::Result<usize> {
