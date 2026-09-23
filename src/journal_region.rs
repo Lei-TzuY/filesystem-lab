@@ -155,9 +155,7 @@ pub fn append_retained_journal_entries(
         if let Some(anchor) = decode_v3_anchor(&first_block)? {
             let current = read_v3_entries(device, superblock, layout, anchor)?;
             validate_complete_entries(superblock, &current)?;
-            let target_bank = 1_usize
-                .checked_sub(anchor.bank)
-                .ok_or_else(|| invalid_data("journal v3 active bank is invalid"))?;
+            let target_bank = if anchor.bank == 0 { 1 } else { 0 };
             let generation = anchor
                 .generation
                 .checked_add(1)
