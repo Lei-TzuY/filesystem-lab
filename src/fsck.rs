@@ -116,7 +116,6 @@ pub(crate) fn validate_namespace_snapshot(
     audit_namespace(inodes, entries)
 }
 
-
 fn finish_device_audit(
     device: &mut impl BlockDevice,
     superblock: Superblock,
