@@ -226,7 +226,7 @@ fn prepare_data_writes(
             )?;
         }
 
-        if current_image.is_none_or(|current| current != image) {
+        if current_image != Some(image) {
             writes.push((physical_block, image));
         }
     }
