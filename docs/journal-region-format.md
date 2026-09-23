@@ -59,3 +59,34 @@ never target the superblock or the journal reservation itself.
 
 The journal is still bounded rather than circular; persistent head/tail wraparound and multi-
 transaction retention remain outside this milestone.
+
+
+## Version 3 retained snapshots
+
+Version 3 adds an optional bounded retained-log publication mode without changing filesystem
+superblock geometry. The first journal block is a checksummed anchor and the remaining reservation is
+split into two equal-sized banks. The anchor records the active bank, a monotonically increasing
+generation, the encoded payload length, the payload CRC-32, and its own header CRC-32.
+
+A retained publication writes the complete replacement journal stream to the inactive bank, flushes
+that bank, then atomically replaces the first-block anchor and flushes again. The old active bank is
+never overwritten before the new bank is durable. Under the repository's whole-block crash model,
+reboot therefore observes either the previous complete retained snapshot or the new complete
+snapshot.
+
+The first retained snapshot may be created from the canonical v2 empty anchor or a zeroed legacy
+empty reservation. Once v3 is active, later retained appends alternate banks and carry forward the
+already-retained complete transactions. Active v1/v2 logs must be recovered and checkpointed before
+entering retained mode.
+
+Only complete committed transactions may be appended through the retained API. A retained snapshot
+with an incomplete tail is rejected for further append, keeping the bank-switch boundary itself a
+complete-transaction durability point.
+
+Checkpointing remains compatible: after all retained committed transactions are replayed and home
+writes are durable, the existing v2 empty anchor invalidates the v3 snapshot in one first-block
+transition. Stale bank bytes are then non-authoritative.
+
+This is still a bounded snapshot journal. Bank capacity is half of the reservation after the anchor
+block, and there is no persistent circular head/tail, wraparound reuse, or arbitrary-duration
+transaction retention.
