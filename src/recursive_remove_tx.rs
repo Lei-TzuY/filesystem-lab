@@ -1,13 +1,16 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io;
 
+use crate::allocation::BlockAllocator;
 use crate::allocation_disk::load_allocator;
 use crate::block::BlockDevice;
 use crate::create_tx::store_create_metadata_journaled;
+use crate::directory_codec::PersistedDirectoryEntry;
 use crate::directory_table::load_directory_table;
 use crate::format::Superblock;
 use crate::fsck::{check_device, validate_namespace_snapshot, ROOT_INODE_ID};
 use crate::inode::InodeKind;
+use crate::inode_codec::PersistedInode;
 use crate::inode_table::load_inode_table;
 use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::recovery::RecoveryReport;
@@ -18,6 +21,15 @@ pub struct RecursiveRemoveReport {
     pub removed_inodes: Vec<u64>,
     pub released_blocks: Vec<u64>,
     pub transaction: RecoveryReport,
+}
+
+struct RecursiveRemovePlan {
+    allocator: BlockAllocator,
+    desired_inodes: Vec<PersistedInode>,
+    desired_entries: Vec<PersistedDirectoryEntry>,
+    removed_entries: usize,
+    removed_inodes: Vec<u64>,
+    released_blocks: Vec<u64>,
 }
 
 /// Atomically removes one complete directory subtree from a clean recovered filesystem.
@@ -151,14 +163,30 @@ pub fn remove_directory_tree_journaled(
     }
     released_blocks.sort_unstable();
 
-    validate_namespace_snapshot(&desired_inodes, &desired_entries)?;
+    let plan = RecursiveRemovePlan {
+        allocator,
+        desired_inodes,
+        desired_entries,
+        removed_entries: removed_entry_indices.len(),
+        removed_inodes,
+        released_blocks,
+    };
+    publish_recursive_remove(device, superblock, plan)
+}
+
+fn publish_recursive_remove(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    plan: RecursiveRemovePlan,
+) -> io::Result<RecursiveRemoveReport> {
+    validate_namespace_snapshot(&plan.desired_inodes, &plan.desired_entries)?;
 
     let transaction = store_create_metadata_journaled(
         device,
         superblock,
-        &allocator,
-        &desired_inodes,
-        &desired_entries,
+        &plan.allocator,
+        &plan.desired_inodes,
+        &plan.desired_entries,
     )?;
     if transaction.committed_transactions != 1 {
         return Err(invalid_data(
@@ -169,9 +197,9 @@ pub fn remove_directory_tree_journaled(
     check_device(device)?;
 
     Ok(RecursiveRemoveReport {
-        removed_entries: removed_entry_indices.len(),
-        removed_inodes,
-        released_blocks,
+        removed_entries: plan.removed_entries,
+        removed_inodes: plan.removed_inodes,
+        released_blocks: plan.released_blocks,
         transaction,
     })
 }
@@ -179,7 +207,7 @@ pub fn remove_directory_tree_journaled(
 fn collect_subtree_directories(
     target: u64,
     inode_kinds: &BTreeMap<u64, InodeKind>,
-    entries: &[crate::directory_codec::PersistedDirectoryEntry],
+    entries: &[PersistedDirectoryEntry],
 ) -> BTreeSet<u64> {
     let mut directories = BTreeSet::from([target]);
     let mut pending = VecDeque::from([target]);
