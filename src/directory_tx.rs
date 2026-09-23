@@ -68,8 +68,7 @@ where
         }
     };
 
-    let (mut projected, current_report) =
-        projected_device_after_entries(device, &current_entries)?;
+    let (mut projected, current_report) = projected_device_after_entries(device, &current_entries)?;
     let mut desired_entries = load_directory_table(&mut projected, superblock)?;
     update(&mut desired_entries)?;
 
