@@ -98,7 +98,7 @@ fn assert_removed_state(
         .any(|entry| entry.parent == 2 || entry.parent == 3));
 
     let inodes = load_inode_table(device, superblock).unwrap();
-    assert!(!inodes.iter().any(|inode| matches!(inode.id, 2 | 3 | 4)));
+    assert!(!inodes.iter().any(|inode| matches!(inode.id, 2..=4)));
     let allocator = load_allocator(device, superblock).unwrap();
     assert!(!allocator.is_owned(blocks.private).unwrap());
 
