@@ -176,20 +176,13 @@ pub fn append_retained_journal_entries(
     validate_complete_entries(superblock, &combined)?;
     let payload = encode_entries(&combined)?;
     if payload.len() > layout.capacity {
-        return Err(invalid_input(
-            "retained journal image exceeds one v3 bank",
-        ));
+        return Err(invalid_input("retained journal image exceeds one v3 bank"));
     }
 
     write_v3_bank(device, superblock, layout, target_bank, &payload)?;
     device.flush()?;
 
-    let anchor = encode_v3_anchor(
-        target_bank,
-        generation,
-        payload.len(),
-        crc32(&payload),
-    )?;
+    let anchor = encode_v3_anchor(target_bank, generation, payload.len(), crc32(&payload))?;
     device.write_block(superblock.journal_start, &anchor)?;
     device.flush()
 }
@@ -425,11 +418,7 @@ fn v3_bank_layout(superblock: Superblock) -> io::Result<V3BankLayout> {
     })
 }
 
-fn v3_bank_start(
-    superblock: Superblock,
-    layout: V3BankLayout,
-    bank: usize,
-) -> io::Result<u64> {
+fn v3_bank_start(superblock: Superblock, layout: V3BankLayout, bank: usize) -> io::Result<u64> {
     if bank > 1 {
         return Err(invalid_input("journal v3 bank index is invalid"));
     }
@@ -437,8 +426,8 @@ fn v3_bank_start(
         .checked_mul(layout.blocks_per_bank)
         .and_then(|offset| offset.checked_add(1))
         .ok_or_else(|| invalid_input("journal v3 bank offset overflow"))?;
-    let bank_offset =
-        u64::try_from(bank_offset).map_err(|_| invalid_input("journal v3 bank offset exceeds u64"))?;
+    let bank_offset = u64::try_from(bank_offset)
+        .map_err(|_| invalid_input("journal v3 bank offset exceeds u64"))?;
     superblock
         .journal_start
         .checked_add(bank_offset)
@@ -460,8 +449,8 @@ fn write_v3_bank(
     let start = v3_bank_start(superblock, layout, bank)?;
 
     for index in 0..layout.blocks_per_bank {
-        let block_offset =
-            u64::try_from(index).map_err(|_| invalid_input("journal v3 block index exceeds u64"))?;
+        let block_offset = u64::try_from(index)
+            .map_err(|_| invalid_input("journal v3 block index exceeds u64"))?;
         let block = start
             .checked_add(block_offset)
             .ok_or_else(|| invalid_input("journal v3 block address overflow"))?;
@@ -550,8 +539,7 @@ fn encode_v3_anchor(
         .copy_from_slice(&payload_crc.to_le_bytes());
 
     let checksum = crc32(&block[..HEADER_SIZE]);
-    block[V3_ANCHOR_CRC_OFFSET..V3_ANCHOR_CRC_OFFSET + 4]
-        .copy_from_slice(&checksum.to_le_bytes());
+    block[V3_ANCHOR_CRC_OFFSET..V3_ANCHOR_CRC_OFFSET + 4].copy_from_slice(&checksum.to_le_bytes());
     Ok(block)
 }
 
