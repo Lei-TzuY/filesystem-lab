@@ -65,7 +65,9 @@ pub fn remove_directory_tree_journaled(
         .ok_or_else(|| invalid_input("recursive-remove directory entry is missing"))?;
     let target = entries[selected_index].target;
     if target == ROOT_INODE_ID {
-        return Err(invalid_input("recursive-remove cannot remove the root inode"));
+        return Err(invalid_input(
+            "recursive-remove cannot remove the root inode",
+        ));
     }
     if inode_kinds.get(&target) != Some(&InodeKind::Directory) {
         return Err(invalid_input(
@@ -113,7 +115,9 @@ pub fn remove_directory_tree_journaled(
         .into_iter()
         .filter(|inode_id| {
             subtree_directories.contains(inode_id)
-                || !desired_entries.iter().any(|entry| entry.target == *inode_id)
+                || !desired_entries
+                    .iter()
+                    .any(|entry| entry.target == *inode_id)
         })
         .collect::<Vec<_>>();
     removed_inodes.sort_unstable();
@@ -126,7 +130,10 @@ pub fn remove_directory_tree_journaled(
         .collect::<Vec<_>>();
 
     let mut released_blocks = Vec::new();
-    for inode in inodes.iter().filter(|inode| removed_set.contains(&inode.id)) {
+    for inode in inodes
+        .iter()
+        .filter(|inode| removed_set.contains(&inode.id))
+    {
         for block in &inode.blocks {
             if !allocator
                 .is_owned(*block)
