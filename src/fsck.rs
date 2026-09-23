@@ -82,6 +82,40 @@ pub(crate) fn check_device_allowing_orphaned_allocations(
     Ok((report, ownership.orphaned_allocations))
 }
 
+pub(crate) fn check_device_allowing_unreachable_inodes(
+    device: &mut impl BlockDevice,
+) -> io::Result<(FsckReport, Vec<u64>)> {
+    let superblock = read_superblock(device).map_err(|error| with_context("superblock", &error))?;
+    let allocator =
+        load_allocator(device, &superblock).map_err(|error| with_context("allocation", &error))?;
+    let inodes = load_inode_table(device, &superblock)
+        .map_err(|error| with_context("inode table", &error))?;
+    let referenced_blocks = audit_inode_ownership(&superblock, &allocator, &inodes)?;
+    audit_inode_payloads(device, &inodes)?;
+    let directory_entries = load_directory_table(device, &superblock)
+        .map_err(|error| with_context("directory table", &error))?;
+    let namespace = scan_namespace(&inodes, &directory_entries)?;
+    let entries =
+        load_journal_image(device, superblock).map_err(|error| with_context("journal", &error))?;
+    let report = audit_journal(
+        superblock,
+        &entries,
+        allocator.allocated_blocks(),
+        allocator.free_blocks(),
+        inodes.len(),
+        referenced_blocks,
+        directory_entries.len(),
+    )?;
+    Ok((report, namespace.unreachable_inodes))
+}
+
+pub(crate) fn validate_namespace_snapshot(
+    inodes: &[PersistedInode],
+    entries: &[PersistedDirectoryEntry],
+) -> io::Result<()> {
+    audit_namespace(inodes, entries)
+}
+
 fn finish_device_audit(
     device: &mut impl BlockDevice,
     superblock: Superblock,
@@ -190,10 +224,27 @@ fn scan_inode_ownership(
     })
 }
 
+struct NamespaceAudit {
+    unreachable_inodes: Vec<u64>,
+}
+
 fn audit_namespace(
     inodes: &[PersistedInode],
     entries: &[PersistedDirectoryEntry],
 ) -> io::Result<()> {
+    let namespace = scan_namespace(inodes, entries)?;
+    if let Some(unreachable) = namespace.unreachable_inodes.first() {
+        return Err(invalid_data_owned(format!(
+            "inode {unreachable} is unreachable from root inode {ROOT_INODE_ID}"
+        )));
+    }
+    Ok(())
+}
+
+fn scan_namespace(
+    inodes: &[PersistedInode],
+    entries: &[PersistedDirectoryEntry],
+) -> io::Result<NamespaceAudit> {
     let inode_kinds = inodes
         .iter()
         .map(|inode| (inode.id, inode.kind))
@@ -226,7 +277,9 @@ fn audit_namespace(
     }
 
     if inodes.is_empty() {
-        return Ok(());
+        return Ok(NamespaceAudit {
+            unreachable_inodes: Vec::new(),
+        });
     }
 
     let root_kind = inode_kinds
@@ -255,14 +308,14 @@ fn audit_namespace(
         }
     }
 
-    if let Some(unreachable) = inodes.iter().find(|inode| !reachable.contains(&inode.id)) {
-        return Err(invalid_data_owned(format!(
-            "inode {} is unreachable from root inode {}",
-            unreachable.id, ROOT_INODE_ID
-        )));
-    }
+    let mut unreachable_inodes = inodes
+        .iter()
+        .filter(|inode| !reachable.contains(&inode.id))
+        .map(|inode| inode.id)
+        .collect::<Vec<_>>();
+    unreachable_inodes.sort_unstable();
 
-    Ok(())
+    Ok(NamespaceAudit { unreachable_inodes })
 }
 
 fn audit_directory_cycle(
