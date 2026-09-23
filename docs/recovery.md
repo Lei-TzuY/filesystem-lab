@@ -36,3 +36,9 @@ Deterministic crash tests exercise create, unlink, rename, truncate-to-zero, fil
 ## Current limits
 
 Format v6 still uses a bounded fixed journal reservation rather than a circular head/tail log. Journal-region v3 can retain multiple complete committed transactions by alternating two snapshot banks, but it does not provide persistent wraparound head/tail management or unbounded retention. The crash model still excludes sector tearing, controller reordering, and partial-block persistence. Exact byte EOF, non-sparse resize, and extending byte writes are implemented separately; sparse-hole semantics remain outside main until their dedicated phase is integrated.
+
+## Retained-prefix recovery
+
+Journal-region v3 supports partial retained-log consumption through `recover_retained_prefix_and_checkpoint`. Only complete committed transactions are eligible. The selected prefix is interpreted by the same recovery planner as ordinary replay and is projected through strict fsck before any home mutation. Accepted prefix writes are replayed in log order and flushed; only then is the remaining suffix atomically republished through the inactive v3 bank, or the journal is cleared when no suffix remains.
+
+This ordering makes crash/retry idempotent: before suffix-anchor publication the old full snapshot remains authoritative, while after publication the replayed prefix is already durable and only the suffix remains authoritative. Deterministic write-through crash enumeration covers this transition.
