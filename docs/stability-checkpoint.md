@@ -54,6 +54,8 @@ Durable inode construction and block-count mutation now also have explicit invar
 
 The bounded journal region now writes version-2 empty/active anchors. Tail blocks are staged behind a durable empty anchor and flushed before active publication; checkpoint invalidates the log with one checksummed empty-anchor block after home replay is durable. Complete version-1 journal images remain readable. This closes the earlier dependence on pre-flush writes being volatile and remains part of the format-v6 durability model.
 
+Journal-region version 3 additionally supports bounded multi-transaction retention through two alternating snapshot banks. The inactive bank is fully written and flushed before the first-block anchor flips to a higher generation, so write-through crash testing can expose only the previous complete retained log or the replacement complete retained log. Checkpoint continues to collapse either state to the canonical v2 empty anchor. This is not yet circular head/tail wraparound.
+
 ## Format-v6 byte EOF milestone
 
 Filesystem format v6 promotes exact regular-file EOF into inode-record version 3. Whole-file and
@@ -98,7 +100,7 @@ A change belongs inside this checkpoint only if it preserves or tightens the exi
 
 The checkpoint still deliberately does not define:
 
-- a circular journal with persistent head/tail or multi-transaction retention beyond the bounded reservation;
+- a circular journal with persistent head/tail and wraparound reuse beyond the bounded dual-bank retained-snapshot reservation;
 - sparse files, hole punching, or a general extent data model;
 - persisted hard-link counts;
 - permissions, ACLs, mmap, FUSE, or broad POSIX compatibility;
