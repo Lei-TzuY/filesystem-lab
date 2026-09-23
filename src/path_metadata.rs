@@ -5,6 +5,7 @@ use crate::block::BlockDevice;
 use crate::directory_table::load_directory_table;
 use crate::format::Superblock;
 use crate::inode::InodeKind;
+use crate::inode_codec::SPARSE_HOLE_BLOCK;
 use crate::inode_table::load_inode_table;
 use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::path_lookup::{
@@ -86,6 +87,15 @@ fn metadata_for_inode(
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "resolved inode is missing"))?;
 
     for block in &inode.blocks {
+        if *block == SPARSE_HOLE_BLOCK {
+            if inode.kind != InodeKind::File {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "non-file inode contains sparse-hole sentinel",
+                ));
+            }
+            continue;
+        }
         if *block < superblock.reserved_blocks() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
