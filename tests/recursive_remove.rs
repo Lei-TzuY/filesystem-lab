@@ -93,7 +93,9 @@ fn assert_removed_state(
 ) {
     let entries = load_directory_table(device, superblock).unwrap();
     assert!(!entries.iter().any(|entry| entry.name == "tree"));
-    assert!(!entries.iter().any(|entry| entry.parent == 2 || entry.parent == 3));
+    assert!(!entries
+        .iter()
+        .any(|entry| entry.parent == 2 || entry.parent == 3));
 
     let inodes = load_inode_table(device, superblock).unwrap();
     assert!(!inodes.iter().any(|inode| matches!(inode.id, 2 | 3 | 4)));
