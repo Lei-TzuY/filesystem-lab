@@ -14,7 +14,7 @@ use crate::transaction_image::CaptureDevice;
 
 /// Reads one existing logical data block from a durable regular file.
 ///
-/// Format v5 does not persist a byte length, so this API deliberately exposes only block-granular
+/// Format v7 does not persist a byte length, so this API deliberately exposes only block-granular
 /// I/O over block references already present in the inode. It rejects metadata/data ownership
 /// disagreement instead of reading through an inconsistent inode reference.
 ///
@@ -30,10 +30,14 @@ pub fn read_file_block(
     inode_id: u64,
     file_block_index: usize,
 ) -> io::Result<[u8; BLOCK_SIZE]> {
-    let block = resolve_owned_file_block(device, superblock, inode_id, file_block_index)?;
-    let mut data = [0_u8; BLOCK_SIZE];
-    device.read_block(block, &mut data)?;
-    Ok(data)
+    match resolve_file_block_mapping(device, superblock, inode_id, file_block_index)? {
+        Some(block) => {
+            let mut data = [0_u8; BLOCK_SIZE];
+            device.read_block(block, &mut data)?;
+            Ok(data)
+        }
+        None => Ok([0_u8; BLOCK_SIZE]),
+    }
 }
 
 /// Journals one full-block overwrite of an existing regular-file block.
@@ -81,8 +85,8 @@ pub fn write_file_block_range_journaled(
 /// `start_offset` is relative to `first_block_index`. The range may cross block boundaries, but it
 /// may not extend beyond blocks already referenced by the regular-file inode. Complete resulting
 /// block images are committed together through the existing multi-block WAL path, so a durable
-/// commit recovers the whole byte range rather than a prefix. Format v5 still has no persisted byte
-/// length; this operation does not extend files, allocate blocks, or create sparse holes.
+/// commit recovers the whole byte range rather than a prefix. Format v7 still has no persisted byte
+/// length; this operation does not extend files, allocate blocks, or allocate sparse holes.
 ///
 /// # Errors
 /// Returns `InvalidInput` for an empty range, an offset outside the first block, or a range that
@@ -272,12 +276,12 @@ pub fn append_file_block_journaled(
     Ok((block, report))
 }
 
-fn resolve_owned_file_block(
+fn resolve_file_block_mapping(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
     inode_id: u64,
     file_block_index: usize,
-) -> io::Result<u64> {
+) -> io::Result<Option<u64>> {
     let inodes = load_inode_table(device, superblock)?;
     let inode = inodes
         .iter()
@@ -300,6 +304,9 @@ fn resolve_owned_file_block(
             "file-data logical block index is out of range",
         )
     })?;
+    if block == SPARSE_HOLE_BLOCK {
+        return Ok(None);
+    }
     let allocator = load_allocator(device, superblock)?;
     let owned = allocator
         .is_owned(block)
@@ -310,5 +317,19 @@ fn resolve_owned_file_block(
             "file-data inode references an unowned block",
         ));
     }
-    Ok(block)
+    Ok(Some(block))
+}
+
+fn resolve_owned_file_block(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    inode_id: u64,
+    file_block_index: usize,
+) -> io::Result<u64> {
+    resolve_file_block_mapping(device, superblock, inode_id, file_block_index)?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "overwrite-only file operation cannot target a sparse hole",
+        )
+    })
 }
