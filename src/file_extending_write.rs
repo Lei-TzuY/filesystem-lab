@@ -183,8 +183,13 @@ fn prepare_data_writes(
 
     for logical_index in first_changed_block..end_block {
         let physical_block = inode.blocks[logical_index];
-        let (mut image, current_image) =
-            load_candidate_block(device, allocator, physical_block, logical_index, geometry.current_blocks)?;
+        let (mut image, current_image) = load_candidate_block(
+            device,
+            allocator,
+            physical_block,
+            logical_index,
+            geometry.current_blocks,
+        )?;
 
         let block_start = u64::try_from(logical_index)
             .map_err(|_| invalid_input("extending write block index exceeds u64"))?
