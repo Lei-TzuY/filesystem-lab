@@ -28,6 +28,7 @@ The allocation, inode, and directory home regions have independent codecs and in
 | rename | directory | exactly one namespace key changes while the target inode is preserved |
 | truncate-to-zero | allocation, inode | the file inode survives with zero block references and exactly its prior blocks become free |
 | exact-byte grow | allocation, inode, data | EOF advances atomically, only required trailing blocks become owned, and every newly visible byte is zero |
+| extending byte write | allocation, inode, data | gap zero-fill, payload, ownership, block mapping, and new EOF become committed together |
 
 `create`, `unlink`, `rename`, and `truncate-to-zero` have deterministic integration tests that enumerate every block-device `write_block`/`flush` mutation point of a successful bounded operation.
 
@@ -58,9 +59,11 @@ Filesystem format v6 promotes exact regular-file EOF into inode-record version 3
 range reads stop at that persisted EOF, overwrite-only byte writes cannot extend it, and exact-byte
 truncate can shrink into a partial final block while zeroing discarded tail bytes and releasing only
 the trailing block suffix. Exact-byte growth may remain inside the current final block or allocate the
-minimum required trailing blocks; every newly visible byte is zero. Grow and shrink each publish their
-data/allocator/inode changes in one bounded WAL transaction, and deterministic crash tests require
-recovery to converge to the complete old or complete new state.
+minimum required trailing blocks; every newly visible byte is zero. Extending byte writes build on the
+same non-sparse model but combine payload publication with growth in one WAL transaction, so a crash
+cannot expose a zero-grown file without the write payload. Grow, shrink, and extending write publish
+their data/allocator/inode changes atomically, and deterministic crash tests require recovery to
+converge to the complete old or complete new state.
 
 Whole-file clone, exchange, and transfer-replace carry exact EOF together with file contents, so a
 partial-final-block file remains semantically whole across those operations. The filesystem now

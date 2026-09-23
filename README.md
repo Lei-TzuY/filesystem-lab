@@ -23,7 +23,8 @@ The implemented core now includes:
 - deterministic write/flush crash enumeration for create, unlink, and rename;
 - idempotent recovery after committed home-write interruption;
 - read-only fsck across superblock geometry, allocation ownership, journal integrity, inode block ownership, namespace references, root reachability, and directory-cycle constraints;
-- crash-consistent exact-byte resize: shrink releases only the trailing block suffix and zeroes discarded final-block tail bytes, while growth zero-fills every newly visible byte and allocates only required trailing blocks; plus focused malformed-image, corruption, insufficient-journal-capacity, and crash-prefix regressions.
+- crash-consistent exact-byte resize: shrink releases only the trailing block suffix and zeroes discarded final-block tail bytes, while growth zero-fills every newly visible byte and allocates only required trailing blocks;
+- atomic non-sparse extending byte writes that commit gap zero-fill, payload, new block ownership, block mapping, and EOF in one bounded WAL transaction; plus focused malformed-image, corruption, insufficient-journal-capacity, and crash-prefix regressions.
 
 The transaction paths share one internal metadata-image capture primitive so table encoders are rendered and compared with home blocks under one bounds/zero-fill contract before publication through the WAL.
 
