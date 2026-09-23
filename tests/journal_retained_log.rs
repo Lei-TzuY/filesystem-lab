@@ -97,8 +97,7 @@ fn write_through_second_append_exposes_only_old_or_new_complete_snapshot() {
         let expected_transactions = if visible == first { 1 } else { 2 };
         let report = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         assert_eq!(
-            report.committed_transactions,
-            expected_transactions,
+            report.committed_transactions, expected_transactions,
             "crash_at={crash_at}"
         );
         assert_eq!(read_block(&mut device, first_home), [0x41; BLOCK_SIZE]);
@@ -127,8 +126,7 @@ fn active_v2_log_must_checkpoint_before_retained_mode() {
 
     store_journal_image(&mut device, superblock, &first).unwrap();
 
-    let error =
-        append_retained_journal_entries(&mut device, superblock, &second).unwrap_err();
+    let error = append_retained_journal_entries(&mut device, superblock, &second).unwrap_err();
     assert_eq!(error.kind(), std::io::ErrorKind::WouldBlock);
     assert_eq!(load_journal_image(&mut device, superblock).unwrap(), first);
 }
