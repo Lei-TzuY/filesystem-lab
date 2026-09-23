@@ -135,8 +135,7 @@ fn invalid_or_oversized_retained_append_is_side_effect_free() {
         },
     ];
     device.arm(None);
-    let error =
-        append_retained_journal_entries(&mut device, superblock, &incomplete).unwrap_err();
+    let error = append_retained_journal_entries(&mut device, superblock, &incomplete).unwrap_err();
     assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     assert_eq!(device.operations(), 0);
     device.reboot();
@@ -144,8 +143,7 @@ fn invalid_or_oversized_retained_append_is_side_effect_free() {
 
     let oversized = committed_tx(23, home, 0x55);
     device.arm(None);
-    let error =
-        append_retained_journal_entries(&mut device, superblock, &oversized).unwrap_err();
+    let error = append_retained_journal_entries(&mut device, superblock, &oversized).unwrap_err();
     assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
     assert_eq!(device.operations(), 0);
     device.reboot();
