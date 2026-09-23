@@ -7,14 +7,30 @@ use crate::journal_codec::{decode_entries, encode_entries};
 
 const REGION_MAGIC_V1: [u8; 4] = *b"JRG1";
 const REGION_MAGIC_V2: [u8; 4] = *b"JRG2";
+const REGION_MAGIC_V3: [u8; 4] = *b"JRG3";
 const REGION_VERSION_V1: u16 = 1;
 const REGION_VERSION_V2: u16 = 2;
+const REGION_VERSION_V3: u16 = 3;
 const REGION_STATE_EMPTY: u16 = 0;
 const REGION_STATE_ACTIVE: u16 = 1;
 const HEADER_SIZE: usize = 32;
 const STATE_OFFSET: usize = 6;
 const CHECKSUM_OFFSET: usize = 16;
 const RESERVED_OFFSET: usize = 20;
+const V3_BANK_0: u16 = 1;
+const V3_BANK_1: u16 = 2;
+const V3_GENERATION_OFFSET: usize = 8;
+const V3_PAYLOAD_LEN_OFFSET: usize = 16;
+const V3_PAYLOAD_CRC_OFFSET: usize = 24;
+const V3_ANCHOR_CRC_OFFSET: usize = 28;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct V3Anchor {
+    bank: usize,
+    generation: u64,
+    payload_len: usize,
+    payload_crc: u32,
+}
 
 /// Stores one bounded journal image inside the superblock-reserved journal region.
 ///
@@ -98,6 +114,79 @@ pub fn store_journal_image(
     device.flush()
 }
 
+/// Appends complete committed transactions to a retained journal snapshot without checkpointing
+/// the transactions already present in that snapshot.
+///
+/// Version 3 reserves the first journal block as a checksummed anchor and divides the remaining
+/// reservation into two equal banks. A replacement snapshot is written completely to the inactive
+/// bank and flushed before the anchor flips to that bank. Under the repository's whole-block crash
+/// model, reboot therefore observes either the previous complete snapshot or the new complete
+/// snapshot; partial inactive-bank writes are never authoritative.
+///
+/// The first retained publication may start from an empty v2/zeroed journal. Once a v3 snapshot is
+/// active, later calls append to its decoded entry stream and alternate banks. Active v1/v2 images
+/// must be recovered and checkpointed before entering retained mode because they occupy the only
+/// recovery source understood by their publication protocol.
+///
+/// Appended entries must contain one or more complete transactions; retaining an uncommitted tail is
+/// intentionally rejected by this API.
+///
+/// # Errors
+///
+/// Returns `WouldBlock` when a non-empty non-v3 journal is active. Returns `InvalidInput` when
+/// the reservation cannot provide two banks or the combined retained image does not fit. Malformed
+/// entries, corrupt current state, arithmetic overflow, and block-device failures are propagated.
+pub fn append_retained_journal_entries(
+    device: &mut impl BlockDevice,
+    superblock: Superblock,
+    entries: &[JournalEntry],
+) -> io::Result<()> {
+    validate_region(device, superblock)?;
+    if entries.is_empty() {
+        return Err(invalid_input("retained journal append requires entries"));
+    }
+    validate_complete_entries(superblock, entries)?;
+
+    let layout = v3_bank_layout(superblock)?;
+    let mut first_block = [0_u8; BLOCK_SIZE];
+    device.read_block(superblock.journal_start, &mut first_block)?;
+
+    let (mut combined, target_bank, generation) =
+        if let Some(anchor) = decode_v3_anchor(&first_block)? {
+            let current = read_v3_entries(device, superblock, layout, anchor)?;
+            validate_complete_entries(superblock, &current)?;
+            let target_bank = usize::from(anchor.bank == 0);
+            let generation = anchor
+                .generation
+                .checked_add(1)
+                .ok_or_else(|| invalid_input("journal v3 generation exhausted"))?;
+            (current, target_bank, generation)
+        } else {
+            let current = load_journal_image(device, superblock)?;
+            if !current.is_empty() {
+                return Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "active v1/v2 journal must be checkpointed before retained publication",
+                ));
+            }
+            (Vec::new(), 0, 1)
+        };
+
+    combined.extend_from_slice(entries);
+    validate_complete_entries(superblock, &combined)?;
+    let payload = encode_entries(&combined)?;
+    if payload.len() > layout.capacity {
+        return Err(invalid_input("retained journal image exceeds one v3 bank"));
+    }
+
+    write_v3_bank(device, superblock, layout, target_bank, &payload)?;
+    device.flush()?;
+
+    let anchor = encode_v3_anchor(target_bank, generation, payload.len(), crc32(&payload))?;
+    device.write_block(superblock.journal_start, &anchor)?;
+    device.flush()
+}
+
 /// Publishes the v2 empty journal anchor after the caller has made any replayed home state durable.
 ///
 /// Only the header-bearing first journal block is rewritten. Older tail bytes deliberately remain
@@ -154,6 +243,10 @@ pub fn load_journal_image(
     device.read_block(superblock.journal_start, &mut first_block)?;
     if is_v2_empty_anchor(&first_block)? {
         return Ok(Vec::new());
+    }
+    if let Some(anchor) = decode_v3_anchor(&first_block)? {
+        let layout = v3_bank_layout(superblock)?;
+        return read_v3_entries(device, superblock, layout, anchor);
     }
 
     let region = read_complete_journal_region(device, superblock, &first_block)?;
@@ -298,6 +391,241 @@ fn is_v2_empty_anchor(block: &[u8; BLOCK_SIZE]) -> io::Result<bool> {
     Ok(true)
 }
 
+#[derive(Clone, Copy, Debug)]
+struct V3BankLayout {
+    blocks_per_bank: usize,
+    capacity: usize,
+}
+
+fn v3_bank_layout(superblock: Superblock) -> io::Result<V3BankLayout> {
+    let journal_blocks = usize::try_from(superblock.journal_blocks)
+        .map_err(|_| invalid_input("journal block count exceeds usize"))?;
+    let data_blocks = journal_blocks
+        .checked_sub(1)
+        .ok_or_else(|| invalid_input("journal v3 requires an anchor block"))?;
+    let blocks_per_bank = data_blocks / 2;
+    if blocks_per_bank == 0 {
+        return Err(invalid_input(
+            "journal v3 requires at least three reserved journal blocks",
+        ));
+    }
+    let capacity = blocks_per_bank
+        .checked_mul(BLOCK_SIZE)
+        .ok_or_else(|| invalid_input("journal v3 bank capacity overflow"))?;
+    Ok(V3BankLayout {
+        blocks_per_bank,
+        capacity,
+    })
+}
+
+fn v3_bank_start(superblock: Superblock, layout: V3BankLayout, bank: usize) -> io::Result<u64> {
+    if bank > 1 {
+        return Err(invalid_input("journal v3 bank index is invalid"));
+    }
+    let bank_offset = bank
+        .checked_mul(layout.blocks_per_bank)
+        .and_then(|offset| offset.checked_add(1))
+        .ok_or_else(|| invalid_input("journal v3 bank offset overflow"))?;
+    let bank_offset = u64::try_from(bank_offset)
+        .map_err(|_| invalid_input("journal v3 bank offset exceeds u64"))?;
+    superblock
+        .journal_start
+        .checked_add(bank_offset)
+        .ok_or_else(|| invalid_input("journal v3 bank start overflow"))
+}
+
+fn write_v3_bank(
+    device: &mut impl BlockDevice,
+    superblock: Superblock,
+    layout: V3BankLayout,
+    bank: usize,
+    payload: &[u8],
+) -> io::Result<()> {
+    if payload.len() > layout.capacity {
+        return Err(invalid_input("journal v3 payload exceeds bank capacity"));
+    }
+    let mut image = vec![0_u8; layout.capacity];
+    image[..payload.len()].copy_from_slice(payload);
+    let start = v3_bank_start(superblock, layout, bank)?;
+
+    for index in 0..layout.blocks_per_bank {
+        let block_offset = u64::try_from(index)
+            .map_err(|_| invalid_input("journal v3 block index exceeds u64"))?;
+        let block = start
+            .checked_add(block_offset)
+            .ok_or_else(|| invalid_input("journal v3 block address overflow"))?;
+        let byte_start = index
+            .checked_mul(BLOCK_SIZE)
+            .ok_or_else(|| invalid_input("journal v3 byte offset overflow"))?;
+        let byte_end = byte_start
+            .checked_add(BLOCK_SIZE)
+            .ok_or_else(|| invalid_input("journal v3 byte range overflow"))?;
+        let chunk: &[u8; BLOCK_SIZE] = image[byte_start..byte_end]
+            .try_into()
+            .map_err(|_| invalid_input("journal v3 bank slice has invalid size"))?;
+        device.write_block(block, chunk)?;
+    }
+    Ok(())
+}
+
+fn read_v3_entries(
+    device: &mut impl BlockDevice,
+    superblock: Superblock,
+    layout: V3BankLayout,
+    anchor: V3Anchor,
+) -> io::Result<Vec<JournalEntry>> {
+    if anchor.payload_len == 0 || anchor.payload_len > layout.capacity {
+        return Err(invalid_data("journal v3 payload length is invalid"));
+    }
+    let start = v3_bank_start(superblock, layout, anchor.bank)
+        .map_err(|error| invalid_data_owned(error.to_string()))?;
+    let mut image = vec![0_u8; layout.capacity];
+
+    for index in 0..layout.blocks_per_bank {
+        let block_offset =
+            u64::try_from(index).map_err(|_| invalid_data("journal v3 block index exceeds u64"))?;
+        let block = start
+            .checked_add(block_offset)
+            .ok_or_else(|| invalid_data("journal v3 block address overflow"))?;
+        let mut block_data = [0_u8; BLOCK_SIZE];
+        device.read_block(block, &mut block_data)?;
+        let byte_start = index
+            .checked_mul(BLOCK_SIZE)
+            .ok_or_else(|| invalid_data("journal v3 byte offset overflow"))?;
+        let byte_end = byte_start
+            .checked_add(BLOCK_SIZE)
+            .ok_or_else(|| invalid_data("journal v3 byte range overflow"))?;
+        image[byte_start..byte_end].copy_from_slice(&block_data);
+    }
+
+    if image[anchor.payload_len..].iter().any(|byte| *byte != 0) {
+        return Err(invalid_data("journal v3 bank padding is non-zero"));
+    }
+    let payload = &image[..anchor.payload_len];
+    if crc32(payload) != anchor.payload_crc {
+        return Err(invalid_data("journal v3 payload checksum mismatch"));
+    }
+    let entries = decode_entries(payload)?;
+    validate_entries(superblock, &entries)?;
+    Ok(entries)
+}
+
+fn encode_v3_anchor(
+    bank: usize,
+    generation: u64,
+    payload_len: usize,
+    payload_crc: u32,
+) -> io::Result<[u8; BLOCK_SIZE]> {
+    let bank_code = match bank {
+        0 => V3_BANK_0,
+        1 => V3_BANK_1,
+        _ => return Err(invalid_input("journal v3 bank index is invalid")),
+    };
+    let payload_len =
+        u64::try_from(payload_len).map_err(|_| invalid_input("journal v3 payload exceeds u64"))?;
+    if generation == 0 {
+        return Err(invalid_input("journal v3 generation zero is reserved"));
+    }
+
+    let mut block = [0_u8; BLOCK_SIZE];
+    block[0..4].copy_from_slice(&REGION_MAGIC_V3);
+    block[4..6].copy_from_slice(&REGION_VERSION_V3.to_le_bytes());
+    block[6..8].copy_from_slice(&bank_code.to_le_bytes());
+    block[V3_GENERATION_OFFSET..V3_GENERATION_OFFSET + 8]
+        .copy_from_slice(&generation.to_le_bytes());
+    block[V3_PAYLOAD_LEN_OFFSET..V3_PAYLOAD_LEN_OFFSET + 8]
+        .copy_from_slice(&payload_len.to_le_bytes());
+    block[V3_PAYLOAD_CRC_OFFSET..V3_PAYLOAD_CRC_OFFSET + 4]
+        .copy_from_slice(&payload_crc.to_le_bytes());
+
+    let checksum = crc32(&block[..HEADER_SIZE]);
+    block[V3_ANCHOR_CRC_OFFSET..V3_ANCHOR_CRC_OFFSET + 4].copy_from_slice(&checksum.to_le_bytes());
+    Ok(block)
+}
+
+fn decode_v3_anchor(block: &[u8; BLOCK_SIZE]) -> io::Result<Option<V3Anchor>> {
+    if block[0..4] != REGION_MAGIC_V3 {
+        return Ok(None);
+    }
+    if u16::from_le_bytes([block[4], block[5]]) != REGION_VERSION_V3 {
+        return Err(invalid_data("unsupported journal region v3 version"));
+    }
+    if block[HEADER_SIZE..].iter().any(|byte| *byte != 0) {
+        return Err(invalid_data("journal v3 anchor padding is non-zero"));
+    }
+
+    let bank = match u16::from_le_bytes([block[6], block[7]]) {
+        V3_BANK_0 => 0,
+        V3_BANK_1 => 1,
+        _ => return Err(invalid_data("journal v3 active bank is invalid")),
+    };
+    let generation = u64::from_le_bytes(
+        block[V3_GENERATION_OFFSET..V3_GENERATION_OFFSET + 8]
+            .try_into()
+            .map_err(|_| invalid_data("journal v3 generation field is malformed"))?,
+    );
+    if generation == 0 {
+        return Err(invalid_data("journal v3 generation zero is invalid"));
+    }
+    let payload_len = usize::try_from(u64::from_le_bytes(
+        block[V3_PAYLOAD_LEN_OFFSET..V3_PAYLOAD_LEN_OFFSET + 8]
+            .try_into()
+            .map_err(|_| invalid_data("journal v3 payload length field is malformed"))?,
+    ))
+    .map_err(|_| invalid_data("journal v3 payload length exceeds usize"))?;
+    let payload_crc = u32::from_le_bytes(
+        block[V3_PAYLOAD_CRC_OFFSET..V3_PAYLOAD_CRC_OFFSET + 4]
+            .try_into()
+            .map_err(|_| invalid_data("journal v3 payload checksum field is malformed"))?,
+    );
+    let expected_anchor_crc = u32::from_le_bytes(
+        block[V3_ANCHOR_CRC_OFFSET..V3_ANCHOR_CRC_OFFSET + 4]
+            .try_into()
+            .map_err(|_| invalid_data("journal v3 anchor checksum field is malformed"))?,
+    );
+    let mut header = block[..HEADER_SIZE].to_vec();
+    header[V3_ANCHOR_CRC_OFFSET..V3_ANCHOR_CRC_OFFSET + 4].fill(0);
+    if crc32(&header) != expected_anchor_crc {
+        return Err(invalid_data("journal v3 anchor checksum mismatch"));
+    }
+
+    Ok(Some(V3Anchor {
+        bank,
+        generation,
+        payload_len,
+        payload_crc,
+    }))
+}
+
+fn validate_complete_entries(superblock: Superblock, entries: &[JournalEntry]) -> io::Result<()> {
+    validate_entries(superblock, entries)?;
+    let mut active = None;
+    let mut commits = 0_usize;
+    for entry in entries {
+        match entry {
+            JournalEntry::Begin { txid } => active = Some(*txid),
+            JournalEntry::Write { .. } => {}
+            JournalEntry::Commit { .. } => {
+                active = None;
+                commits = commits
+                    .checked_add(1)
+                    .ok_or_else(|| invalid_data("journal committed transaction count overflow"))?;
+            }
+        }
+    }
+    if active.is_some() {
+        return Err(invalid_data(
+            "retained journal append requires complete transactions",
+        ));
+    }
+    if commits == 0 {
+        return Err(invalid_data(
+            "retained journal append requires a committed transaction",
+        ));
+    }
+    Ok(())
+}
+
 fn validate_region(device: &impl BlockDevice, superblock: Superblock) -> io::Result<()> {
     if superblock.total_blocks != device.block_count() {
         return Err(invalid_input(
@@ -401,6 +729,10 @@ fn crc32(bytes: &[u8]) -> u32 {
 }
 
 fn invalid_data(message: &'static str) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message)
+}
+
+fn invalid_data_owned(message: String) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
 
