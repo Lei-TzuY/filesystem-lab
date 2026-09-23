@@ -48,8 +48,7 @@ fn prefix_checkpoint_reclaims_retained_bank_capacity() {
     let error = append_retained_journal_entries(&mut device, superblock, &third).unwrap_err();
     assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
 
-    let report =
-        recover_retained_prefix_and_checkpoint(&mut device, superblock, 1).unwrap();
+    let report = recover_retained_prefix_and_checkpoint(&mut device, superblock, 1).unwrap();
     assert_eq!(
         report,
         RetainedPrefixCheckpointReport {
@@ -173,8 +172,7 @@ fn semantic_bad_prefix_is_rejected_before_any_mutation() {
     let retained_before = load_journal_image(&mut device, superblock).unwrap();
 
     device.arm(None);
-    let error =
-        recover_retained_prefix_and_checkpoint(&mut device, superblock, 1).unwrap_err();
+    let error = recover_retained_prefix_and_checkpoint(&mut device, superblock, 1).unwrap_err();
 
     assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     assert!(error
