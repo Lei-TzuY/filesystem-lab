@@ -116,6 +116,43 @@ fn write_through_second_append_exposes_only_old_or_new_complete_snapshot() {
 }
 
 #[test]
+fn invalid_or_oversized_retained_append_is_side_effect_free() {
+    let superblock = Superblock::with_journal_blocks(32, 3).unwrap();
+    let home = superblock.reserved_blocks();
+    let first = vec![
+        JournalEntry::Begin { txid: 21 },
+        JournalEntry::Commit { txid: 21 },
+    ];
+    let mut device = CrashDevice::new(32);
+    append_retained_journal_entries(&mut device, superblock, &first).unwrap();
+
+    let incomplete = vec![
+        JournalEntry::Begin { txid: 22 },
+        JournalEntry::Write {
+            txid: 22,
+            block: home,
+            data: Box::new([0x44; BLOCK_SIZE]),
+        },
+    ];
+    device.arm(None);
+    let error =
+        append_retained_journal_entries(&mut device, superblock, &incomplete).unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    assert_eq!(device.operations(), 0);
+    device.reboot();
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), first);
+
+    let oversized = committed_tx(23, home, 0x55);
+    device.arm(None);
+    let error =
+        append_retained_journal_entries(&mut device, superblock, &oversized).unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(device.operations(), 0);
+    device.reboot();
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), first);
+}
+
+#[test]
 fn active_v2_log_must_checkpoint_before_retained_mode() {
     let superblock = Superblock::with_journal_blocks(64, 8).unwrap();
     let first_home = superblock.reserved_blocks();
