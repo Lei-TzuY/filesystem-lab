@@ -5,7 +5,8 @@ use crate::block::BLOCK_SIZE_U64;
 use crate::inode::{Inode, InodeKind};
 
 pub const INODE_RECORD_MAGIC: [u8; 4] = *b"INO1";
-pub const INODE_RECORD_VERSION: u16 = 3;
+pub const INODE_RECORD_VERSION: u16 = 4;
+pub const SPARSE_HOLE_BLOCK: u64 = u64::MAX;
 pub const INODE_RECORD_HEADER_LEN: usize = 40;
 
 const KIND_FILE: u16 = 1;
@@ -107,6 +108,20 @@ impl PersistedInode {
         self.canonical_byte_len().map(|_| ())
     }
 
+    /// Returns whether this regular-file mapping contains at least one logical sparse hole.
+    #[must_use]
+    pub fn has_sparse_holes(&self) -> bool {
+        self.kind == InodeKind::File && self.blocks.contains(&SPARSE_HOLE_BLOCK)
+    }
+
+    /// Iterates only physical data-block references, excluding sparse-hole sentinels.
+    pub fn physical_blocks(&self) -> impl Iterator<Item = u64> + '_ {
+        self.blocks
+            .iter()
+            .copied()
+            .filter(|block| *block != SPARSE_HOLE_BLOCK)
+    }
+
     /// Replaces one logical block range while preserving durable inode invariants and EOF position.
     ///
     /// Block-granular insert/remove operations preserve the current unused tail length in the final
@@ -195,7 +210,7 @@ impl From<&Inode> for PersistedInode {
     }
 }
 
-/// Encodes one inode into a self-delimiting, checksummed little-endian version-3 record.
+/// Encodes one inode into a self-delimiting, checksummed little-endian version-4 record.
 ///
 /// # Errors
 ///
@@ -242,7 +257,7 @@ pub fn encode_inode(inode: &PersistedInode) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
-/// Decodes and validates exactly one version-3 inode record.
+/// Decodes and validates exactly one version-4 inode record.
 ///
 /// # Errors
 ///
@@ -372,17 +387,29 @@ fn validate_inode_fields(
         return Err("inode identifier zero is reserved");
     }
 
-    let mut sorted = blocks.to_vec();
-    sorted.sort_unstable();
-    if sorted.windows(2).any(|pair| pair[0] == pair[1]) {
-        return Err("inode record contains duplicate block references");
-    }
-
     if kind != InodeKind::File {
+        if blocks.contains(&SPARSE_HOLE_BLOCK) {
+            return Err("sparse-hole sentinel is valid only for regular files");
+        }
         if byte_len != 0 {
             return Err("non-file inode byte length must be zero");
         }
+        let mut sorted = blocks.to_vec();
+        sorted.sort_unstable();
+        if sorted.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err("inode record contains duplicate block references");
+        }
         return Ok(0);
+    }
+
+    let mut physical = blocks
+        .iter()
+        .copied()
+        .filter(|block| *block != SPARSE_HOLE_BLOCK)
+        .collect::<Vec<_>>();
+    physical.sort_unstable();
+    if physical.windows(2).any(|pair| pair[0] == pair[1]) {
+        return Err("inode record contains duplicate physical block references");
     }
 
     let capacity = block_capacity(blocks)?;
@@ -497,6 +524,37 @@ mod tests {
         let outside = inode.replace_block_range(4..4, &[31]).unwrap_err();
         assert_eq!(outside.kind(), io::ErrorKind::InvalidInput);
         assert_eq!(inode, original);
+    }
+
+    #[test]
+    fn sparse_holes_round_trip_and_do_not_conflict_with_each_other() {
+        let inode = PersistedInode::new_file_with_size(
+            7,
+            vec![11, SPARSE_HOLE_BLOCK, SPARSE_HOLE_BLOCK, 27],
+            15_000,
+        )
+        .unwrap();
+
+        let encoded = encode_inode(&inode).unwrap();
+        let decoded = decode_inode(&encoded).unwrap();
+
+        assert_eq!(decoded, inode);
+        assert!(decoded.has_sparse_holes());
+        assert_eq!(decoded.physical_blocks().collect::<Vec<_>>(), vec![11, 27]);
+    }
+
+    #[test]
+    fn rejects_sparse_holes_on_non_file_inodes() {
+        let inode = PersistedInode {
+            id: 8,
+            kind: InodeKind::Directory,
+            blocks: vec![SPARSE_HOLE_BLOCK],
+            byte_len: 0,
+        };
+        assert_eq!(
+            encode_inode(&inode).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
     }
 
     #[test]
