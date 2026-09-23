@@ -4,6 +4,7 @@ use crate::block::BlockDevice;
 use crate::format::Superblock;
 use crate::fsck::check_device;
 use crate::inode::InodeKind;
+use crate::inode_codec::SPARSE_HOLE_BLOCK;
 use crate::inode_table::load_inode_table;
 use crate::journal_checkpoint::recover_journal_and_checkpoint;
 use crate::path_lookup::resolve_path_following_symlinks;
@@ -30,7 +31,7 @@ pub struct FileExtentPage {
 /// read-only fsck pass must then accept allocator ownership, inode references, and namespace state
 /// before the file mapping is exposed. Intermediate and final symbolic links are followed.
 ///
-/// Format v5 persists an explicit physical block number for every logical file block. This query
+/// Format v7 persists an explicit physical block number for every logical file block. This query
 /// coalesces only adjacent logical entries whose physical block numbers are also consecutive. It is
 /// therefore an observation of the current explicit mapping, not a persistent extent record, sparse
 /// mapping, allocation reservation, or promise that later mutations will preserve contiguity.
@@ -59,8 +60,9 @@ pub fn file_extents_at_path(
 /// across advancing pages. The cursor need not coincide with an extent boundary.
 ///
 /// Each call independently recovers, fsck-validates, and observes one durable snapshot; pagination
-/// across concurrent file mutations is not a multi-call snapshot guarantee. Format v5 remains an
-/// explicit block-vector format and this API does not create persistent extent records.
+/// across concurrent file mutations is not a multi-call snapshot guarantee. Format v7 remains an
+/// sparse block-vector format. Sparse holes are omitted from physical extent output and split
+/// adjacent physical runs; this API still does not create persistent extent records.
 ///
 /// # Errors
 ///
@@ -107,28 +109,36 @@ fn recovered_file_blocks(
 }
 
 fn coalesce_extents(blocks: &[u64]) -> io::Result<Vec<FileExtent>> {
-    if blocks.is_empty() {
-        return Ok(Vec::new());
-    }
-
     let mut extents = Vec::new();
-    let mut logical_start = 0_usize;
-    let mut physical_start = blocks[0];
-    let mut previous = physical_start;
+    let mut active: Option<(usize, u64, u64)> = None;
 
-    for (logical_index, physical_block) in blocks.iter().copied().enumerate().skip(1) {
-        if previous.checked_add(1) == Some(physical_block) {
-            previous = physical_block;
+    for (logical_index, physical_block) in blocks.iter().copied().enumerate() {
+        if physical_block == SPARSE_HOLE_BLOCK {
+            if let Some((logical_start, physical_start, _)) = active.take() {
+                push_extent(&mut extents, logical_start, physical_start, logical_index)?;
+            }
             continue;
         }
 
-        push_extent(&mut extents, logical_start, physical_start, logical_index)?;
-        logical_start = logical_index;
-        physical_start = physical_block;
-        previous = physical_block;
+        match active {
+            Some((logical_start, physical_start, previous))
+                if previous.checked_add(1) == Some(physical_block) =>
+            {
+                active = Some((logical_start, physical_start, physical_block));
+            }
+            Some((logical_start, physical_start, _)) => {
+                push_extent(&mut extents, logical_start, physical_start, logical_index)?;
+                active = Some((logical_index, physical_block, physical_block));
+            }
+            None => {
+                active = Some((logical_index, physical_block, physical_block));
+            }
+        }
     }
 
-    push_extent(&mut extents, logical_start, physical_start, blocks.len())?;
+    if let Some((logical_start, physical_start, _)) = active {
+        push_extent(&mut extents, logical_start, physical_start, blocks.len())?;
+    }
     Ok(extents)
 }
 
