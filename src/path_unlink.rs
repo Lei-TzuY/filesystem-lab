@@ -10,6 +10,9 @@ use crate::inode_table::load_inode_table;
 use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
+use crate::recursive_remove_tx::{
+    remove_directory_tree_journaled, RecursiveRemoveReport,
+};
 use crate::unlink_tx::store_unlink_metadata_journaled;
 
 /// Removes the final durable namespace reference to a regular file.
@@ -221,6 +224,34 @@ pub fn remove_directory_at_path_journaled(
     recover_journal_and_checkpoint_checked(device, *superblock)?;
     let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
     remove_directory_journaled(device, superblock, parent, name)
+}
+
+/// Recursively removes one directory subtree addressed by an absolute pathname.
+///
+/// Intermediate pathname components follow bounded symbolic-link expansion. The final component is
+/// not followed and must name a directory. A single trailing slash is accepted with the same
+/// no-follow-final semantics as ordinary directory removal. Older committed WAL is checked,
+/// recovered, and checkpointed before resolving the parent.
+///
+/// Regular files and symbolic links that retain namespace references outside the removed subtree
+/// keep their inode/data state. Subtree directories with external namespace references are rejected
+/// before publication. The complete allocator/inode/directory transition is committed atomically.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` for invalid/root paths, non-directory targets, or subtree directories with
+/// external namespace references. Parent resolution, strict-fsck, bounded-WAL, recovery, and device
+/// errors are propagated.
+pub fn remove_directory_tree_at_path_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    path: &str,
+) -> io::Result<RecursiveRemoveReport> {
+    let path = strip_single_directory_trailing_slash(path)?;
+    let (parent_path, name) = split_path(path)?;
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
+    let parent = resolve_path_following_symlinks(device, superblock, parent_path)?;
+    remove_directory_tree_journaled(device, superblock, parent, name)
 }
 
 fn strip_single_directory_trailing_slash(path: &str) -> io::Result<&str> {
