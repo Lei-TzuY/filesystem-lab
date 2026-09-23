@@ -56,6 +56,8 @@ The bounded journal region now writes version-2 empty/active anchors. Tail block
 
 Journal-region version 3 additionally supports bounded multi-transaction retention through two alternating snapshot banks. The inactive bank is fully written and flushed before the first-block anchor flips to a higher generation, so write-through crash testing can expose only the previous complete retained log or the replacement complete retained log. Checkpoint continues to collapse either state to the canonical v2 empty anchor. This is not yet circular head/tail wraparound.
 
+Retained v3 snapshots can now advance a filesystem-consistent complete-transaction prefix without discarding the suffix. Prefix home writes are semantically preflighted through strict fsck, replayed and flushed, then the suffix is atomically republished through the inactive bank. This reclaims bounded retained capacity and provides persistent logical head advancement while still deliberately stopping short of physical circular head/tail wraparound.
+
 ## Format-v6 byte EOF milestone
 
 Filesystem format v6 promotes exact regular-file EOF into inode-record version 3. Whole-file and
