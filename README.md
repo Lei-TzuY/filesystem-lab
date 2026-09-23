@@ -22,7 +22,7 @@ The implemented core now includes:
 - validated atomic create, unlink, and bounded rename lifecycle operations;
 - deterministic write/flush crash enumeration for create, unlink, and rename;
 - idempotent recovery after committed home-write interruption;
-- read-only fsck across superblock geometry, allocation ownership, journal integrity, inode block ownership, namespace references, root reachability, and directory-cycle constraints;
+- read-only fsck across superblock geometry, allocation ownership, journal integrity, inode block ownership, namespace references, root reachability, and directory-cycle constraints, plus bounded crash-consistent repair for allocation leaks and otherwise-valid unreachable namespace components;
 - crash-consistent exact-byte resize: shrink releases only the trailing block suffix and zeroes discarded final-block tail bytes, while growth zero-fills every newly visible byte and allocates only required trailing blocks;
 - atomic non-sparse extending byte writes that commit gap zero-fill, payload, new block ownership, block mapping, and EOF in one bounded WAL transaction; plus focused malformed-image, corruption, insufficient-journal-capacity, and crash-prefix regressions.
 
@@ -64,7 +64,7 @@ The following are intentionally outside the current checkpoint unless a concrete
 
 - circular journal head/tail management and multi-transaction retention beyond the bounded reservation;
 - sparse files, hole punching, and a general extent data model;
-- persisted hard-link counts, generic orphan reattachment, and recursive deletion;
+- persisted hard-link counts and recursive deletion;
 - permissions, ACLs, symlinks, mmap, FUSE integration, and broad POSIX compatibility;
 - sector tearing, controller reordering, and partial-block fault models.
 
