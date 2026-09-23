@@ -205,9 +205,9 @@ fn release_removed_inode_blocks(
         .iter()
         .filter(|inode| removed_set.contains(&inode.id))
     {
-        for block in &inode.blocks {
+        for block in inode.physical_blocks() {
             if !allocator
-                .is_owned(*block)
+                .is_owned(block)
                 .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?
             {
                 return Err(invalid_data(
@@ -215,9 +215,9 @@ fn release_removed_inode_blocks(
                 ));
             }
             allocator
-                .free(*block)
+                .free(block)
                 .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-            released_blocks.push(*block);
+            released_blocks.push(block);
         }
     }
     released_blocks.sort_unstable();
