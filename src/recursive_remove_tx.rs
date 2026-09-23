@@ -63,9 +63,20 @@ pub fn remove_directory_tree_journaled(
     recover_journal_and_checkpoint_checked(device, *superblock)?;
     check_device(device)?;
 
-    let mut allocator = load_allocator(device, superblock)?;
+    let allocator = load_allocator(device, superblock)?;
     let inodes = load_inode_table(device, superblock)?;
     let entries = load_directory_table(device, superblock)?;
+    let plan = build_recursive_remove_plan(allocator, inodes, entries, parent, name)?;
+    publish_recursive_remove(device, superblock, plan)
+}
+
+fn build_recursive_remove_plan(
+    mut allocator: BlockAllocator,
+    inodes: Vec<PersistedInode>,
+    entries: Vec<PersistedDirectoryEntry>,
+    parent: u64,
+    name: &str,
+) -> io::Result<RecursiveRemovePlan> {
     let inode_kinds = inodes
         .iter()
         .map(|inode| (inode.id, inode.kind))
@@ -88,7 +99,54 @@ pub fn remove_directory_tree_journaled(
     }
 
     let subtree_directories = collect_subtree_directories(target, &inode_kinds, &entries);
-    let removed_entry_indices = entries
+    let removed_entry_indices = collect_removed_entry_indices(
+        selected_index,
+        &subtree_directories,
+        &entries,
+    );
+    reject_external_directory_references(
+        &subtree_directories,
+        &removed_entry_indices,
+        &entries,
+    )?;
+
+    let desired_entries = entries
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| !removed_entry_indices.contains(index))
+        .map(|(_, entry)| entry.clone())
+        .collect::<Vec<_>>();
+
+    let removed_inodes = collect_removed_inodes(
+        &subtree_directories,
+        &removed_entry_indices,
+        &entries,
+        &desired_entries,
+    );
+    let removed_set = removed_inodes.iter().copied().collect::<BTreeSet<_>>();
+    let desired_inodes = inodes
+        .iter()
+        .filter(|inode| !removed_set.contains(&inode.id))
+        .cloned()
+        .collect::<Vec<_>>();
+    let released_blocks = release_removed_inode_blocks(&mut allocator, &inodes, &removed_set)?;
+
+    Ok(RecursiveRemovePlan {
+        allocator,
+        desired_inodes,
+        desired_entries,
+        removed_entries: removed_entry_indices.len(),
+        removed_inodes,
+        released_blocks,
+    })
+}
+
+fn collect_removed_entry_indices(
+    selected_index: usize,
+    subtree_directories: &BTreeSet<u64>,
+    entries: &[PersistedDirectoryEntry],
+) -> BTreeSet<usize> {
+    entries
         .iter()
         .enumerate()
         .filter_map(|(index, entry)| {
@@ -98,25 +156,33 @@ pub fn remove_directory_tree_journaled(
                 None
             }
         })
-        .collect::<BTreeSet<_>>();
+        .collect()
+}
 
-    for directory in &subtree_directories {
-        if entries.iter().enumerate().any(|(index, entry)| {
+fn reject_external_directory_references(
+    subtree_directories: &BTreeSet<u64>,
+    removed_entry_indices: &BTreeSet<usize>,
+    entries: &[PersistedDirectoryEntry],
+) -> io::Result<()> {
+    let has_external_reference = subtree_directories.iter().any(|directory| {
+        entries.iter().enumerate().any(|(index, entry)| {
             entry.target == *directory && !removed_entry_indices.contains(&index)
-        }) {
-            return Err(invalid_input(
-                "recursive-remove subtree directory has an external namespace reference",
-            ));
-        }
+        })
+    });
+    if has_external_reference {
+        return Err(invalid_input(
+            "recursive-remove subtree directory has an external namespace reference",
+        ));
     }
+    Ok(())
+}
 
-    let desired_entries = entries
-        .iter()
-        .enumerate()
-        .filter(|(index, _)| !removed_entry_indices.contains(index))
-        .map(|(_, entry)| entry.clone())
-        .collect::<Vec<_>>();
-
+fn collect_removed_inodes(
+    subtree_directories: &BTreeSet<u64>,
+    removed_entry_indices: &BTreeSet<usize>,
+    entries: &[PersistedDirectoryEntry],
+    desired_entries: &[PersistedDirectoryEntry],
+) -> Vec<u64> {
     let mut candidate_targets = removed_entry_indices
         .iter()
         .map(|index| entries[*index].target)
@@ -133,14 +199,14 @@ pub fn remove_directory_tree_journaled(
         })
         .collect::<Vec<_>>();
     removed_inodes.sort_unstable();
+    removed_inodes
+}
 
-    let removed_set = removed_inodes.iter().copied().collect::<BTreeSet<_>>();
-    let desired_inodes = inodes
-        .iter()
-        .filter(|inode| !removed_set.contains(&inode.id))
-        .cloned()
-        .collect::<Vec<_>>();
-
+fn release_removed_inode_blocks(
+    allocator: &mut BlockAllocator,
+    inodes: &[PersistedInode],
+    removed_set: &BTreeSet<u64>,
+) -> io::Result<Vec<u64>> {
     let mut released_blocks = Vec::new();
     for inode in inodes
         .iter()
@@ -162,16 +228,7 @@ pub fn remove_directory_tree_journaled(
         }
     }
     released_blocks.sort_unstable();
-
-    let plan = RecursiveRemovePlan {
-        allocator,
-        desired_inodes,
-        desired_entries,
-        removed_entries: removed_entry_indices.len(),
-        removed_inodes,
-        released_blocks,
-    };
-    publish_recursive_remove(device, superblock, plan)
+    Ok(released_blocks)
 }
 
 fn publish_recursive_remove(
