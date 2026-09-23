@@ -69,7 +69,7 @@ pub(crate) fn rename_overwrite_nondirectory_journaled(
             "non-directory rename overwrite cannot use directory endpoints",
         ));
     }
-    let destination_blocks = destination_inode.blocks.clone();
+    let destination_blocks = destination_inode.physical_blocks().collect::<Vec<_>>();
     let destination_references = entries
         .iter()
         .filter(|entry| entry.target == destination_target)
