@@ -81,20 +81,16 @@ fn dependent_retained_directory_updates_plan_against_projected_state() {
     );
     assert_eq!(names(&mut device, &superblock), vec!["base"]);
 
-    let second = update_directory_table_retained_journaled(
-        &mut device,
-        &superblock,
-        |entries| {
-            if !entries.iter().any(|entry| entry.name == "a") {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "second retained update did not observe first projected update",
-                ));
-            }
-            entries.push(entry("b"));
-            Ok(())
-        },
-    )
+    let second = update_directory_table_retained_journaled(&mut device, &superblock, |entries| {
+        if !entries.iter().any(|entry| entry.name == "a") {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "second retained update did not observe first projected update",
+            ));
+        }
+        entries.push(entry("b"));
+        Ok(())
+    })
     .unwrap();
     assert_eq!(
         second,
@@ -158,8 +154,7 @@ fn second_retained_directory_update_crash_converges_to_old_or_new_snapshot() {
         assert!(recovered_names.contains(&"base".to_owned()));
         assert!(recovered_names.contains(&"a".to_owned()));
         assert!(
-            recovered_names == vec!["base", "a"]
-                || recovered_names == vec!["base", "a", "b"],
+            recovered_names == vec!["base", "a"] || recovered_names == vec!["base", "a", "b"],
             "crash_at={crash_at}, names={recovered_names:?}"
         );
         assert!(load_journal_image(&mut device, superblock)
@@ -180,18 +175,14 @@ fn semantic_bad_retained_directory_update_fails_before_journal_mutation() {
     let home_before = names(&mut device, &superblock);
 
     device.arm(None);
-    let error = update_directory_table_retained_journaled(
-        &mut device,
-        &superblock,
-        |entries| {
-            entries.push(PersistedDirectoryEntry {
-                parent: 1,
-                target: 999,
-                name: "dangling".to_owned(),
-            });
-            Ok(())
-        },
-    )
+    let error = update_directory_table_retained_journaled(&mut device, &superblock, |entries| {
+        entries.push(PersistedDirectoryEntry {
+            parent: 1,
+            target: 999,
+            name: "dangling".to_owned(),
+        });
+        Ok(())
+    })
     .unwrap_err();
 
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
