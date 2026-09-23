@@ -155,7 +155,7 @@ pub fn append_retained_journal_entries(
         if let Some(anchor) = decode_v3_anchor(&first_block)? {
             let current = read_v3_entries(device, superblock, layout, anchor)?;
             validate_complete_entries(superblock, &current)?;
-            let target_bank = if anchor.bank == 0 { 1 } else { 0 };
+            let target_bank = usize::from(anchor.bank == 0);
             let generation = anchor
                 .generation
                 .checked_add(1)
