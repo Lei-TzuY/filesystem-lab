@@ -126,7 +126,7 @@ fn prepare_write_plan(
         });
     }
 
-    let target_blocks = byte_len_to_block_count(geometry.end_offset)?;
+    let target_blocks = byte_len_to_block_count(end_offset)?;
     let current_blocks = inodes[inode_index].blocks.len();
     if target_blocks < current_blocks {
         return Err(io::Error::new(
@@ -154,8 +154,8 @@ fn prepare_write_plan(
         WriteGeometry {
             current_blocks,
             current_eof,
-            geometry.start_offset,
-            geometry.end_offset,
+            start_offset,
+            end_offset,
         },
         data,
     )?;
@@ -207,8 +207,8 @@ fn prepare_data_writes(
             &mut image,
             block_start,
             block_end,
-            start_offset,
-            end_offset,
+            geometry.start_offset,
+            geometry.end_offset,
             data,
         )?;
         if geometry.end_offset < block_end {
