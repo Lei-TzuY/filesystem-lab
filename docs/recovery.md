@@ -42,3 +42,9 @@ Format v6 still uses a bounded fixed journal reservation rather than a circular 
 Journal-region v3 supports partial retained-log consumption through `recover_retained_prefix_and_checkpoint`. Only complete committed transactions are eligible. The selected prefix is interpreted by the same recovery planner as ordinary replay and is projected through strict fsck before any home mutation. Accepted prefix writes are replayed in log order and flushed; only then is the remaining suffix atomically republished through the inactive v3 bank, or the journal is cleared when no suffix remains.
 
 This ordering makes crash/retry idempotent: before suffix-anchor publication the old full snapshot remains authoritative, while after publication the replayed prefix is already durable and only the suffix remains authoritative. Deterministic write-through crash enumeration covers this transition.
+
+## Projection-aware retained metadata transactions
+
+The directory-table transaction layer can now append dependent updates to journal-region v3 without replaying each update home immediately. It reads the directory table through the current retained recovery projection, renders the next complete snapshot against that logical state, and strict-fsck checks the combined retained stream before publication. This prevents later retained updates from accidentally rebuilding state from stale home metadata and dropping earlier retained namespace changes.
+
+Publication still uses the v3 inactive-bank protocol, so a write-through crash while appending a dependent directory update exposes either the previous complete retained namespace state or the new complete retained namespace state. Ordinary recovery/checkpoint converges either image. This integration is intentionally limited to the directory-table transaction layer in this milestone; other metadata/data transaction families retain their existing immediate replay/checkpoint behavior until independently integrated and verified.
