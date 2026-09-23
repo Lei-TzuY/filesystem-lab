@@ -138,8 +138,16 @@ fn cross_block_extending_write_allocates_only_required_suffix() {
     assert!(bytes[3000..5000].iter().all(|byte| *byte == 0));
     assert_eq!(&bytes[5000..], payload.as_slice());
 
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap().allocated_blocks(), 2);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap()[1].blocks[0], first);
+    assert_eq!(
+        load_allocator(&mut device, &superblock)
+            .unwrap()
+            .allocated_blocks(),
+        2
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap()[1].blocks[0],
+        first
+    );
     let second = load_inode_table(&mut device, &superblock).unwrap()[1].blocks[1];
     let second_image = read_block(&mut device, second);
     assert!(second_image[1004..].iter().all(|byte| *byte == 0));
@@ -187,8 +195,14 @@ fn insufficient_journal_capacity_fails_before_home_mutation() {
     assert!(error
         .to_string()
         .contains("journal image exceeds reserved region"));
-    assert_eq!(load_allocator(&mut device, &superblock).unwrap(), allocator_before);
-    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes_before);
+    assert_eq!(
+        load_allocator(&mut device, &superblock).unwrap(),
+        allocator_before
+    );
+    assert_eq!(
+        load_inode_table(&mut device, &superblock).unwrap(),
+        inodes_before
+    );
     assert!(load_journal_image(&mut device, superblock)
         .unwrap()
         .is_empty());
@@ -202,14 +216,8 @@ fn extending_write_crash_matrix_recovers_old_or_complete_new_file() {
 
     let mut probe = prepared.clone();
     probe.arm(None);
-    write_file_range_extending_at_path_journaled(
-        &mut probe,
-        &superblock,
-        "/file",
-        5000,
-        &payload,
-    )
-    .unwrap();
+    write_file_range_extending_at_path_journaled(&mut probe, &superblock, "/file", 5000, &payload)
+        .unwrap();
     let mutation_count = probe.operations();
     assert!(mutation_count > 0);
 
@@ -256,8 +264,7 @@ fn extending_write_crash_matrix_recovers_old_or_complete_new_file() {
         }
 
         assert!(
-            recovery == RecoveryReport::default()
-                || recovery.committed_transactions == 1,
+            recovery == RecoveryReport::default() || recovery.committed_transactions == 1,
             "crash_at={crash_at}, recovery={recovery:?}"
         );
         assert!(load_journal_image(&mut device, superblock)
