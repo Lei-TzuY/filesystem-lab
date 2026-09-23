@@ -29,6 +29,7 @@ The allocation, inode, and directory home regions have independent codecs and in
 | truncate-to-zero | allocation, inode | the file inode survives with zero block references and exactly its prior blocks become free |
 | exact-byte grow | allocation, inode, data | EOF advances atomically, only required trailing blocks become owned, and every newly visible byte is zero |
 | extending byte write | allocation, inode, data | gap zero-fill, payload, ownership, block mapping, and new EOF become committed together |
+| recursive subtree remove | allocation, inode, directory | subtree namespace edges disappear together; only last-reference non-directory inodes retire; external directory references fail closed |
 
 `create`, `unlink`, `rename`, and `truncate-to-zero` have deterministic integration tests that enumerate every block-device `write_block`/`flush` mutation point of a successful bounded operation.
 
@@ -99,7 +100,7 @@ The checkpoint still deliberately does not define:
 
 - a circular journal with persistent head/tail or multi-transaction retention beyond the bounded reservation;
 - sparse files, hole punching, or a general extent data model;
-- persisted hard-link counts or recursive removal;
+- persisted hard-link counts;
 - permissions, ACLs, mmap, FUSE, or broad POSIX compatibility;
 - stronger hardware fault models such as torn sectors or storage reordering.
 
