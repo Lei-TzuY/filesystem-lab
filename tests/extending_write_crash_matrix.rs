@@ -212,7 +212,7 @@ fn insufficient_journal_capacity_fails_before_home_mutation() {
 #[test]
 fn extending_write_crash_matrix_recovers_old_or_complete_new_file() {
     let payload = vec![0xcc; 100];
-    let (prepared, superblock, first) = partial_file();
+    let (prepared, superblock, _) = partial_file();
 
     let mut probe = prepared.clone();
     probe.arm(None);
