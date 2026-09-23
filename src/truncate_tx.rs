@@ -7,7 +7,7 @@ use crate::create_tx::store_create_metadata_journaled;
 use crate::directory_table::load_directory_table;
 use crate::format::Superblock;
 use crate::inode::InodeKind;
-use crate::inode_codec::PersistedInode;
+use crate::inode_codec::{PersistedInode, SPARSE_HOLE_BLOCK};
 use crate::inode_table::{load_inode_table, store_inode_table};
 use crate::journal::JournalLog;
 use crate::journal_checkpoint::recover_journal_and_checkpoint;
@@ -139,9 +139,11 @@ fn prepare_byte_truncate_plan(
     let released = target.replace_block_range(target_blocks..current_blocks, &[])?;
     target.set_file_byte_len(target_bytes)?;
     for block in &released {
-        allocator
-            .free(*block)
-            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+        if *block != SPARSE_HOLE_BLOCK {
+            allocator
+                .free(*block)
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+        }
     }
 
     Ok(Some(ByteTruncatePlan {
@@ -168,6 +170,9 @@ fn byte_len_to_block_count(target_bytes: u64) -> io::Result<usize> {
 
 fn validate_released_ownership(allocator: &BlockAllocator, released: &[u64]) -> io::Result<()> {
     for block in released {
+        if *block == SPARSE_HOLE_BLOCK {
+            continue;
+        }
         let owned = allocator
             .is_owned(*block)
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
@@ -199,6 +204,9 @@ fn prepare_partial_tail_zero(
     }
 
     let block = target.blocks[target_blocks - 1];
+    if block == SPARSE_HOLE_BLOCK {
+        return Ok(None);
+    }
     let owned = allocator
         .is_owned(block)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
@@ -265,9 +273,11 @@ pub fn truncate_file_to_zero_journaled(
     let current_blocks = target.blocks.len();
     let released = target.replace_block_range(0..current_blocks, &[])?;
     for block in released {
-        allocator
-            .free(block)
-            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+        if block != SPARSE_HOLE_BLOCK {
+            allocator
+                .free(block)
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+        }
     }
 
     store_create_metadata_journaled(device, superblock, &allocator, &inodes, &entries)
@@ -328,9 +338,11 @@ pub fn truncate_file_to_blocks_journaled(
     let current_blocks = target.blocks.len();
     let released = target.replace_block_range(target_blocks..current_blocks, &[])?;
     for block in &released {
-        allocator
-            .free(*block)
-            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+        if *block != SPARSE_HOLE_BLOCK {
+            allocator
+                .free(*block)
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+        }
     }
 
     let report =
@@ -387,9 +399,11 @@ pub fn truncate_file_last_block_journaled(
     })?;
     let block = target.blocks[last_index];
     target.replace_block_range(last_index..last_index + 1, &[])?;
-    allocator
-        .free(block)
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    if block != SPARSE_HOLE_BLOCK {
+        allocator
+            .free(block)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    }
 
     let report =
         store_create_metadata_journaled(device, superblock, &allocator, &inodes, &entries)?;
