@@ -221,14 +221,7 @@ pub(crate) fn replace_retained_journal_entries(
         .generation
         .checked_add(1)
         .ok_or_else(|| invalid_input("journal v3 generation exhausted"))?;
-    publish_v3_snapshot(
-        device,
-        superblock,
-        layout,
-        target_bank,
-        generation,
-        entries,
-    )
+    publish_v3_snapshot(device, superblock, layout, target_bank, generation, entries)
 }
 
 fn publish_v3_snapshot(
