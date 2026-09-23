@@ -99,6 +99,7 @@ pub mod path_whole_exchange;
 pub mod path_whole_transfer_replace;
 pub mod path_zero_range;
 pub mod recovery;
+pub mod recursive_remove_tx;
 pub mod recovery_projection;
 pub mod rename_exchange_tx;
 mod rename_overwrite_nondirectory_tx;
