@@ -9,9 +9,10 @@ use crate::inode_table::load_inode_table;
 /// Reads a non-empty byte range across existing logical blocks of a durable regular file.
 ///
 /// `start_offset` is relative to `first_block_index`. The range may span multiple logical blocks,
-/// but every touched byte must lie at or before the format-v6 persisted EOF and every touched block
-/// must already be referenced by the inode and allocator-owned. Sparse holes and implicit extension
-/// remain unsupported.
+/// but every touched byte must lie at or before the format-v7 persisted EOF and every touched block
+/// must lie inside the persisted EOF. Physical mappings must be allocator-owned; sparse-hole
+/// mappings synthesize zero bytes without touching the block device. Implicit extension remains
+/// unsupported.
 ///
 /// # Errors
 ///
