@@ -86,6 +86,14 @@ struct ExtendingWritePlan {
     data_writes: Vec<(u64, [u8; BLOCK_SIZE])>,
 }
 
+#[derive(Clone, Copy)]
+struct WriteGeometry {
+    current_blocks: usize,
+    current_eof: u64,
+    start_offset: u64,
+    end_offset: u64,
+}
+
 fn prepare_write_plan(
     device: &mut impl BlockDevice,
     superblock: &Superblock,
@@ -118,7 +126,7 @@ fn prepare_write_plan(
         });
     }
 
-    let target_blocks = byte_len_to_block_count(end_offset)?;
+    let target_blocks = byte_len_to_block_count(geometry.end_offset)?;
     let current_blocks = inodes[inode_index].blocks.len();
     if target_blocks < current_blocks {
         return Err(io::Error::new(
@@ -143,10 +151,12 @@ fn prepare_write_plan(
         device,
         &allocator,
         &inodes[inode_index],
-        current_blocks,
-        current_eof,
-        start_offset,
-        end_offset,
+        WriteGeometry {
+            current_blocks,
+            current_eof,
+            geometry.start_offset,
+            geometry.end_offset,
+        },
         data,
     )?;
 
@@ -162,22 +172,19 @@ fn prepare_data_writes(
     device: &mut impl BlockDevice,
     allocator: &BlockAllocator,
     inode: &PersistedInode,
-    current_blocks: usize,
-    current_eof: u64,
-    start_offset: u64,
-    end_offset: u64,
+    geometry: WriteGeometry,
     data: &[u8],
 ) -> io::Result<Vec<(u64, [u8; BLOCK_SIZE])>> {
-    let first_changed_byte = current_eof.min(start_offset);
+    let first_changed_byte = geometry.current_eof.min(geometry.start_offset);
     let first_changed_block = usize::try_from(first_changed_byte / BLOCK_SIZE_U64)
         .map_err(|_| invalid_input("extending write first block exceeds usize"))?;
-    let end_block = byte_len_to_block_count(end_offset)?;
+    let end_block = byte_len_to_block_count(geometry.end_offset)?;
     let mut writes = Vec::with_capacity(end_block.saturating_sub(first_changed_block));
 
     for logical_index in first_changed_block..end_block {
         let physical_block = inode.blocks[logical_index];
         let (mut image, current_image) =
-            load_candidate_block(device, allocator, physical_block, logical_index, current_blocks)?;
+            load_candidate_block(device, allocator, physical_block, logical_index, geometry.current_blocks)?;
 
         let block_start = u64::try_from(logical_index)
             .map_err(|_| invalid_input("extending write block index exceeds u64"))?
@@ -187,13 +194,13 @@ fn prepare_data_writes(
             .checked_add(BLOCK_SIZE_U64)
             .ok_or_else(|| invalid_input("extending write block end overflow"))?;
 
-        if start_offset > current_eof {
+        if geometry.start_offset > geometry.current_eof {
             zero_intersection(
                 &mut image,
                 block_start,
                 block_end,
-                current_eof,
-                start_offset,
+                geometry.current_eof,
+                geometry.start_offset,
             )?;
         }
         copy_intersection(
@@ -204,8 +211,14 @@ fn prepare_data_writes(
             end_offset,
             data,
         )?;
-        if end_offset < block_end {
-            zero_intersection(&mut image, block_start, block_end, end_offset, block_end)?;
+        if geometry.end_offset < block_end {
+            zero_intersection(
+                &mut image,
+                block_start,
+                block_end,
+                geometry.end_offset,
+                block_end,
+            )?;
         }
 
         if current_image.is_none_or(|current| current != image) {
