@@ -66,14 +66,14 @@ pub fn remove_directory_tree_journaled(
     let allocator = load_allocator(device, superblock)?;
     let inodes = load_inode_table(device, superblock)?;
     let entries = load_directory_table(device, superblock)?;
-    let plan = build_recursive_remove_plan(allocator, inodes, entries, parent, name)?;
+    let plan = build_recursive_remove_plan(allocator, &inodes, &entries, parent, name)?;
     publish_recursive_remove(device, superblock, plan)
 }
 
 fn build_recursive_remove_plan(
     mut allocator: BlockAllocator,
-    inodes: Vec<PersistedInode>,
-    entries: Vec<PersistedDirectoryEntry>,
+    inodes: &[PersistedInode],
+    entries: &[PersistedDirectoryEntry],
     parent: u64,
     name: &str,
 ) -> io::Result<RecursiveRemovePlan> {
