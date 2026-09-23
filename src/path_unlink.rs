@@ -10,9 +10,7 @@ use crate::inode_table::load_inode_table;
 use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
-use crate::recursive_remove_tx::{
-    remove_directory_tree_journaled, RecursiveRemoveReport,
-};
+use crate::recursive_remove_tx::{remove_directory_tree_journaled, RecursiveRemoveReport};
 use crate::unlink_tx::store_unlink_metadata_journaled;
 
 /// Removes the final durable namespace reference to a regular file.
