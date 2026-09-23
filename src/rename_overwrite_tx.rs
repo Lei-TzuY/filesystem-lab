@@ -209,7 +209,7 @@ fn rename_overwrite_impl(
             kind_name(policy.expected_kind)
         )));
     }
-    let destination_blocks = destination_inode.blocks.clone();
+    let destination_blocks = destination_inode.physical_blocks().collect::<Vec<_>>();
     let destination_references = entries
         .iter()
         .filter(|entry| entry.target == destination_target)
