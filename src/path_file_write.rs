@@ -3,6 +3,7 @@ use std::io;
 use crate::block::{BlockDevice, BLOCK_SIZE};
 use crate::file_append_batch::append_file_blocks_journaled;
 use crate::file_data::write_file_range_journaled;
+use crate::file_extending_write::write_file_range_extending_journaled;
 use crate::file_replace::replace_file_blocks_journaled;
 use crate::format::Superblock;
 use crate::inode::InodeKind;
@@ -11,6 +12,34 @@ use crate::journal_checkpoint::recover_journal_and_checkpoint_checked;
 use crate::path_lookup::resolve_path_following_symlinks;
 use crate::recovery::RecoveryReport;
 use crate::truncate_tx::truncate_file_to_blocks_journaled;
+
+/// Atomically writes a byte range and extends the pathname-addressed regular file when needed.
+///
+/// Older committed WAL is checked/recovered before pathname resolution, including final symlink
+/// following. The write offset is absolute from the start of the file. If the payload ends beyond
+/// persisted EOF, the gap is zero-filled without sparse holes, only required trailing blocks are
+/// allocated, and payload/data/allocator/inode EOF changes are committed together through one WAL.
+///
+/// Writes wholly within EOF retain the existing overwrite-only transaction semantics.
+///
+/// The returned block vector contains blocks allocated only when the write extends into new logical
+/// blocks.
+///
+/// # Errors
+///
+/// Propagates checked recovery, pathname resolution, allocation, bounded-journal, exact EOF, and
+/// durable I/O errors. Empty writes and non-file targets return `InvalidInput`.
+pub fn write_file_range_extending_at_path_journaled(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    path: &str,
+    start_offset: u64,
+    data: &[u8],
+) -> io::Result<(Vec<u64>, RecoveryReport)> {
+    recover_journal_and_checkpoint_checked(device, *superblock)?;
+    let inode_id = resolve_path_following_symlinks(device, superblock, path)?;
+    write_file_range_extending_journaled(device, superblock, inode_id, start_offset, data)
+}
 
 /// Atomically overwrites every complete logical block persisted by the regular file named by an
 /// absolute pathname.
@@ -22,7 +51,7 @@ use crate::truncate_tx::truncate_file_to_blocks_journaled;
 ///
 /// The mutation delegates non-empty writes to the existing journaled range-write primitive, keeping
 /// allocator ownership, WAL publication, recovery, and journal-capacity validation centralized.
-/// Format v5 still has no byte EOF, so this API neither grows nor shrinks the file and cannot encode
+/// Format v6 persists exact byte EOF, so this API neither grows nor shrinks the file and cannot encode
 /// a partial final block or sparse hole. It changes no on-disk format.
 ///
 /// # Errors
@@ -78,7 +107,7 @@ pub fn write_file_blocks_at_path_journaled(
 /// replacement over the file's complete current block list. Empty-to-empty is a no-op.
 ///
 /// Each non-empty transition is therefore a single existing WAL transaction rather than a grow then
-/// overwrite sequence. Format v5 still has no byte EOF, so this API replaces complete 4 KiB logical
+/// overwrite sequence. Format v6 persists exact byte EOF, so this API replaces complete 4 KiB logical
 /// blocks only and does not claim partial-final-block, sparse-hole, extent, or byte-length semantics.
 /// It changes no on-disk format.
 ///
