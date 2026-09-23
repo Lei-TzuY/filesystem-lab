@@ -59,13 +59,14 @@ pub fn unlink_file_journaled(
         ));
     }
 
-    let unique_blocks: BTreeSet<u64> = inode.blocks.iter().copied().collect();
-    if unique_blocks.len() != inode.blocks.len() {
+    let physical_blocks = inode.physical_blocks().collect::<Vec<_>>();
+    let unique_blocks: BTreeSet<u64> = physical_blocks.iter().copied().collect();
+    if unique_blocks.len() != physical_blocks.len() {
         return Err(invalid_input(
-            "regular-file inode contains duplicate block references",
+            "regular-file inode contains duplicate physical block references",
         ));
     }
-    for block in &inode.blocks {
+    for block in &physical_blocks {
         if !allocator
             .is_owned(*block)
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?
@@ -76,9 +77,9 @@ pub fn unlink_file_journaled(
         }
     }
 
-    for block in &inode.blocks {
+    for block in physical_blocks {
         allocator
-            .free(*block)
+            .free(block)
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
     }
     inodes.remove(inode_index);
