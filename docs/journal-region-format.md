@@ -57,8 +57,9 @@ current formatting writes the canonical v2 empty anchor instead.
 Journal writes may target ordinary data blocks and allocation/inode/directory home regions. They may
 never target the superblock or the journal reservation itself.
 
-The journal is still bounded rather than circular; persistent head/tail wraparound and multi-
-transaction retention remain outside this milestone.
+The journal remains bounded rather than circular. Version 3 can retain multiple complete
+transactions inside one alternating-bank snapshot, while persistent head/tail wraparound and
+retention beyond the bounded bank capacity remain outside this milestone.
 
 
 ## Version 3 retained snapshots
