@@ -95,8 +95,7 @@ pub fn write_file_range_extending_journaled(
         allocated.push(block);
     }
     if !allocated.is_empty() {
-        inodes[inode_index]
-            .replace_block_range(current_blocks..current_blocks, &allocated)?;
+        inodes[inode_index].replace_block_range(current_blocks..current_blocks, &allocated)?;
     }
     inodes[inode_index].set_file_byte_len(end_offset)?;
 
@@ -152,13 +151,7 @@ pub fn write_file_range_extending_journaled(
         )?;
 
         if end_offset < block_end {
-            zero_intersection(
-                &mut image,
-                block_start,
-                block_end,
-                end_offset,
-                block_end,
-            )?;
+            zero_intersection(&mut image, block_start, block_end, end_offset, block_end)?;
         }
 
         if logical_index >= current_blocks {
