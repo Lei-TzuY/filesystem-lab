@@ -8,7 +8,7 @@ use crate::directory_codec::PersistedDirectoryEntry;
 use crate::directory_table::load_directory_table;
 use crate::format::{read_superblock, Superblock};
 use crate::inode::InodeKind;
-use crate::inode_codec::PersistedInode;
+use crate::inode_codec::{PersistedInode, SPARSE_HOLE_BLOCK};
 use crate::inode_table::load_inode_table;
 use crate::journal::{JournalEntry, TransactionId};
 use crate::journal_region::load_journal_image;
@@ -181,6 +181,15 @@ fn scan_inode_ownership(
 
     for inode in inodes {
         for block in &inode.blocks {
+            if *block == SPARSE_HOLE_BLOCK {
+                if inode.kind != InodeKind::File {
+                    return Err(invalid_data_owned(format!(
+                        "non-file inode {} contains sparse-hole sentinel",
+                        inode.id
+                    )));
+                }
+                continue;
+            }
             if *block < reserved_blocks || *block >= superblock.total_blocks {
                 return Err(invalid_data_owned(format!(
                     "inode {} references reserved or out-of-range block {}",
