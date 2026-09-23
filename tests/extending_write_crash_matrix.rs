@@ -214,7 +214,7 @@ fn extending_write_crash_matrix_recovers_old_or_complete_new_file() {
     assert!(mutation_count > 0);
 
     for crash_at in 0..mutation_count {
-        let (mut device, superblock, _) = partial_file();
+        let (mut device, superblock, local_first) = partial_file();
         device.arm(Some(crash_at));
         assert!(
             write_file_range_extending_at_path_journaled(
@@ -236,7 +236,7 @@ fn extending_write_crash_matrix_recovers_old_or_complete_new_file() {
 
         match file.byte_len {
             3000 => {
-                assert_eq!(file.blocks, vec![first], "crash_at={crash_at}");
+                assert_eq!(file.blocks, vec![local_first], "crash_at={crash_at}");
                 assert_eq!(allocator.allocated_blocks(), 1, "crash_at={crash_at}");
                 let bytes = read_file_blocks_at_path(&mut device, &superblock, "/file").unwrap();
                 assert_eq!(bytes.len(), 3000);
@@ -244,7 +244,7 @@ fn extending_write_crash_matrix_recovers_old_or_complete_new_file() {
             }
             5100 => {
                 assert_eq!(file.blocks.len(), 2, "crash_at={crash_at}");
-                assert_eq!(file.blocks[0], first, "crash_at={crash_at}");
+                assert_eq!(file.blocks[0], local_first, "crash_at={crash_at}");
                 assert_eq!(allocator.allocated_blocks(), 2, "crash_at={crash_at}");
                 let bytes = read_file_blocks_at_path(&mut device, &superblock, "/file").unwrap();
                 assert_eq!(bytes.len(), 5100);
