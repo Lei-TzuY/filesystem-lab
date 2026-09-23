@@ -4,6 +4,7 @@ use std::io;
 use crate::block::{BlockDevice, BLOCK_SIZE};
 use crate::format::read_superblock;
 use crate::fsck::{check_device, FsckReport};
+use crate::journal::JournalEntry;
 use crate::journal_region::load_journal_image;
 use crate::recovery::{plan_recovery, RecoveryReport};
 
@@ -33,7 +34,14 @@ pub fn check_device_after_recovery_projection(
 ) -> io::Result<RecoveryProjectionReport> {
     let superblock = read_superblock(device)?;
     let entries = load_journal_image(device, superblock)?;
-    let plan = plan_recovery(&entries)?;
+    check_device_after_entries_projection(device, &entries)
+}
+
+pub(crate) fn check_device_after_entries_projection(
+    device: &mut impl BlockDevice,
+    entries: &[JournalEntry],
+) -> io::Result<RecoveryProjectionReport> {
+    let plan = plan_recovery(entries)?;
 
     let mut blocks = BTreeMap::new();
     for (block, data) in plan.writes() {
