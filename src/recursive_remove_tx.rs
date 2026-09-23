@@ -99,16 +99,9 @@ fn build_recursive_remove_plan(
     }
 
     let subtree_directories = collect_subtree_directories(target, &inode_kinds, &entries);
-    let removed_entry_indices = collect_removed_entry_indices(
-        selected_index,
-        &subtree_directories,
-        &entries,
-    );
-    reject_external_directory_references(
-        &subtree_directories,
-        &removed_entry_indices,
-        &entries,
-    )?;
+    let removed_entry_indices =
+        collect_removed_entry_indices(selected_index, &subtree_directories, &entries);
+    reject_external_directory_references(&subtree_directories, &removed_entry_indices, &entries)?;
 
     let desired_entries = entries
         .iter()
