@@ -123,9 +123,7 @@ fn projects_a_committed_root_inode_without_mutating_home_state() {
     assert_eq!(projected.fsck.referenced_blocks, 0);
     assert_eq!(device.writes, writes_before);
     assert_eq!(device.flushes, flushes_before);
-    assert!(load_inode_table(&mut device, &superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), []);
     assert_eq!(
         load_allocator(&mut device, &superblock)
             .unwrap()

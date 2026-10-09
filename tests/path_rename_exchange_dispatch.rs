@@ -184,9 +184,7 @@ fn rejects_mixed_kinds_and_repeated_trailing_separator_before_wal() {
             .kind(),
         io::ErrorKind::InvalidInput
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -230,9 +228,7 @@ fn every_dispatched_file_exchange_crash_point_recovers_old_or_complete_new_state
             assert_eq!(target_for(&mut device, &superblock, "right"), 2);
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

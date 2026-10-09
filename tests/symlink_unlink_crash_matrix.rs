@@ -41,9 +41,7 @@ fn setup_link() -> (CrashDevice, Superblock, u64, u64) {
         .find(|inode| inode.id == inode_id)
         .unwrap();
     let block = inode.blocks[0];
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
     (device, superblock, inode_id, block)
 }
@@ -71,7 +69,7 @@ fn assert_new_state(device: &mut CrashDevice, superblock: &Superblock, block: u6
         load_inode_table(device, superblock).unwrap(),
         vec![root_inode()]
     );
-    assert!(load_directory_table(device, superblock).unwrap().is_empty());
+    assert_eq!(load_directory_table(device, superblock).unwrap(), []);
     check_device(device).unwrap();
 }
 
@@ -86,9 +84,7 @@ fn every_symlink_unlink_mutation_crash_point_is_old_or_recoverable_new_state() {
     assert!(mutation_operations >= 7);
     assert_eq!(report.committed_transactions, 1);
     assert_new_state(&mut probe, &superblock, block);
-    assert!(load_journal_image(&mut probe, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut probe, superblock).unwrap(), []);
 
     for crash_at in 0..mutation_operations {
         let mut device = baseline.clone();
@@ -139,9 +135,7 @@ fn every_symlink_unlink_mutation_crash_point_is_old_or_recoverable_new_state() {
             assert_eq!(recovery.committed_transactions, 1);
             assert_new_state(&mut device, &superblock, block);
         }
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 
         let second = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         assert_eq!(second, RecoveryReport::default());

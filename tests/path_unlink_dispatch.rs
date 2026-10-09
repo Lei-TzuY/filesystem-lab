@@ -174,9 +174,7 @@ fn rejects_directories_and_invalid_path_shapes_without_publishing() {
     }
 
     assert_eq!(snapshot(&mut device, &superblock), before);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -212,9 +210,7 @@ fn every_dispatch_branch_recovers_to_old_or_complete_new_state_at_every_crash_po
                 "case {case:?}, crash_at {crash_at} recovered a partial state"
             );
             check_device(&mut device).unwrap();
-            assert!(load_journal_image(&mut device, superblock)
-                .unwrap()
-                .is_empty());
+            assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
             assert_eq!(
                 recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
                 RecoveryReport::default()

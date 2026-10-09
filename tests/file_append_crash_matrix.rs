@@ -63,7 +63,7 @@ fn assert_old(device: &mut CrashDevice, superblock: &Superblock, block: u64) {
         .into_iter()
         .find(|inode| inode.id == 2)
         .unwrap();
-    assert!(inode.blocks.is_empty());
+    assert_eq!(inode.blocks, []);
 }
 
 fn assert_new(
@@ -96,9 +96,7 @@ fn append_allocates_references_and_persists_one_complete_block() {
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(report.home_writes, 3);
     assert_new(&mut device, &superblock, block, &data);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -113,9 +111,7 @@ fn every_append_mutation_crash_point_is_old_or_recoverable_new_state() {
     let mutation_operations = probe.operations();
     assert!(mutation_operations >= 7);
     assert_new(&mut probe, &superblock, expected_block, &data);
-    assert!(load_journal_image(&mut probe, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut probe, superblock).unwrap(), []);
 
     for crash_at in 0..mutation_operations {
         let (mut device, superblock, expected_block) = setup();
@@ -160,9 +156,7 @@ fn every_append_mutation_crash_point_is_old_or_recoverable_new_state() {
             assert_new(&mut device, &superblock, expected_block, &data);
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 
         let second = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         assert_eq!(second, RecoveryReport::default());

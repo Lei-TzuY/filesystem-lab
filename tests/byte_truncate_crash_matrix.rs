@@ -73,9 +73,7 @@ fn exact_byte_shrink_updates_eof_releases_suffix_and_zeros_tail() {
     let first_image = read_block(&mut device, first);
     assert!(first_image[..3000].iter().all(|byte| *byte == 0xa5));
     assert!(first_image[3000..].iter().all(|byte| *byte == 0));
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 

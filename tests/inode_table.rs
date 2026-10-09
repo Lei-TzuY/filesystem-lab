@@ -74,9 +74,7 @@ fn sample_inodes() -> Vec<PersistedInode> {
 fn fresh_format_contains_empty_inode_table() {
     let mut device = MemoryDevice::new(32);
     let superblock = format_device(&mut device).unwrap();
-    assert!(load_inode_table(&mut device, &superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), []);
 }
 
 #[test]
@@ -119,7 +117,7 @@ fn duplicate_inode_ids_are_rejected_before_write() {
 
     let error = store_inode_table(&mut device, &superblock, &duplicate).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
-    assert!(device.writes.is_empty());
+    assert_eq!(device.writes, []);
 }
 
 #[test]

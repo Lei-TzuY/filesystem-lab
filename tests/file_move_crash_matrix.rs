@@ -106,9 +106,7 @@ fn invalid_moves_are_rejected_before_publication() {
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     }
     assert_eq!(blocks_for(&mut device, &superblock), blocks);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -121,9 +119,7 @@ fn allocator_disagreement_is_rejected_before_publication() {
     let error = move_file_block_range_journaled(&mut device, &superblock, 2, 1, 2, 3).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     assert_eq!(blocks_for(&mut device, &superblock), blocks);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -163,9 +159,7 @@ fn every_move_mutation_crash_point_is_old_or_recoverable_new_state() {
         }
         assert_owned(&mut device, &superblock, blocks);
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

@@ -95,7 +95,7 @@ fn same_block_extending_write_zero_fills_gap_and_advances_eof() {
     )
     .unwrap();
 
-    assert!(allocated.is_empty());
+    assert_eq!(allocated, []);
     assert_eq!(report.committed_transactions, 1);
     let metadata = metadata_at_path(&mut device, &superblock, "/file").unwrap();
     assert_eq!(metadata.logical_blocks, 1);
@@ -167,7 +167,7 @@ fn overwrite_inside_eof_keeps_size_and_allocates_nothing() {
     )
     .unwrap();
 
-    assert!(allocated.is_empty());
+    assert_eq!(allocated, []);
     assert_eq!(report.committed_transactions, 1);
     let metadata = metadata_at_path(&mut device, &superblock, "/file").unwrap();
     assert_eq!(metadata.byte_len, 3000);
@@ -203,9 +203,7 @@ fn insufficient_journal_capacity_fails_before_home_mutation() {
         load_inode_table(&mut device, &superblock).unwrap(),
         inodes_before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -267,9 +265,7 @@ fn extending_write_crash_matrix_recovers_old_or_complete_new_file() {
             recovery == RecoveryReport::default() || recovery.committed_transactions == 1,
             "crash_at={crash_at}, recovery={recovery:?}"
         );
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         check_device(&mut device).unwrap();
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),

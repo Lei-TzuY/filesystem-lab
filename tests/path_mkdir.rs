@@ -103,9 +103,10 @@ fn creates_empty_directories_at_direct_symlinked_and_trailing_slash_paths() {
         assert_eq!(metadata.kind, InodeKind::Directory);
         assert_eq!(metadata.logical_blocks, 0);
         assert_eq!(metadata.namespace_references, 1);
-        assert!(list_directory_at_path(&mut device, &superblock, path)
-            .unwrap()
-            .is_empty());
+        assert_eq!(
+            list_directory_at_path(&mut device, &superblock, path).unwrap(),
+            []
+        );
     }
 
     assert_eq!(
@@ -162,9 +163,7 @@ fn rejects_invalid_destinations_collisions_and_non_directory_parent_before_publi
         load_directory_table(&mut device, &superblock).unwrap(),
         entries_before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -207,18 +206,15 @@ fn every_trailing_slash_directory_create_crash_point_recovers_old_or_complete_ne
             assert_eq!(metadata.kind, InodeKind::Directory);
             assert_eq!(metadata.logical_blocks, 0);
             assert_eq!(metadata.namespace_references, 1);
-            assert!(
-                list_directory_at_path(&mut device, &superblock, "/dir/new_dir/")
-                    .unwrap()
-                    .is_empty()
+            assert_eq!(
+                list_directory_at_path(&mut device, &superblock, "/dir/new_dir/").unwrap(),
+                []
             );
         }
 
         assert_unique_ownership(&mut device, &superblock);
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

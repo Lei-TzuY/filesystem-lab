@@ -70,9 +70,7 @@ fn partial_write_preserves_unmodified_bytes_and_reuses_journal() {
     assert_eq!(&image[100..104], &[1, 2, 3, 4]);
     assert!(image[..100].iter().all(|byte| *byte == 0x11));
     assert!(image[104..].iter().all(|byte| *byte == 0x11));
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -132,9 +130,7 @@ fn every_partial_write_crash_point_recovers_whole_old_or_new_block() {
             );
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

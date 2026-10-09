@@ -110,9 +110,7 @@ fn rejects_repeated_trailing_separators_before_wal() {
         .kind(),
         io::ErrorKind::InvalidInput
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     assert_eq!(
         load_directory_table(&mut device, &superblock).unwrap(),
         original
@@ -135,9 +133,7 @@ fn rejects_exchange_that_would_create_directory_cycle_before_wal() {
             .kind(),
         io::ErrorKind::InvalidInput
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     assert_eq!(
         load_directory_table(&mut device, &superblock).unwrap(),
         original
@@ -195,9 +191,7 @@ fn every_trailing_slash_directory_exchange_crash_point_recovers_old_or_complete_
             );
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

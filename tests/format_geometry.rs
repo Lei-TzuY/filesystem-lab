@@ -64,17 +64,15 @@ fn assert_clean_metadata(
     superblock: filesystem_lab::format::Superblock,
 ) {
     assert_eq!(read_superblock(device).unwrap(), superblock);
-    assert!(load_journal_image(device, superblock).unwrap().is_empty());
+    assert_eq!(load_journal_image(device, superblock).unwrap(), []);
     assert_eq!(
         load_allocator(device, &superblock)
             .unwrap()
             .allocated_blocks(),
         0
     );
-    assert!(load_inode_table(device, &superblock).unwrap().is_empty());
-    assert!(load_directory_table(device, &superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_inode_table(device, &superblock).unwrap(), []);
+    assert_eq!(load_directory_table(device, &superblock).unwrap(), []);
 }
 
 #[test]

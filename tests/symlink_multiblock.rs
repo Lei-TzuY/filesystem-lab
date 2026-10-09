@@ -79,7 +79,7 @@ fn assert_removed_state(device: &mut CrashDevice, superblock: &Superblock, alloc
         load_inode_table(device, superblock).unwrap(),
         vec![root_inode()]
     );
-    assert!(load_directory_table(device, superblock).unwrap().is_empty());
+    assert_eq!(load_directory_table(device, superblock).unwrap(), []);
     check_device(device).unwrap();
 }
 
@@ -107,9 +107,7 @@ fn multi_block_symlink_round_trips_and_unlink_frees_every_target_block() {
 
     unlink_symlink_journaled(&mut device, &superblock, 1, "long-link").unwrap();
     assert_removed_state(&mut device, &superblock, allocated_before);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -139,17 +137,13 @@ fn every_multi_block_symlink_create_crash_point_is_old_or_recoverable_new_state(
                 load_inode_table(&mut device, &superblock).unwrap(),
                 vec![root_inode()]
             );
-            assert!(load_directory_table(&mut device, &superblock)
-                .unwrap()
-                .is_empty());
+            assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), []);
             check_device(&mut device).unwrap();
         } else {
             assert_eq!(recovery.committed_transactions, 1);
             assert_new_state(&mut device, &superblock, &target);
         }
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 
         let second = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         assert_eq!(second, RecoveryReport::default());
@@ -192,9 +186,7 @@ fn every_multi_block_symlink_unlink_crash_point_is_old_or_recoverable_removed_st
             assert_eq!(recovery.committed_transactions, 1);
             assert_removed_state(&mut device, &superblock, allocated_before);
         }
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 
         let second = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         assert_eq!(second, RecoveryReport::default());

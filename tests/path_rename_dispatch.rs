@@ -140,9 +140,7 @@ fn same_inode_alias_is_a_no_op() {
         load_directory_table(&mut device, &superblock).unwrap(),
         before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -169,9 +167,7 @@ fn alias_no_op_still_enforces_directory_intent() {
             .kind(),
         io::ErrorKind::InvalidInput
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -218,9 +214,7 @@ fn every_absent_destination_crash_point_recovers_old_or_complete_new_state() {
             assert_eq!(target_for(&mut device, &superblock, "destination"), Some(2));
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
@@ -274,9 +268,7 @@ fn every_overwrite_crash_point_recovers_old_or_complete_new_state() {
             assert_eq!(target_for(&mut device, &superblock, "destination"), Some(2));
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

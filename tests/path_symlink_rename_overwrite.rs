@@ -140,9 +140,7 @@ fn overwrites_symlink_without_following_final_components() {
         source_block,
         destination_block,
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -209,9 +207,7 @@ fn rejects_wrong_kind_malformed_paths_and_multiply_linked_destination() {
         load_directory_table(&mut device, &superblock).unwrap(),
         entries_with_alias
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -281,9 +277,7 @@ fn every_pathname_symlink_overwrite_crash_point_recovers_old_or_complete_new_sta
             );
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

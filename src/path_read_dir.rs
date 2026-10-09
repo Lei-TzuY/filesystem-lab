@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn empty_directory_returns_empty_listing() {
         let inodes = vec![inode(1, InodeKind::Directory)];
-        assert!(enumerate_directory(1, &inodes, &[]).unwrap().is_empty());
+        assert_eq!(enumerate_directory(1, &inodes, &[]).unwrap(), []);
     }
 
     #[test]

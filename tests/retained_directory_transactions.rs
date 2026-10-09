@@ -3,7 +3,6 @@ mod support;
 use std::io;
 
 use filesystem_lab::allocation_disk::{load_allocator, store_allocator};
-use filesystem_lab::block::BLOCK_SIZE;
 use filesystem_lab::directory_codec::PersistedDirectoryEntry;
 use filesystem_lab::directory_table::{load_directory_table, store_directory_table};
 use filesystem_lab::directory_tx::{
@@ -105,9 +104,7 @@ fn dependent_retained_directory_updates_plan_against_projected_state() {
 
     // Retention deliberately leaves home metadata unchanged until recovery/checkpoint.
     assert_eq!(names(&mut device, &superblock), vec!["base"]);
-    assert!(!load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_ne!(load_journal_image(&mut device, superblock).unwrap(), []);
 
     let recovery = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
     assert_eq!(
@@ -118,9 +115,7 @@ fn dependent_retained_directory_updates_plan_against_projected_state() {
         }
     );
     assert_eq!(names(&mut device, &superblock), vec!["base", "a", "b"]);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -157,9 +152,7 @@ fn second_retained_directory_update_crash_converges_to_old_or_new_snapshot() {
             recovered_names == vec!["base", "a"] || recovered_names == vec!["base", "a", "b"],
             "crash_at={crash_at}, names={recovered_names:?}"
         );
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         check_device(&mut device).unwrap();
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
@@ -188,8 +181,6 @@ fn semantic_bad_retained_directory_update_fails_before_journal_mutation() {
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     assert_eq!(device.operations(), 0);
     assert_eq!(names(&mut device, &superblock), home_before);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }

@@ -109,9 +109,7 @@ fn collapses_ranges_through_direct_and_symlink_paths() {
         assert!(!allocator.is_owned(blocks[2]).unwrap());
         assert!(!allocator.is_owned(blocks[3]).unwrap());
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     }
 }
 
@@ -159,9 +157,7 @@ fn rejects_invalid_pathname_collapses_without_publication() {
         load_directory_table(&mut device, &superblock).unwrap(),
         directory_before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -202,9 +198,7 @@ fn every_pathname_collapse_crash_point_recovers_old_or_complete_new_state() {
             directory_old
         );
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

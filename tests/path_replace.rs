@@ -164,9 +164,7 @@ fn pathname_replacement_follows_final_symlink_and_resizes_atomically() {
         load_directory_table(&mut device, &superblock).unwrap(),
         namespace_before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -213,9 +211,7 @@ fn pathname_replacement_rejects_invalid_ranges_without_publication() {
         namespace_before
     );
     assert_old(&mut device, &superblock, &original_blocks, &expected_new);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -268,9 +264,7 @@ fn every_pathname_replacement_crash_point_is_old_or_recoverable_new_state() {
             namespace_before
         );
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

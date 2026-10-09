@@ -337,9 +337,7 @@ mod tests {
             load_inode_table(&mut device, &superblock).unwrap(),
             remaining_inodes
         );
-        assert!(load_directory_table(&mut device, &superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), []);
         check_device(&mut device).unwrap();
     }
 
@@ -386,9 +384,7 @@ mod tests {
             load_inode_table(&mut device, &superblock).unwrap(),
             remaining_inodes
         );
-        assert!(load_directory_table(&mut device, &superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), []);
         check_device(&mut device).unwrap();
 
         let replay = recover_journal(&mut device, superblock).unwrap();

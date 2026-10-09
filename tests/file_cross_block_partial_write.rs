@@ -75,9 +75,7 @@ fn cross_block_range_is_one_transaction() {
     assert_eq!(&first[BLOCK_SIZE - 8..], &[0xaa; 8]);
     assert_eq!(&second[..8], &[0xaa; 8]);
     assert!(second[8..].iter().all(|b| *b == 0x22));
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -95,9 +93,7 @@ fn crossing_past_existing_blocks_is_rejected_before_publication() {
         read_file_block(&mut device, &superblock, 2, 1).unwrap(),
         before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -126,9 +122,7 @@ fn every_cross_block_crash_point_recovers_old_or_complete_new_range() {
             assert_eq!(&second[..8], &[0xaa; 8]);
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

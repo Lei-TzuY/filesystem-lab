@@ -231,9 +231,7 @@ mod tests {
         // v2 publication adds empty-anchor and staged-tail barriers; create still performs
         // durable home replay plus the existing final checkpoint boundary.
         assert_eq!(device.flushes, flushes_before + 5);
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert!(load_allocator(&mut device, &superblock)
             .unwrap()
             .is_owned(data_block)
@@ -271,9 +269,7 @@ mod tests {
             .is_owned(data_block)
             .unwrap());
         assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes);
-        assert!(load_directory_table(&mut device, &superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), []);
         assert!(check_device(&mut device).is_err());
 
         let report = recover_journal(&mut device, superblock).unwrap();
@@ -315,11 +311,7 @@ mod tests {
             .unwrap()
             .is_owned(data_block)
             .unwrap());
-        assert!(load_inode_table(&mut device, &superblock)
-            .unwrap()
-            .is_empty());
-        assert!(load_directory_table(&mut device, &superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), []);
+        assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), []);
     }
 }

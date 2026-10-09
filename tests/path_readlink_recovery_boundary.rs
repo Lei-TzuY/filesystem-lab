@@ -113,9 +113,7 @@ fn readlink_recovers_committed_final_symlink_before_no_follow_resolution() {
         );
         assert_unique_ownership(&mut device, &superblock);
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

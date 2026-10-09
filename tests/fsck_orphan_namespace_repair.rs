@@ -75,7 +75,7 @@ fn assert_repaired(
     assert_eq!(image, [0x5a; BLOCK_SIZE]);
 
     check_device(device).unwrap();
-    assert!(load_journal_image(device, *superblock).unwrap().is_empty());
+    assert_eq!(load_journal_image(device, *superblock).unwrap(), []);
 }
 
 #[test]
@@ -92,7 +92,7 @@ fn repair_reattaches_only_orphan_component_root_and_is_idempotent() {
 
     device.arm(None);
     let second = repair_unreachable_inodes_journaled(&mut device, &superblock).unwrap();
-    assert!(second.reattached.is_empty());
+    assert_eq!(second.reattached, []);
     assert_eq!(second.repair_transaction.committed_transactions, 0);
     assert_eq!(device.operations(), 0);
 }

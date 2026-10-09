@@ -154,20 +154,17 @@ fn paginates_the_deterministic_directory_snapshot() {
             },
         ]
     );
-    assert!(
-        list_directory_page_at_path(&mut device, &superblock, "/", 0, 0)
-            .unwrap()
-            .is_empty()
+    assert_eq!(
+        list_directory_page_at_path(&mut device, &superblock, "/", 0, 0).unwrap(),
+        []
     );
-    assert!(
-        list_directory_page_at_path(&mut device, &superblock, "/", 4, 3)
-            .unwrap()
-            .is_empty()
+    assert_eq!(
+        list_directory_page_at_path(&mut device, &superblock, "/", 4, 3).unwrap(),
+        []
     );
-    assert!(
-        list_directory_page_at_path(&mut device, &superblock, "/", usize::MAX, 1)
-            .unwrap()
-            .is_empty()
+    assert_eq!(
+        list_directory_page_at_path(&mut device, &superblock, "/", usize::MAX, 1).unwrap(),
+        []
     );
 }
 
@@ -212,9 +209,10 @@ fn resolves_nested_and_final_symlink_directory_paths() {
 #[test]
 fn empty_directory_returns_an_empty_listing() {
     let (mut device, superblock) = setup();
-    assert!(list_directory_at_path(&mut device, &superblock, "/empty")
-        .unwrap()
-        .is_empty());
+    assert_eq!(
+        list_directory_at_path(&mut device, &superblock, "/empty").unwrap(),
+        []
+    );
 }
 
 #[test]

@@ -53,9 +53,7 @@ fn retained_v3_log_replays_multiple_transactions_without_intermediate_checkpoint
     assert_eq!(report.home_writes, 2);
     assert_eq!(read_block(&mut device, first_home), [0x31; BLOCK_SIZE]);
     assert_eq!(read_block(&mut device, second_home), [0x72; BLOCK_SIZE]);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]

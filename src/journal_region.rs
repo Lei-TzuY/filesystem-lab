@@ -960,9 +960,7 @@ mod tests {
     fn zeroed_fresh_region_is_empty() {
         let superblock = Superblock::with_journal_blocks(8, 2).unwrap();
         let mut device = MemoryDevice::new(8);
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     }
 
     #[test]
@@ -988,9 +986,7 @@ mod tests {
         store_journal_image(&mut device, superblock, &[]).unwrap();
         device.blocks[2][BLOCK_SIZE - 1] = 1;
 
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     }
 
     #[test]
