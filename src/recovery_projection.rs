@@ -41,24 +41,32 @@ pub(crate) fn check_device_after_entries_projection(
     device: &mut impl BlockDevice,
     entries: &[JournalEntry],
 ) -> io::Result<RecoveryProjectionReport> {
-    let plan = plan_recovery(entries)?;
-
-    let mut blocks = BTreeMap::new();
-    for (block, data) in plan.writes() {
-        blocks.insert(*block, *data);
-    }
-
-    let recovery = plan.report();
-    let mut projected = ProjectionDevice {
-        base: device,
-        blocks,
-    };
+    let (mut projected, recovery) = projected_device_after_entries(device, entries)?;
     let fsck = check_device(&mut projected)?;
 
     Ok(RecoveryProjectionReport { recovery, fsck })
 }
 
-struct ProjectionDevice<'a, D: BlockDevice + ?Sized> {
+pub(crate) fn projected_device_after_entries<'a, D: BlockDevice + ?Sized>(
+    device: &'a mut D,
+    entries: &[JournalEntry],
+) -> io::Result<(ProjectionDevice<'a, D>, RecoveryReport)> {
+    let plan = plan_recovery(entries)?;
+    let mut blocks = BTreeMap::new();
+    for (block, data) in plan.writes() {
+        blocks.insert(*block, *data);
+    }
+    let recovery = plan.report();
+    Ok((
+        ProjectionDevice {
+            base: device,
+            blocks,
+        },
+        recovery,
+    ))
+}
+
+pub(crate) struct ProjectionDevice<'a, D: BlockDevice + ?Sized> {
     base: &'a mut D,
     blocks: BTreeMap<u64, [u8; BLOCK_SIZE]>,
 }

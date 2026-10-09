@@ -17,7 +17,7 @@ The implemented core now includes:
 - independently versioned inode-record v3 persistence with exact regular-file byte EOF and checksummed inode-table images;
 - independently versioned persisted directory entries and checksummed directory-table images;
 - buffer-cache `Clean` / `Dirty` / `Writeback` state semantics and durability-aware eviction rules;
-- logical WAL transactions with Begin/full-block Write/Commit records, versioned journal-region anchors, committed-only replay, early-persistence-safe checkpoint invalidation, optional v3 dual-bank retention of multiple complete committed transactions, and semantic prefix checkpointing that reclaims retained capacity while preserving the suffix;
+- logical WAL transactions with Begin/full-block Write/Commit records, versioned journal-region anchors, committed-only replay, early-persistence-safe checkpoint invalidation, optional v3 dual-bank retention of multiple complete committed transactions, and semantic prefix checkpointing that reclaims retained capacity while preserving the suffix, plus projection-aware retained directory-table transactions that can build dependent namespace snapshots before home replay;
 - bounded journaled updates for allocation, inode, directory, inode+directory, and allocation+inode+directory metadata snapshots;
 - validated atomic create, unlink, and bounded rename lifecycle operations;
 - deterministic write/flush crash enumeration for create, unlink, and rename;

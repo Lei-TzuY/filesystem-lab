@@ -98,7 +98,7 @@ fn assert_new_state(device: &mut CrashDevice, superblock: &Superblock, data_bloc
         load_inode_table(device, superblock).unwrap(),
         vec![root_inode()]
     );
-    assert!(load_directory_table(device, superblock).unwrap().is_empty());
+    assert_eq!(load_directory_table(device, superblock).unwrap(), []);
 }
 
 #[test]

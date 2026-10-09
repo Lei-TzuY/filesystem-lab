@@ -70,9 +70,7 @@ fn entry(parent: u64, target: u64, name: &str) -> PersistedDirectoryEntry {
 fn fresh_format_contains_empty_directory_table() {
     let mut device = MemoryBlockDevice::new(32);
     let superblock = format_device(&mut device).unwrap();
-    assert!(load_directory_table(&mut device, &superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), []);
 }
 
 #[test]

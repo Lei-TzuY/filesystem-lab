@@ -89,7 +89,7 @@ fn assert_post_query_invariants(
     );
     assert_unique_ownership(device, &superblock);
     check_device(device).unwrap();
-    assert!(load_journal_image(device, superblock).unwrap().is_empty());
+    assert_eq!(load_journal_image(device, superblock).unwrap(), []);
     assert_eq!(
         recover_journal_and_checkpoint(device, superblock).unwrap(),
         RecoveryReport::default()

@@ -136,9 +136,7 @@ fn pathname_unlink_recovers_committed_create_before_resolving_and_recomputing() 
             allocated_before
         );
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 
         let second_recovery = recover_journal(&mut device, superblock).unwrap();
         assert_eq!(second_recovery.committed_transactions, 0);

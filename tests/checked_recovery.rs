@@ -133,9 +133,7 @@ fn checked_recovery_installs_valid_projection_and_checkpoints() {
             byte_len: 0,
         }]
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -178,9 +176,7 @@ fn checked_recovery_rejects_semantic_corruption_before_any_mutation() {
             .allocated_blocks(),
         0
     );
-    assert!(!load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_ne!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -195,9 +191,7 @@ fn pathname_metadata_uses_checked_recovery_for_valid_committed_wal() {
     assert_eq!(metadata.kind, InodeKind::Directory);
     assert_eq!(metadata.logical_blocks, 0);
     assert_eq!(metadata.namespace_references, 0);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -223,7 +217,5 @@ fn pathname_metadata_rejects_semantic_corruption_without_replay() {
             .allocated_blocks(),
         0
     );
-    assert!(!load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_ne!(load_journal_image(&mut device, superblock).unwrap(), []);
 }

@@ -111,9 +111,7 @@ fn default_journal_rejects_large_growth_without_home_mutation() {
         load_directory_table(&mut device, &superblock).unwrap(),
         directory_before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -145,7 +143,7 @@ fn same_block_growth_changes_only_eof_and_keeps_newly_visible_bytes_zero() {
     let (allocated, report) =
         grow_file_at_path_to_bytes_journaled(&mut device, &superblock, "/file", 3500).unwrap();
 
-    assert!(allocated.is_empty());
+    assert_eq!(allocated, []);
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(
         load_allocator(&mut device, &superblock)

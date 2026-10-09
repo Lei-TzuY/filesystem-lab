@@ -125,10 +125,8 @@ fn assert_bad_wal_remains_unapplied(
             byte_len: 0,
         }]
     );
-    assert!(load_directory_table(device, &superblock)
-        .unwrap()
-        .is_empty());
-    assert!(!load_journal_image(device, superblock).unwrap().is_empty());
+    assert_eq!(load_directory_table(device, &superblock).unwrap(), []);
+    assert_ne!(load_journal_image(device, superblock).unwrap(), []);
     assert!(orphan >= superblock.reserved_blocks());
 }
 

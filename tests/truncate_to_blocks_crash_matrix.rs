@@ -92,9 +92,7 @@ fn truncate_to_blocks_releases_exact_tail_and_checkpoints() {
         load_directory_table(&mut device, &superblock).unwrap(),
         entries
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -109,7 +107,7 @@ fn truncate_to_blocks_rejects_growth_and_directory_and_noops_at_current_size() {
 
     let (released, report) =
         truncate_file_to_blocks_journaled(&mut device, &superblock, 2, 4).unwrap();
-    assert!(released.is_empty());
+    assert_eq!(released, []);
     assert_eq!(report, RecoveryReport::default());
     assert!(state_is_old(&mut device, &superblock, &blocks));
     check_device(&mut device).unwrap();
@@ -145,9 +143,7 @@ fn every_multi_block_truncate_mutation_crash_point_recovers_to_old_or_new_state(
         }
 
         recover_journal_and_checkpoint(&mut device, superblock).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert!(
             state_is_old(&mut device, &superblock, &blocks)
                 || state_is_new(&mut device, &superblock, &blocks)

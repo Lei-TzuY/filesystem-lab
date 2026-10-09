@@ -128,9 +128,7 @@ fn creates_initialized_one_block_files_at_direct_and_symlinked_parent_paths() {
     let second_block = assert_created_file(&mut device, &superblock, "/dir/via_alias", &second);
     assert_ne!(first_block, second_block);
     assert_unique_ownership(&mut device, &superblock);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -180,9 +178,7 @@ fn rejects_invalid_destinations_without_allocating_or_publishing_namespace() {
         load_directory_table(&mut device, &superblock).unwrap(),
         entries_before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -253,9 +249,7 @@ fn every_one_block_create_crash_point_recovers_old_or_complete_new_file() {
 
         assert_unique_ownership(&mut device, &superblock);
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

@@ -53,7 +53,7 @@ fn assert_old_state(device: &mut CrashDevice, superblock: &Superblock) {
         load_inode_table(device, superblock).unwrap(),
         vec![root_inode()]
     );
-    assert!(load_directory_table(device, superblock).unwrap().is_empty());
+    assert_eq!(load_directory_table(device, superblock).unwrap(), []);
     check_device(device).unwrap();
 }
 
@@ -87,9 +87,7 @@ fn every_symlink_mutation_crash_point_is_old_or_recoverable_new_state() {
         TARGET
     );
     assert_new_state(&mut probe, &superblock);
-    assert!(load_journal_image(&mut probe, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut probe, superblock).unwrap(), []);
 
     for crash_at in 0..mutation_operations {
         let (mut device, superblock) = setup();
@@ -138,9 +136,7 @@ fn every_symlink_mutation_crash_point_is_old_or_recoverable_new_state() {
             assert_eq!(recovery.committed_transactions, 1);
             assert_new_state(&mut device, &superblock);
         }
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 
         let second = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         assert_eq!(second, RecoveryReport::default());

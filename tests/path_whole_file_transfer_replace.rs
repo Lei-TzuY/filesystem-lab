@@ -111,10 +111,9 @@ fn transfers_complete_source_over_destination_and_releases_displaced_blocks() {
 
     transfer_source_over_destination(&mut device, &superblock).unwrap();
 
-    assert!(
-        read_file_blocks_at_path(&mut device, &superblock, "/source")
-            .unwrap()
-            .is_empty()
+    assert_eq!(
+        read_file_blocks_at_path(&mut device, &superblock, "/source").unwrap(),
+        []
     );
     assert_eq!(
         read_file_blocks_at_path(&mut device, &superblock, "/destination").unwrap(),
@@ -141,13 +140,13 @@ fn empty_source_atomically_clears_destination_and_releases_its_blocks() {
     )
     .unwrap();
 
-    assert!(read_file_blocks_at_path(&mut device, &superblock, "/empty")
-        .unwrap()
-        .is_empty());
-    assert!(
-        read_file_blocks_at_path(&mut device, &superblock, "/destination")
-            .unwrap()
-            .is_empty()
+    assert_eq!(
+        read_file_blocks_at_path(&mut device, &superblock, "/empty").unwrap(),
+        []
+    );
+    assert_eq!(
+        read_file_blocks_at_path(&mut device, &superblock, "/destination").unwrap(),
+        []
     );
     let allocator_after = load_allocator(&mut device, &superblock).unwrap();
     assert_eq!(
@@ -199,9 +198,7 @@ fn rejects_same_inode_or_non_file_without_publication() {
         load_directory_table(&mut device, &superblock).unwrap(),
         directory_before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -239,9 +236,7 @@ fn every_whole_file_transfer_replace_crash_point_recovers_old_or_complete_new_st
             directory_before
         );
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

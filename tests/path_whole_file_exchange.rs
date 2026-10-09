@@ -116,9 +116,10 @@ fn exchanges_nonempty_file_with_empty_file_atomically() {
 
     exchange_left_with_empty(&mut device, &superblock).unwrap();
 
-    assert!(read_file_blocks_at_path(&mut device, &superblock, "/left")
-        .unwrap()
-        .is_empty());
+    assert_eq!(
+        read_file_blocks_at_path(&mut device, &superblock, "/left").unwrap(),
+        []
+    );
     assert_eq!(
         read_file_blocks_at_path(&mut device, &superblock, "/empty").unwrap(),
         left_before
@@ -163,9 +164,7 @@ fn rejects_same_inode_or_non_file_without_publication() {
         load_directory_table(&mut device, &superblock).unwrap(),
         directory_before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -202,9 +201,7 @@ fn every_whole_file_exchange_crash_point_recovers_old_or_complete_new_state() {
             directory_before
         );
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

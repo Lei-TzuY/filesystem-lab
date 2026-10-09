@@ -81,9 +81,7 @@ fn prefix_checkpoint_reclaims_retained_bank_capacity() {
     );
     assert_eq!(read_block(&mut device, second_home), [0x22; BLOCK_SIZE]);
     assert_eq!(read_block(&mut device, third_home), [0x33; BLOCK_SIZE]);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 

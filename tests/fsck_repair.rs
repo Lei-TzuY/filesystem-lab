@@ -114,13 +114,11 @@ fn repairs_only_unreferenced_allocations_and_is_idempotent() {
     assert!(!allocator.is_owned(orphan).unwrap());
     assert_eq!(allocator.allocated_blocks(), 1);
     check_device(&mut device).unwrap();
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 
     device.arm(None);
     let second = repair_orphaned_allocations_journaled(&mut device, &superblock).unwrap();
-    assert!(second.released_blocks.is_empty());
+    assert_eq!(second.released_blocks, []);
     assert_eq!(second.repair_transaction, RecoveryReport::default());
     assert_eq!(device.operations(), 0);
 }

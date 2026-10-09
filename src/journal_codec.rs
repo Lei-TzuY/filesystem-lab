@@ -296,6 +296,6 @@ mod tests {
 
     #[test]
     fn empty_stream_decodes_to_empty_log() {
-        assert!(decode_entries(&[]).unwrap().is_empty());
+        assert_eq!(decode_entries(&[]).unwrap(), []);
     }
 }

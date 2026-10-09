@@ -282,9 +282,7 @@ fn format_replaces_stale_journal_bytes_with_canonical_empty_anchor() {
 
     let superblock = format_device(&mut device).unwrap();
 
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]

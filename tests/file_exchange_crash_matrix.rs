@@ -135,7 +135,7 @@ fn invalid_exchange_is_rejected_before_publication() {
         mappings(&mut device, &sb),
         (blocks[..3].to_vec(), blocks[3..].to_vec())
     );
-    assert!(load_journal_image(&mut device, sb).unwrap().is_empty());
+    assert_eq!(load_journal_image(&mut device, sb).unwrap(), []);
 }
 
 #[test]
@@ -176,7 +176,7 @@ fn every_exchange_mutation_crash_point_is_old_or_recoverable_new() {
         }
         assert_owned(&mut device, &sb, blocks);
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, sb).unwrap().is_empty());
+        assert_eq!(load_journal_image(&mut device, sb).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, sb).unwrap(),
             RecoveryReport::default()
@@ -216,7 +216,7 @@ fn invalid_same_file_exchange_is_rejected_before_publication() {
         mappings(&mut device, &sb),
         (blocks[..3].to_vec(), blocks[3..].to_vec())
     );
-    assert!(load_journal_image(&mut device, sb).unwrap().is_empty());
+    assert_eq!(load_journal_image(&mut device, sb).unwrap(), []);
 }
 
 #[test]
@@ -261,7 +261,7 @@ fn every_same_file_exchange_crash_point_is_old_or_recoverable_new() {
         }
         assert_owned(&mut device, &sb, blocks);
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, sb).unwrap().is_empty());
+        assert_eq!(load_journal_image(&mut device, sb).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, sb).unwrap(),
             RecoveryReport::default()

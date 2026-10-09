@@ -110,9 +110,7 @@ fn whole_file_clone_replacement_is_old_or_new_across_every_crash_boundary() {
 
         assert_unique_ownership(&mut device, &superblock);
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
@@ -136,8 +134,6 @@ fn whole_file_clone_replacement_rejects_same_inode_before_publication() {
         read_file_blocks_at_path(&mut device, &superblock, "/source").unwrap(),
         before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }

@@ -103,9 +103,7 @@ fn dispatch_overwrites_empty_directory_with_terminal_slashes() {
         load_allocator(&mut device, &superblock).unwrap(),
         allocator_before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -129,9 +127,7 @@ fn dispatch_rejects_repeated_trailing_separators_without_publication() {
         load_directory_table(&mut device, &superblock).unwrap(),
         before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -156,9 +152,7 @@ fn dispatch_rejects_nonempty_destination_without_publication() {
         load_directory_table(&mut device, &superblock).unwrap(),
         before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -212,9 +206,7 @@ fn every_dispatch_directory_overwrite_crash_point_recovers_old_or_complete_new_s
             assert_new_state(&mut device, &superblock);
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

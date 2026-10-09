@@ -89,7 +89,7 @@ fn partial_eof_is_observable_and_bounds_pathname_reads_and_writes() {
 
     let (released, report) =
         truncate_file_at_path_to_bytes_journaled(&mut device, &superblock, "/file", 5000).unwrap();
-    assert!(released.is_empty());
+    assert_eq!(released, []);
     assert_eq!(report.committed_transactions, 1);
 
     let metadata = metadata_at_path(&mut device, &superblock, "/file").unwrap();
@@ -194,9 +194,10 @@ fn whole_file_operations_preserve_partial_eof_semantics() {
             .byte_len,
         0
     );
-    assert!(read_file_blocks_at_path(&mut device, &superblock, "/other")
-        .unwrap()
-        .is_empty());
+    assert_eq!(
+        read_file_blocks_at_path(&mut device, &superblock, "/other").unwrap(),
+        []
+    );
     assert_eq!(
         metadata_at_path(&mut device, &superblock, "/destination")
             .unwrap()

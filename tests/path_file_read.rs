@@ -95,9 +95,10 @@ fn zero_block_file_reads_empty_and_non_file_is_rejected() {
     create_empty_file_at_path_journaled(&mut device, &superblock, "/empty").unwrap();
     create_symlink_at_path_journaled(&mut device, &superblock, "/link", "/missing").unwrap();
 
-    assert!(read_file_blocks_at_path(&mut device, &superblock, "/empty")
-        .unwrap()
-        .is_empty());
+    assert_eq!(
+        read_file_blocks_at_path(&mut device, &superblock, "/empty").unwrap(),
+        []
+    );
     assert_eq!(
         read_file_blocks_at_path(&mut device, &superblock, "/")
             .unwrap_err()

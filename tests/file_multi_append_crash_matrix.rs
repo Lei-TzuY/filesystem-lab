@@ -74,7 +74,7 @@ fn assert_old(device: &mut CrashDevice, superblock: &Superblock, expected: &[u64
         .into_iter()
         .find(|inode| inode.id == 2)
         .unwrap();
-    assert!(inode.blocks.is_empty());
+    assert_eq!(inode.blocks, []);
 }
 
 fn assert_new(
@@ -113,9 +113,7 @@ fn append_two_blocks_is_one_atomic_transaction() {
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(report.home_writes, 4);
     assert_new(&mut device, &superblock, &expected, &data);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -174,9 +172,7 @@ fn every_two_block_append_crash_point_is_old_or_recoverable_new_state() {
             assert_new(&mut device, &superblock, &expected, &data);
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

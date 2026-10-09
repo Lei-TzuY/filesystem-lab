@@ -2,12 +2,119 @@ use std::io;
 
 use crate::block::BlockDevice;
 use crate::directory_codec::PersistedDirectoryEntry;
-use crate::directory_table::store_directory_table;
+use crate::directory_table::{load_directory_table, store_directory_table};
 use crate::format::Superblock;
 use crate::journal::JournalLog;
-use crate::journal_region::store_journal_image;
-use crate::recovery::{recover_journal, RecoveryReport};
+use crate::journal_region::{
+    append_retained_journal_entries, load_journal_image, load_retained_journal_entries,
+    store_journal_image,
+};
+use crate::recovery::{plan_recovery, recover_journal, RecoveryReport};
+use crate::recovery_projection::{
+    check_device_after_entries_projection, projected_device_after_entries,
+};
 use crate::transaction_image::CaptureDevice;
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct RetainedDirectoryUpdateReport {
+    pub retained: RecoveryReport,
+    pub appended_home_writes: usize,
+}
+
+/// Applies one directory-table mutation against the logical state produced by any retained WAL and
+/// appends the resulting complete transaction to journal-region v3 without replaying it home.
+///
+/// The update closure observes the directory table after all currently retained committed
+/// transactions are projected. The desired snapshot is rendered and diffed against that projected
+/// state, not stale home blocks. Before publication, the complete retained stream plus the new
+/// transaction is projected through strict fsck. A semantically invalid candidate therefore fails
+/// before any journal write or flush.
+///
+/// This is the first high-level transaction path that can build dependent retained mutations: a
+/// second call can observe namespace changes retained by the first call even though home metadata has
+/// not yet been replayed.
+///
+/// # Errors
+///
+/// Returns `WouldBlock` when a non-empty v1/v2 journal is active. Propagates retained-journal
+/// decode/capacity errors, directory encoding errors, projected strict-fsck failures, closure errors,
+/// and block-device failures. A no-op closure produces no journal mutation.
+pub fn update_directory_table_retained_journaled<F>(
+    device: &mut impl BlockDevice,
+    superblock: &Superblock,
+    update: F,
+) -> io::Result<RetainedDirectoryUpdateReport>
+where
+    F: FnOnce(&mut Vec<PersistedDirectoryEntry>) -> io::Result<()>,
+{
+    if device.block_count() != superblock.total_blocks {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "retained directory-table device geometry does not match superblock",
+        ));
+    }
+
+    let current_entries = if let Some(entries) = load_retained_journal_entries(device, *superblock)?
+    {
+        entries
+    } else {
+        let existing = load_journal_image(device, *superblock)?;
+        if !existing.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "active v1/v2 journal must be checkpointed before retained directory update",
+            ));
+        }
+        Vec::new()
+    };
+
+    let (mut projected, current_report) = projected_device_after_entries(device, &current_entries)?;
+    let mut desired_entries = load_directory_table(&mut projected, superblock)?;
+    update(&mut desired_entries)?;
+
+    let mut capture = CaptureDevice::new(superblock.total_blocks);
+    store_directory_table(&mut capture, superblock, &desired_entries)?;
+    let mut changed = Vec::new();
+    capture.collect_changed_range(
+        &mut projected,
+        superblock.directory_range(),
+        "retained directory image did not render every directory metadata block",
+        &mut changed,
+    )?;
+    capture.ensure_empty("retained directory image rendered outside directory metadata region")?;
+    drop(projected);
+
+    if changed.is_empty() {
+        return Ok(RetainedDirectoryUpdateReport {
+            retained: current_report,
+            appended_home_writes: 0,
+        });
+    }
+
+    let mut log = JournalLog::new();
+    let txid = log.begin()?;
+    for (block, data) in changed.iter().copied() {
+        log.write(txid, block, data)?;
+    }
+    log.commit(txid)?;
+
+    let mut candidate = current_entries;
+    candidate.extend_from_slice(log.entries());
+    let projected_report = check_device_after_entries_projection(device, &candidate)?;
+    let candidate_plan = plan_recovery(&candidate)?;
+    if projected_report.recovery != candidate_plan.report() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "retained directory projection disagrees with recovery plan",
+        ));
+    }
+
+    append_retained_journal_entries(device, *superblock, log.entries())?;
+    Ok(RetainedDirectoryUpdateReport {
+        retained: projected_report.recovery,
+        appended_home_writes: changed.len(),
+    })
+}
 
 /// Persists one directory-table snapshot through the bounded write-ahead log.
 ///

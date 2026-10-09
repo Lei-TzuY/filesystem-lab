@@ -104,9 +104,7 @@ fn truncate_last_block_releases_exactly_one_block_and_checkpoints() {
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(report.home_writes, 2);
     assert_new_state(&mut device, &superblock, &blocks, &entries);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -137,9 +135,7 @@ fn every_truncate_last_block_mutation_crash_point_recovers_to_old_or_new_state()
         "single-block truncate must cross WAL, two home metadata writes, and checkpoint"
     );
     assert_new_state(&mut probe, &superblock, &blocks, &entries);
-    assert!(load_journal_image(&mut probe, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut probe, superblock).unwrap(), []);
     check_device(&mut probe).unwrap();
 
     for crash_at in 0..mutation_operations {

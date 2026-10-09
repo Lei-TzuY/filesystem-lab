@@ -148,9 +148,7 @@ fn defragments_a_fragmented_file_through_a_final_symlink() {
     assert_eq!(report.committed_transactions, 1);
     assert_unique_file_ownership(&mut device, &superblock);
     check_device(&mut device).unwrap();
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -249,9 +247,7 @@ fn every_defragmentation_crash_point_recovers_old_or_complete_new_state() {
         );
         assert_unique_file_ownership(&mut device, &superblock);
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

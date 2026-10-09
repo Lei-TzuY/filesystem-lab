@@ -85,7 +85,7 @@ fn assert_new_state(
     }
     let inodes = load_inode_table(device, superblock).unwrap();
     let file = inodes.iter().find(|inode| inode.id == 2).unwrap();
-    assert!(file.blocks.is_empty());
+    assert_eq!(file.blocks, []);
     assert_eq!(load_directory_table(device, superblock).unwrap(), entries);
 }
 

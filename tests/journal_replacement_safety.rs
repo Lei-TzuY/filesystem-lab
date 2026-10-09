@@ -151,9 +151,7 @@ fn pathname_create_recovers_committed_journal_before_recomputing_next_mutation()
         assert_ne!(first.inode_id, second.inode_id);
         assert_unique_ownership(&mut device, &superblock);
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 
         let second_recovery = recover_journal(&mut device, superblock).unwrap();
         assert_eq!(second_recovery.committed_transactions, 0);

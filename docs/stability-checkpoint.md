@@ -58,6 +58,8 @@ Journal-region version 3 additionally supports bounded multi-transaction retenti
 
 Retained v3 snapshots can now advance a filesystem-consistent complete-transaction prefix without discarding the suffix. Prefix home writes are semantically preflighted through strict fsck, replayed and flushed, then the suffix is atomically republished through the inactive bank. This reclaims bounded retained capacity and provides persistent logical head advancement while still deliberately stopping short of physical circular head/tail wraparound.
 
+The directory-table transaction layer is the first production metadata consumer of retained mode. Each retained namespace update loads directory state through the current WAL recovery projection, so dependent updates compose against logical state rather than stale home blocks. The full candidate retained stream is strict-fsck projected before append; invalid namespace candidates therefore fail before journal mutation. Other transaction families still use their existing immediate replay/checkpoint contracts.
+
 ## Format-v6 byte EOF milestone
 
 Filesystem format v6 promotes exact regular-file EOF into inode-record version 3. Whole-file and

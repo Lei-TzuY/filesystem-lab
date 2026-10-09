@@ -157,30 +157,28 @@ fn none_starts_from_first_entry_and_zero_limit_is_empty() {
             .collect::<Vec<_>>(),
         vec!["alpha".to_owned(), "beta".to_owned()]
     );
-    assert!(list_directory_page_after_name_at_path(
-        &mut device,
-        &superblock,
-        "/dir",
-        Some("alpha"),
-        0,
-    )
-    .unwrap()
-    .is_empty());
+    assert_eq!(
+        list_directory_page_after_name_at_path(&mut device, &superblock, "/dir", Some("alpha"), 0,)
+            .unwrap(),
+        []
+    );
 }
 
 #[test]
 fn cursor_past_end_is_empty_and_final_symlink_is_followed() {
     let (mut device, superblock) = setup();
 
-    assert!(list_directory_page_after_name_at_path(
-        &mut device,
-        &superblock,
-        "/dir-link",
-        Some("zzzz"),
-        4,
-    )
-    .unwrap()
-    .is_empty());
+    assert_eq!(
+        list_directory_page_after_name_at_path(
+            &mut device,
+            &superblock,
+            "/dir-link",
+            Some("zzzz"),
+            4,
+        )
+        .unwrap(),
+        []
+    );
     assert_eq!(
         list_directory_page_after_name_at_path(
             &mut device,

@@ -121,9 +121,7 @@ fn collapse_releases_range_and_shifts_suffix_atomically() {
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(report.home_writes, 2);
     assert_new(&mut device, &superblock, blocks);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -136,9 +134,7 @@ fn empty_or_out_of_bounds_range_is_rejected_before_publication() {
         collapse_file_block_range_journaled(&mut device, &superblock, 2, 4, 2).unwrap_err();
     assert_eq!(outside.kind(), io::ErrorKind::InvalidInput);
     assert_old(&mut device, &superblock, blocks);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -152,9 +148,7 @@ fn allocator_disagreement_anywhere_in_range_is_rejected_before_publication() {
     let error = collapse_file_block_range_journaled(&mut device, &superblock, 2, 2, 2).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     assert_eq!(inode_blocks(&mut device, &superblock), blocks);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -206,9 +200,7 @@ fn every_collapse_mutation_crash_point_is_old_or_recoverable_new_state() {
             assert_new(&mut device, &superblock, blocks);
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 
         let second = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         assert_eq!(second, RecoveryReport::default());

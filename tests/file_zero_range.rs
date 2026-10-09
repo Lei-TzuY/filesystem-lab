@@ -77,9 +77,7 @@ fn zero_range_crosses_blocks_in_one_transaction() {
     assert!(first[BLOCK_SIZE - 8..].iter().all(|byte| *byte == 0));
     assert!(second[..8].iter().all(|byte| *byte == 0));
     assert!(second[8..].iter().all(|byte| *byte == 0x22));
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -98,9 +96,7 @@ fn invalid_zero_ranges_are_rejected_before_publication() {
             .kind(),
         io::ErrorKind::InvalidInput
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -132,9 +128,7 @@ fn every_zero_range_crash_point_recovers_old_or_complete_zeroed_range() {
             assert!(second[8..].iter().all(|byte| *byte == 0x22));
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

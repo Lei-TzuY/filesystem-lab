@@ -64,18 +64,14 @@ fn journaled_file_block_overwrite_round_trips_and_reuses_checkpointed_journal() 
         read_file_block(&mut device, &superblock, 2, 0).unwrap(),
         first
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 
     assert_eq!(
         write_file_block_journaled(&mut device, &superblock, 2, 0, first).unwrap(),
         RecoveryReport::default()
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 
     let second = [0x6b; BLOCK_SIZE];
     let second_report = write_file_block_journaled(&mut device, &superblock, 2, 0, second).unwrap();
@@ -85,9 +81,7 @@ fn journaled_file_block_overwrite_round_trips_and_reuses_checkpointed_journal() 
         read_file_block(&mut device, &superblock, 2, 0).unwrap(),
         second
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -152,9 +146,7 @@ fn every_file_block_write_and_checkpoint_crash_point_recovers_to_old_or_new_data
             );
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 
         let second = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         assert_eq!(second, RecoveryReport::default());

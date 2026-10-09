@@ -168,9 +168,7 @@ fn symlink_hard_link_rejects_non_symlink_source_and_invalid_destinations() {
         load_directory_table(&mut device, &superblock).unwrap(),
         entries_before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -207,9 +205,7 @@ fn rejects_invalid_paths_and_destination_collisions_before_publication() {
         load_directory_table(&mut device, &superblock).unwrap(),
         entries_before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -263,9 +259,7 @@ fn every_pathname_hard_link_crash_point_recovers_old_or_complete_new_state() {
         }
 
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
@@ -342,9 +336,7 @@ fn every_pathname_symlink_hard_link_crash_point_recovers_old_or_complete_new_sta
         }
 
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

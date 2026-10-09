@@ -114,7 +114,7 @@ fn assert_removed_state(
         assert!(!allocator.is_owned(blocks.shared).unwrap());
     }
 
-    assert!(load_journal_image(device, *superblock).unwrap().is_empty());
+    assert_eq!(load_journal_image(device, *superblock).unwrap(), []);
     check_device(device).unwrap();
 }
 

@@ -126,9 +126,7 @@ fn removal_frees_selected_block_and_shifts_logical_suffix() {
     assert_eq!(report.committed_transactions, 1);
     assert_eq!(report.home_writes, 2);
     assert_new(&mut device, &superblock, first, middle, last);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 }
 
@@ -138,9 +136,7 @@ fn removal_outside_file_is_rejected_before_publication() {
     let error = remove_file_block_journaled(&mut device, &superblock, 2, 3).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     assert_old(&mut device, &superblock, first, middle, last);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -154,9 +150,7 @@ fn allocator_disagreement_is_rejected_before_publication() {
     let error = remove_file_block_journaled(&mut device, &superblock, 2, 1).unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
     assert_eq!(blocks(&mut device, &superblock), vec![first, middle, last]);
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -205,9 +199,7 @@ fn every_removal_mutation_crash_point_is_old_or_recoverable_new_state() {
             assert_new(&mut device, &superblock, first, middle, last);
         }
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 
         let second = recover_journal_and_checkpoint(&mut device, superblock).unwrap();
         assert_eq!(second, RecoveryReport::default());

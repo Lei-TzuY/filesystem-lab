@@ -133,9 +133,7 @@ fn rejects_final_source_symlink_that_resolves_to_directory_before_publication() 
         load_directory_table(&mut device, &superblock).unwrap(),
         entries_before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -189,9 +187,7 @@ fn every_following_dispatch_crash_point_recovers_old_or_complete_new_state() {
         }
 
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

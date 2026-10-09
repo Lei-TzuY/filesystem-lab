@@ -115,9 +115,7 @@ fn exchange_swaps_only_namespace_targets() {
     );
     assert_ownership_and_data_unchanged(&mut device, &superblock, first_block, second_block);
     check_device(&mut device).unwrap();
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -167,9 +165,7 @@ fn every_exchange_crash_is_old_or_recoverable_new() {
         }
         assert_ownership_and_data_unchanged(&mut device, &superblock, first_block, second_block);
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
@@ -212,7 +208,5 @@ fn exchange_rejects_directory_target_before_wal_publication() {
         load_directory_table(&mut device, &superblock).unwrap(),
         vec![entry(1, 2, "file"), entry(1, 3, "directory")]
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }

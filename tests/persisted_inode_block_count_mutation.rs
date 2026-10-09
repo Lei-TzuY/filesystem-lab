@@ -58,11 +58,11 @@ fn block_count_mutations_round_trip_through_durable_inode_table() {
     let mut file = PersistedInode::new(2, InodeKind::File, vec![20, 21, 22]).unwrap();
 
     let displaced = file.replace_block_range(3..3, &[30, 31]).unwrap();
-    assert!(displaced.is_empty());
+    assert_eq!(displaced, []);
     assert_eq!(file.blocks, vec![20, 21, 22, 30, 31]);
 
     let displaced = file.replace_block_range(1..1, &[40]).unwrap();
-    assert!(displaced.is_empty());
+    assert_eq!(displaced, []);
     assert_eq!(file.blocks, vec![20, 40, 21, 22, 30, 31]);
 
     let displaced = file.replace_block_range(2..5, &[]).unwrap();

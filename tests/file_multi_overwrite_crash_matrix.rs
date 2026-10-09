@@ -78,18 +78,14 @@ fn multi_block_overwrite_is_one_transaction_and_reuses_checkpointed_journal() {
         read_file_block(&mut device, &superblock, 2, 1).unwrap(),
         NEW_SECOND
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
     check_device(&mut device).unwrap();
 
     assert_eq!(
         overwrite_pair(&mut device, &superblock).unwrap(),
         RecoveryReport::default()
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -127,9 +123,7 @@ fn multi_block_overwrite_rejects_ambiguous_or_invalid_batches_before_wal_publica
         read_file_block(&mut device, &superblock, 2, 1).unwrap(),
         OLD_SECOND
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -175,9 +169,7 @@ fn every_multi_block_overwrite_crash_point_recovers_the_complete_batch() {
         }
 
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()

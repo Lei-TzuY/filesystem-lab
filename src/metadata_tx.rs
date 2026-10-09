@@ -245,12 +245,8 @@ mod tests {
         let report = recover_journal(&mut device, superblock).unwrap();
 
         assert_eq!(report, RecoveryReport::default());
-        assert!(load_inode_table(&mut device, &superblock)
-            .unwrap()
-            .is_empty());
-        assert!(load_directory_table(&mut device, &superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), []);
+        assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), []);
     }
 
     #[test]
@@ -268,9 +264,7 @@ mod tests {
         );
 
         assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), inodes);
-        assert!(load_directory_table(&mut device, &superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), []);
 
         let report = recover_journal(&mut device, superblock).unwrap();
         assert_eq!(report.committed_transactions, 1);
@@ -301,11 +295,7 @@ mod tests {
         );
 
         assert_eq!(device.flushes, flushes_before);
-        assert!(load_inode_table(&mut device, &superblock)
-            .unwrap()
-            .is_empty());
-        assert!(load_directory_table(&mut device, &superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_inode_table(&mut device, &superblock).unwrap(), []);
+        assert_eq!(load_directory_table(&mut device, &superblock).unwrap(), []);
     }
 }

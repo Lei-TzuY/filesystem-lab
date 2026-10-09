@@ -196,9 +196,7 @@ fn rejects_invalid_path_transfer_without_publication() {
         load_directory_table(&mut device, &superblock).unwrap(),
         directory_before
     );
-    assert!(load_journal_image(&mut device, superblock)
-        .unwrap()
-        .is_empty());
+    assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
 }
 
 #[test]
@@ -234,9 +232,7 @@ fn every_pathname_transfer_crash_point_recovers_old_or_complete_new_state() {
             directory_before
         );
         check_device(&mut device).unwrap();
-        assert!(load_journal_image(&mut device, superblock)
-            .unwrap()
-            .is_empty());
+        assert_eq!(load_journal_image(&mut device, superblock).unwrap(), []);
         assert_eq!(
             recover_journal_and_checkpoint(&mut device, superblock).unwrap(),
             RecoveryReport::default()
